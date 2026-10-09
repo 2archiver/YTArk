@@ -227,6 +227,7 @@ jobs:
               echo "=== $apk ==="
               apksigner verify --print-certs "$apk" | head -4
               badging=$(aapt dump badging "$apk")
+              echo "$badging" | grep -E "^package:|^application-label:|^native-code" || true
               echo "$badging" | grep -q "package: name='${APP_ID}'" \
                 || { echo "FAIL: wrong package id"; exit 1; }
               echo "$badging" | grep -q "versionCode='${VERSION_CODE}'" \

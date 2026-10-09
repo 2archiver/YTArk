@@ -115,7 +115,8 @@ def patch_script_url(decoded_dir: str, script_url: str) -> int:
 # Manifest / apktool.yml patching
 # ---------------------------------------------------------------------------
 
-def patch_manifest(decoded_dir: str, app_id: str, app_name: str) -> None:
+def patch_manifest(decoded_dir: str, app_id: str, app_name: str,
+                   version_code: int = None, version_name: str = None) -> None:
     path = os.path.join(decoded_dir, "AndroidManifest.xml")
     with open(path, encoding="utf-8") as fh:
         xml = fh.read()
@@ -124,6 +125,19 @@ def patch_manifest(decoded_dir: str, app_id: str, app_name: str) -> None:
         raise SystemExit(
             f"ERROR: package '{OLD_PACKAGE}' not found in decoded manifest — "
             f"base APK layout may have changed.")
+
+    # Version attrs: apktool 3.x keeps them in the decoded manifest (they
+    # take precedence over apktool.yml on rebuild).
+    if version_code is not None:
+        xml, n = re.subn(r'android:versionCode="\d+"',
+                         f'android:versionCode="{version_code}"', xml)
+        print(f"[*] Manifest: versionCode attr patched (x{n})"
+              if n else "[*] Manifest: no versionCode attr (apktool.yml used)")
+    if version_name is not None:
+        xml, n = re.subn(r'android:versionName="[^"]*"',
+                         f'android:versionName="{version_name}"', xml)
+        print(f"[*] Manifest: versionName attr patched (x{n})"
+              if n else "[*] Manifest: no versionName attr (apktool.yml used)")
 
     n_pkg = xml.count(OLD_PACKAGE)
     xml = xml.replace(OLD_PACKAGE, app_id)
@@ -243,7 +257,9 @@ def repack(args) -> None:
                    "--output", decoded, args.base])
 
     patch_script_url(decoded, args.script_url)
-    patch_manifest(decoded, args.app_id, args.app_name)
+    patch_manifest(decoded, args.app_id, args.app_name,
+                   version_code=args.version_code,
+                   version_name=args.version_name)
     patch_apktool_yml(os.path.join(decoded, "apktool.yml"),
                       args.version_code, args.version_name)
 
@@ -328,7 +344,8 @@ def self_test() -> None:
     # 5. Manifest patch on a sample resembling the decoded upstream manifest.
     sample = (
         '<?xml version="1.0"?>\n'
-        f'<manifest package="{OLD_PACKAGE}" versionCode="200">\n'
+        f'<manifest package="{OLD_PACKAGE}"\n'
+        '          android:versionCode="200" android:versionName="2.0.2">\n'
         '  <application android:label="TizenTube" android:name="dev.cobalt.app.CobaltApplication">\n'
         f'    <provider android:authorities="{OLD_PACKAGE}.fileprovider"/>\n'
         '  </application>\n'
@@ -337,7 +354,8 @@ def self_test() -> None:
     mpath = os.path.join(tdir, "AndroidManifest.xml")
     with open(mpath, "w") as fh:
         fh.write(sample)
-    patch_manifest(tdir, "io.github.personal.tubetv", "Personal Tube TV")
+    patch_manifest(tdir, "io.github.personal.tubetv", "Personal Tube TV",
+                   version_code=20042, version_name="2.0.2-personal.42")
     with open(mpath) as fh:
         out = fh.read()
     checks = [
@@ -348,6 +366,9 @@ def self_test() -> None:
          "provider authority renamed"),
         ('android:name="dev.cobalt.app.CobaltApplication"' in out,
          "FQCN component names untouched"),
+        ('android:versionCode="20042"' in out, "versionCode attr patched"),
+        ('android:versionName="2.0.2-personal.42"' in out,
+         "versionName attr patched"),
     ]
     for passed, what in checks:
         if not passed:
@@ -385,7 +406,8 @@ def self_test() -> None:
     # 5b. Manifest label via @string resource.
     sample2 = (
         '<?xml version="1.0"?>\n'
-        f'<manifest package="{OLD_PACKAGE}" versionCode="200">\n'
+        f'<manifest package="{OLD_PACKAGE}"\n'
+        '          android:versionCode="200" android:versionName="2.0.2">\n'
         '  <application android:label="@string/app_name" android:name="dev.cobalt.app.CobaltApplication">\n'
         '  </application>\n'
         '</manifest>\n')
