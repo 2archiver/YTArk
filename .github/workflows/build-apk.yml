@@ -1,9 +1,6 @@
 name: Build YTArk APK for Google TV OS 14
 
 on:
-  push:
-    branches:
-      - arena/8882d89c-ytark
   workflow_dispatch:
 
 permissions:
@@ -213,33 +210,13 @@ jobs:
         run: |
           set -euo pipefail
           export SIGNING_CERT_SHA256
-          LOG_FILE="$RUNNER_TEMP/ytark-draft-release.log"
-          set +e
-          (
-            set -euo pipefail
-            bash tools/create_release.sh
-            cp NOTICE.md release-assets/NOTICE.md
-            gh api "repos/$GITHUB_REPOSITORY/releases/tags/$VERSION_TAG" \
-              > "$RUNNER_TEMP/ytark-validation/draft-release.json"
-            python3 tools/validate_release.py verify-release \
-              --release-json "$RUNNER_TEMP/ytark-validation/draft-release.json" \
-              --state draft
-          ) > "$LOG_FILE" 2>&1
-          release_status=$?
-          set -e
-          cat "$LOG_FILE"
-          if (( release_status != 0 )); then
-            diagnostic="$(python3 - "$LOG_FILE" <<'PY'
-          import sys
-          from collections import deque
-          with open(sys.argv[1], encoding="utf-8", errors="replace") as source:
-              print(" | ".join(line.strip() for line in deque(source, maxlen=25) if line.strip()), end="")
-          PY
-            )"
-            diagnostic="${diagnostic//%/%25}"
-            printf '::error title=YTArk draft release diagnostics::%s\n' "$diagnostic"
-            exit "$release_status"
-          fi
+          bash tools/create_release.sh
+          cp NOTICE.md release-assets/NOTICE.md
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$VERSION_TAG" \
+            > "$RUNNER_TEMP/ytark-validation/draft-release.json"
+          python3 tools/validate_release.py verify-release \
+            --release-json "$RUNNER_TEMP/ytark-validation/draft-release.json" \
+            --state draft
 
       - name: Upload validated draft assets
         uses: actions/upload-artifact@v7.0.2
