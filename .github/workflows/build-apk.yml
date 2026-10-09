@@ -93,7 +93,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SCRIPT_TAG: s${{ github.run_number }}
-        run: bash tools/publish_script_tag.sh TizenTube/dist/userScript.js
+        run: |
+          set -o pipefail
+          bash tools/publish_script_tag.sh TizenTube/dist/userScript.js 2>&1 \
+            | tee /tmp/steplogs/05-publish-tag.log
 
       - name: Verify jsDelivr serves the exact script
         env:
@@ -140,7 +143,7 @@ jobs:
             [ -n "$apktool_url" ] || { echo "could not locate apktool jar"; exit 1; }
             curl -fsSL -o "$RUNNER_TEMP/apktool.jar" "$apktool_url"
             java -jar "$RUNNER_TEMP/apktool.jar" --version
-          } 2>&1 | tee /tmp/steplogs/05-toolchain.log
+          } 2>&1 | tee /tmp/steplogs/05b-toolchain.log
 
       # ------------------------------------------------------------------
       # 4. Download the official base APKs (with provenance checks)

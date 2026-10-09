@@ -49,7 +49,8 @@ git add userScript.js README.md
 git commit -qm "Userscript release ${SCRIPT_TAG} ($(date -u +%Y-%m-%dT%H:%M:%SZ))"
 git tag "$SCRIPT_TAG"
 
-# Branch keeps the tag reachable; the tag is unique per run (no force, no cache issues).
-git push -q "$REPO_URL" "HEAD:refs/heads/${BRANCH}" "refs/tags/${SCRIPT_TAG}"
+# The tag is unique per run (no cache issues). The branch is force-moved to the
+# latest script commit as a human-friendly pointer (each commit is an orphan).
+git push -q --force "$REPO_URL" "HEAD:refs/heads/${BRANCH}" "refs/tags/${SCRIPT_TAG}"
 
 echo "published ${SCRIPT_TAG}: https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@${SCRIPT_TAG}/userScript.js"
