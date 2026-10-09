@@ -7,7 +7,7 @@ public final class UpdateVersionTest {
         newer("2.0.3-ytark.16", "2.0.3-ytark.15");
         newer("2.1.0-ytark.16", "2.0.99-ytark.99");
         newer("v2.0.3-ytark.10", "2.0.3-ytark.9");
-        older("2.0.3-ytark.15", "2.0.3-ytark.15");
+        equal("2.0.3-ytark.15", "2.0.3-ytark.15");
         older("2.0.3-ytark.14", "2.0.3-ytark.15");
         newer("2.0.3", "2.0.3-ytark.15");
         System.out.println("UpdateVersion tests passed (7 cases).");
@@ -21,7 +21,13 @@ public final class UpdateVersionTest {
 
     private static void older(String candidate, String installed) {
         if (UpdateVersion.compare(candidate, installed) >= 0) {
-            throw new AssertionError(candidate + " should not be newer than " + installed);
+            throw new AssertionError(candidate + " should be older than " + installed);
+        }
+    }
+
+    private static void equal(String left, String right) {
+        if (UpdateVersion.compare(left, right) != 0) {
+            throw new AssertionError(left + " should equal " + right);
         }
     }
 }
