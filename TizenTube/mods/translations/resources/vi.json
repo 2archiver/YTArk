@@ -1,0 +1,309 @@
+{
+    "__contributors": [
+        "reisxd",
+        "AppleSang"
+    ],
+    "settings": {
+        "options": {
+            "socialMedia": {
+                "title": "Liên kết mạng xã hội",
+                "qrCodeScanMessage": "Bạn có thể truy cập {{name}} của TizenTube bằng cách quét mã QR bên dưới.",
+                "announcements": "Thông báo",
+                "group": "Nhóm",
+                "website": "Trang chủ",
+                "githubSponsors": "Tài trợ ở GitHub"
+            },
+            "adBlock": "Chặn quảng cáo",
+            "sponsorblock": {
+                "title": "Cài đặt SponsorBlock",
+                "options": {
+                    "enableSB": "Bật SponsorBlock",
+                    "manualSkip": "Bỏ qua phân đoạn SponsorBlock thủ công",
+                    "segments": "Bỏ qua phân đoạn SponsorBlock tự động",
+                    "categories": {
+                        "sponsor": "Bỏ qua đoạn tài trợ",
+                        "intro": "Bỏ qua đoạn mở đầu (Intro)",
+                        "outro": "Bỏ qua đoạn kết thúc (Outro)",
+                        "interaction": "Bỏ qua đoạn nhắc nhở tương tác",
+                        "selfpromo": "Bỏ qua đoạn tự quảng cáo",
+                        "preview": "Bỏ qua đoạn xem trước/tóm tắt",
+                        "filler": "Bỏ qua đoạn nói lan man/trò đùa",
+                        "music_offtopic": "Bỏ qua đoạn không phải âm nhạc",
+                        "highlights": "Bật đoạn nổi bật"
+                    },
+                    "showSBToasts": "Hiển thị thông báo SponsorBlock"
+                }
+            },
+            "dearrow": {
+                "title": "Cài đặt DeArrow",
+                "options": {
+                    "enableDA": "Bật DeArrow",
+                    "enableDAThumbnails": "Bật hình thu nhỏ DeArrow"
+                }
+            },
+            "misc": {
+                "title": "Cài đặt khác",
+                "options": {
+                    "endScreenCards": "Ẩn thẻ màn hình kết thúc",
+                    "youThereRenderer": "Bật thông báo 'Video đã tạm dừng. Tiếp tục xem?'",
+                    "paidPromoOverlay": "Bật lớp phủ 'Chứa nội dung được trả tiền để quảng cáo'",
+                    "whosWatching": {
+                        "title": "Menu ai đang xem",
+                        "options": {
+                            "enableWW": "Bật menu ai đang xem",
+                            "permaEnableWW": "Luôn bật menu ai đang xem",
+                            "enableWWOnExit": "Bật menu ai đang xem khi thoát ứng dụng"
+                        }
+                    },
+                    "fixUI": "Sửa lỗi giao diện",
+                    "hqThumbnails": "Bật hình thu nhỏ chất lượng cao",
+                    "longPress": "Bật thao tác nhấn giữ",
+                    "shorts": "Bật Shorts",
+                    "videoPreviews": "Bật tính năng xem trước video",
+                    "ttWelcomeMsg": "Hiển thị thông báo chào mừng TizenTube",
+                    "guestSignInReminder": "Hiển thị nhắc nhở đăng nhập cho chế độ khách",
+                    "reloadHomeOnStartup": "Tải lại trang chủ khi khởi động"
+                }
+            },
+            "subtitles": {
+                "title": "Cài đặt phụ đề",
+                "options": {
+                    "showLocalSubtitle": "Hiển thị phụ đề cục bộ",
+                    "showHiddenSubtitles": "Hiển thị phụ đề bị ẩn"
+                }
+            },
+            "videoPlayer": {
+                "title": "Cài đặt trình phát video",
+                "subtitle": "Tùy chỉnh các tính năng của trình phát video",
+                "options": {
+                    "patching": {
+                        "title": "Vá giao diện trình phát video",
+                        "options": {
+                            "enableVPUIPatching": "Bật vá giao diện trình phát video",
+                            "previousNextBtns": "Bật nút Trước và Tiếp theo",
+                            "showSuperThxBtn": "Hiển thị nút Super Thanks",
+                            "showAIAskBtn": "Hiển thị nút Đặt câu hỏi",
+                            "showSpeedCtrlBtn": "Hiển thị nút Điều khiển tốc độ",
+                            "addMPBtn": "Hiển thị nút Trình phát nhỏ",
+                            "swapMPWithPIP": "Đổi nút Trình phát nhỏ thành Picture-In-Picture"
+                        }
+                    },
+                    "preferredVideoQuality": {
+                        "title": "Chất lượng video ưu tiên",
+                        "subtitle": "Chọn chất lượng video được áp dụng khi bắt đầu phát"
+                    },
+                    "speedSettings": {
+                        "title": "Mức tăng cài đặt tốc độ",
+                        "subtitle": "Đặt mức tăng tốc độ để điều chỉnh tốc độ phát video"
+                    },
+                    "preferredVideoCodec": {
+                        "title": "Bộ giải mã ưu tiên",
+                        "subtitle": "Bộ giải mã sẽ được dùng khi bắt đầu xem video"
+                    },
+                    "afr": "Tốc độ khung hình tự động (AFR)",
+                    "afrPauseDuration": {
+                        "title": "Thời gian tạm dừng AFR",
+                        "subtitle": "Đặt thời gian (tính bằng giây) để tạm dừng phát video khi điều chỉnh tốc độ khung hình"
+                    },
+                    "codecAny": "Bất kỳ",
+                    "qualityAuto": "Tự động",
+                    "hideRelatedVideosPlayer": "Ẩn những video có liên quan"
+                }
+            },
+            "uiSettings": {
+                "title": "Cài đặt giao diện người dùng",
+                "subtitle": "Tùy chỉnh giao diện theo ý thích của bạn",
+                "options": {
+                    "hideWatchedVideos": {
+                        "title": "Ẩn video đã xem",
+                        "options": {
+                            "enableHideWatchedVideos": "Bật ẩn video đã xem",
+                            "watchedVideosThreshold": {
+                                "title": "Ngưỡng video đã xem",
+                                "subtitle": "Đặt ngưỡng phần trăm để ẩn các video đã xem"
+                            },
+                            "setPagesToHideWatchedVideos": "Đặt các trang sẽ ẩn video đã xem"
+                        }
+                    },
+                    "screenDimming": {
+                        "title": "Làm mờ màn hình",
+                        "options": {
+                            "enableScreenDimming": "Bật làm mờ màn hình",
+                            "dimmingTimeout": {
+                                "title": "Thời gian chờ làm mờ",
+                                "subtitle": "Đặt thời gian không hoạt động (tính bằng giây) trước khi màn hình mờ đi"
+                            },
+                            "dimmingOpacity": {
+                                "title": "Độ mờ của màn hình",
+                                "subtitle": "Đặt mức độ mờ cho màn hình"
+                            }
+                        }
+                    },
+                    "disableSidebarContents": {
+                        "title": "Ẩn mục trên thanh điều hướng",
+                        "subtitle": "Chọn các mục dưới đây để ẩn ở trên thanh điều hướng"
+                    },
+                    "launchToOnStartup": {
+                        "title": "Trang khởi động",
+                        "subtitle": "Chọn trang mặc định mà TizenTube sẽ mở khi khởi động"
+                    },
+                    "sortSubscriptionsByAlphabet": "Sắp xếp các kênh đăng ký theo bảng chữ cái",
+                    "disableChannelsOnSidebar": "Ẩn kênh khỏi thanh điều hướng",
+                    "clock": {
+                        "title": "Đồng hồ",
+                        "subtitle": "Hiển thị đồng hồ trên màn hình",
+                        "options": {
+                            "enableClock": "Hiển thị đồng hồ",
+                            "isClock12HourFormat": "Sử dụng dịnh dạng đồng hồ 12H",
+                            "clockShowSeconds": "Hiển thị số giây",
+                            "clockHideWhenVideoPlaying": "Ẩn đồng hồ khi video đang phát"
+                        }
+                    },
+                    "categories": {
+                        "search": "Tìm kiếm",
+                        "home": "Trang chủ",
+                        "sports": "Thể thao",
+                        "news": "Tin tức",
+                        "music": "Âm nhạc",
+                        "podcasts": "Podcasts",
+                        "moviesAndTv": "Phim & TV",
+                        "live": "Trực tiếp",
+                        "gaming": "Trò chơi",
+                        "subscriptions": "Kênh đăng ký",
+                        "library": "Thư viện",
+                        "more": "Xem thêm",
+                        "shorts": "Shorts",
+                        "searchResults": "Kết quả tìm kiếm"
+                    },
+                    "disableEnlargingThumbnails": "Tắt phóng to hình thu nhỏ",
+                    "enableShrinkingThumbnails": "Bật thu nhỏ hình thu nhỏ",
+                    "sortSidebarContents": {
+                        "title": "Sắp xếp các mục ở thanh điều hướng",
+                        "subtitle": "Di chuyển các mục theo sở thích của bạn",
+                        "moveUp": {
+                            "title": "Đi lên",
+                            "subtitle": "Cho mục này đi lên ở trong thanh điều hướng"
+                        },
+                        "moveDown": {
+                            "title": "Hạ xuống",
+                            "subtitle": "Cho mục này hạ xuống ở trong thanh điều hướng"
+                        },
+                        "addToSidebar": "Thêm kênh vào thanh điều hướng",
+                        "removeFromSidebar": "Xoá kênh khỏi thanh điều hướng"
+                    }
+                }
+            },
+            "updater": {
+                "title": "Trình cập nhật TizenTube Cobalt",
+                "menuSubtitle": "Quản lý các bản cập nhật TizenTube Cobalt",
+                "versionSubtitle": "Phiên bản hiện tại: {{version}}",
+                "options": {
+                    "checkForUpdates": "Kiểm tra cập nhật",
+                    "checkForUpdatesOnStartup": "Kiểm tra cập nhật khi khởi động"
+                },
+                "updateAvailable": {
+                    "title": "Có bản cập nhất mới",
+                    "subtitle": "Có một phiên bản mới của TizenTube Cobalt là: {{latestVersion}}, hiện tại đang là: {{currentVersion}}"
+                },
+                "releaseDate": "Ra mắt vào ngày: {{date}}",
+                "updateNow": {
+                    "title": "Cập nhật ngay",
+                    "subtitle": "Bấm vào để tải phiên bản mới nhất."
+                },
+                "remindLater": {
+                    "title": "Nhắc tôi sau",
+                    "subtitle": "Tôi biết rồi, tôi sẽ quay lại cập nhật sau."
+                },
+                "upToDate": {
+                    "title": "TizenTube đang ở phiên bản mới nhất",
+                    "subtitle": "Bạn đang sử dụng phiên bản ({{version}}) của TizenTube Cobalt."
+                },
+                "checkFailed": {
+                    "title": "TizenTube không thể cập nhật được",
+                    "subtitle": "Không thể kiểm tra phiên bản mới nhất."
+                },
+                "downloading": {
+                    "title": "TizenTube đang cập nhật",
+                    "subtitle": "Đang tải phiên bản mới về, chờ tí xíu nhé..."
+                }
+            },
+            "time": {
+                "second": "{{count}} giây",
+                "seconds": "{{count}} giây",
+                "minute": "{{count}} phút",
+                "minutes": "{{count}} phút"
+            }
+        },
+        "ttSettings": {
+            "title": "Cài đặt TizenTube",
+            "madeByText": "Được tạo bởi Reis Can (reisxd) ❤️",
+            "summary": "Mở Cài đặt TizenTube"
+        },
+        "supportTT": {
+            "title": "Ủng hộ TizenTube",
+            "subtitle": "❤️ Thể hiện sự ủng hộ dành cho TizenTube và đội ngũ phát triển!",
+            "content": {
+                "1": "Nếu bạn thích sử dụng TizenTube và muốn ủng hộ đội ngũ phát triển dự án này, hãy:",
+                "2": "1. Tặng sao (Star) cho dự án ở trên GitHub để giúp dự án phổ biến hơn.",
+                "3": "2. Chia sẻ TizenTube với mọi người.",
+                "4": "Nếu bạn muốn quyên góp:",
+                "5": "- Buy Me A Coffee: https://www.buymeacoffee.com/reisxd (ưu tiên)",
+                "6": "- GitHub Sponsors: https://github.com/sponsors/reisxd"
+            }
+        }
+    },
+    "welcomeMsg": {
+        "title": "Chào mừng đến với TizenTube",
+        "subtitle": "Vào mục Cài đặt và nhấp vào Cài đặt TizenTube để tùy chỉnh."
+    },
+    "sponsorblock": {
+        "segments": {
+            "sponsor": "đoạn tài trợ",
+            "intro": "đoạn mở đầu",
+            "outro": "đoạn kết thúc",
+            "interaction": "đoạn nhắc nhở tương tác",
+            "selfpromo": "đoạn tự quảng cáo",
+            "preview": "đoạn tóm tắt hoặc xem trước",
+            "filler": "đoạn nói lan man",
+            "music_offtopic": "phần không phải âm nhạc",
+            "poi_highlight": "đoạn nổi bật"
+        },
+        "toasts": {
+            "skipping": "Đang bỏ qua {{segment}}...",
+            "notSkipping": "Không bỏ qua {{segment}} (đã bỏ qua {{count}} lần)",
+            "skip": "Bỏ qua {{segment}}",
+            "skipToHighlight": "Chuyển đến đoạn nổi bật"
+        }
+    },
+    "player": {
+        "playbackSpeed": {
+            "title": "Tốc độ phát video",
+            "button": "Điều chỉnh tốc độ",
+            "fixStuttering": "Sửa lỗi xé ảnh (1.0001x)"
+        },
+        "miniPlayer": "Trình phát nhỏ",
+        "pictureInPicture": "Picture-in-Picture",
+        "previous": "Trước",
+        "next": "Tiếp",
+        "withTizenTube": "với TizenTube",
+        "share": {
+            "title": "Chia sẻ",
+            "button": "Chia sẻ",
+            "qrCodeScanMessage": "Quét mã QR ở dưới để chia sẻ video này."
+        },
+        "screenOff": "Tắt màn hình"
+    },
+    "toasts": {
+        "videoAddedToQueue": "Đã thêm video vào hàng chờ.",
+        "videoQueueCleared": "Hàng chờ đã được dọn sạch.",
+        "sidebarContentsUpdated": {
+            "title": "Nội dung thanh điều hướng đã được cập nhật",
+            "subtitle": "Ờm thì cái thanh điều hướng được cập nhật thui mà."
+        },
+        "feedbackSent": "Feedback sent."
+    },
+    "videoMenu": {
+        "notInterested": "Not interested",
+        "dontRecommendChannel": "Don't recommend channel"
+    }
+}

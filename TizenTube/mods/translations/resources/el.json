@@ -1,0 +1,308 @@
+{
+    "__contributors": [
+        "twilight0"
+    ],
+    "settings": {
+        "options": {
+            "socialMedia": {
+                "title": "Σύνδεσμοι για σόσιαλ μίντια",
+                "qrCodeScanMessage": "Μπορείτε να επισκευφθείτε την σελίδα {{name}} σαρώνοντας τον κωδικό QR παρακάτω.",
+                "announcements": "Announcements",
+                "group": "Group",
+                "website": "Website",
+                "githubSponsors": "GitHub Sponsors"
+            },
+            "adBlock": "Λειτουργία Ad Block",
+            "sponsorblock": {
+                "title": "Ρυθμίσεις SponsorBlock",
+                "options": {
+                    "enableSB": "Ενεργοποίηση SponsorBlock",
+                    "manualSkip": "Χειροκίνητη παράλειψη ενοτήτων του SponsorBlock",
+                    "segments": "Ενότητες",
+                    "categories": {
+                        "sponsor": "Παράλειψη ενοτήτων των χορηγών",
+                        "intro": "Παράλειψη ενοτήτων εισαγωγής",
+                        "outro": "Παράλειψη ενοτήτων εξόδου",
+                        "interaction": "Παράλειψη ενοτήτων υπενθύμισης αλληλεπίδρασης",
+                        "selfpromo": "Παράλειψη ενοτήτων αυτοπροβολής",
+                        "preview": "Παράλειψη ενοτήτων προεσκόπισης/ανακεφαλαίωσης",
+                        "filler": "Παράλειψη τμημάτων εφαπτομένων/ανέκδοτων",
+                        "music_offtopic": "Παράλειψη τμημάτων μουσικής εκτός θέματος",
+                        "highlights": "Ενεργοποίηση Επισημάνσεων"
+                    },
+                    "showSBToasts": "Εμφάνιση αναδυόμενων διαλόγων SponsorBlock"
+                }
+            },
+            "dearrow": {
+                "title": "Ρυθμίσεις DeArrow",
+                "options": {
+                    "enableDA": "Ενεργοποίηση DeArrow",
+                    "enableDAThumbnails": "Ενεργοποίηση Μικρογραφειών DeArrow"
+                }
+            },
+            "misc": {
+                "title": "Διάφορες Ρυθμίσεις",
+                "options": {
+                    "endScreenCards": "Απόκρυψη καρτελών οθόνης τέλους",
+                    "youThereRenderer": "Ενεργοποίηση μηνύματος 'Παρακολουθείτε ακόμα;'",
+                    "paidPromoOverlay": "Ενεργοποίηση επικάλυψης 'Περιλαμβάνει προώθηση επί πληρωμή'",
+                    "whosWatching": {
+                        "title": "Μενού ποιος παρακολουθεί",
+                        "options": {
+                            "enableWW": "Ενεργοποίηση μενού ποιος παρακολουθεί",
+                            "permaEnableWW": "Μόνιμη ενεργοποίηση του μενού ποιος παρακολουθεί",
+                            "enableWWOnExit": "Ενεργοποιήση μενού ποιος παρακολουθεί κατά την έξοδο από την εφαρμογή"
+                        }
+                    },
+                    "fixUI": "Διόρθωση διεπαφής",
+                    "hqThumbnails": "Ενεργοποίηση μικρογραφιών υψηλής ποιότητας",
+                    "longPress": "Ενεργοποίηση ενεργειών με παρατεταμένο πάτημα",
+                    "shorts": "Ενεργοποίηση Shorts",
+                    "videoPreviews": "Ενεργοποιήστε τις προεπισκοπήσεις βίντεο",
+                    "ttWelcomeMsg": "Εμφάνιση μηνύματος καλωσορίσματος TizenTube",
+                    "guestSignInReminder": "Εμφάνιση υπενθύμισης σύνδεσης επισκέπτη",
+                    "reloadHomeOnStartup": "Επαναφόρτωση αρχικής σελίδας κατά την εκκίνηση"
+                }
+            },
+            "subtitles": {
+                "title": "Ρυθμίσεις υπότιτλων",
+                "options": {
+                    "showLocalSubtitle": "Εμφάνιση τοπικών υπότιτλων",
+                    "showHiddenSubtitles": "Εμφάνιση κρυφών υπότιτλων"
+                }
+            },
+            "videoPlayer": {
+                "title": "Ρυθμίσεις διεπαφής αναπαραγωγής βίντεο",
+                "subtitle": "Προσαρμόστε τις δυνατότητες του προγράμματος αναπαραγωγής βίντεο",
+                "options": {
+                    "patching": {
+                        "title": "Τροποποίηση διεπαφής αναπαραγωγής βίντεο",
+                        "options": {
+                            "enableVPUIPatching": "Ενεργοποίηση τροποποίησης διεπαφής αναπαραγωγής βίντεο",
+                            "previousNextBtns": "Ενεργοποίηση κουμπιών Προηγούμενο και Επόμενο",
+                            "showSuperThxBtn": "Εμφάνιση κουμπιού σούπερ ευχαριστιών",
+                            "showSpeedCtrlBtn": "Εμφάνιση κουμπιού ελέγχου ταχύτητας",
+                            "showAIAskBtn": "Show Ask Button",
+                            "addMPBtn": "Show Mini Player Button",
+                            "swapMPWithPIP": "Swap Mini Player Button with PiP Button"
+                        }
+                    },
+                    "preferredVideoQuality": {
+                        "title": "Προτιμώμενη ποιότητα βίντεο",
+                        "subtitle": "Επιλέξτε την προτιμώμενη ή την επόμενη καλύτερη ποιότητα βίντεο που θα εφαρμοστεί κατά την έναρξη της αναπαραγωγής"
+                    },
+                    "speedSettings": {
+                        "title": "Ρυθμίσεις ποσοτικών αυξήσεων στην ταχύτητα βίντεο",
+                        "subtitle": "Ρύθμιστε τις ποσοτικές αυξήσεις στην ταχύτητα αναπαραγωγής βίντεο"
+                    },
+                    "preferredVideoCodec": {
+                        "title": "Προτιμώμενος αποκωδικοποιητής βίντεο",
+                        "subtitle": "Επιλογή προτιμώμενου αποκωδικοποιητή βίντεο για αναπαραγωγή"
+                    },
+                    "afr": "Αυτόματος ρυθμός καρέ",
+                    "afrPauseDuration": {
+                        "title": "Αυτόματη διάρκεια παύσης κατά τον ρυθμό καρέ",
+                        "subtitle": "Ρυθμίστε τη διάρκεια παύσης του βίντεο (σε δευτερόλεπτα) κατά την προσαρμογή του ρυθμού καρέ"
+                    },
+                    "codecAny": "Any",
+                    "qualityAuto": "Auto",
+                    "hideRelatedVideosPlayer": "Hide Related Videos"
+                }
+            },
+            "uiSettings": {
+                "title": "Ρυθμίσεις διεπαφής χρήστη",
+                "subtitle": "Προσαρμόστε τη διεπαφή χρήστη σύμφωνα με τις προτιμήσεις σας",
+                "options": {
+                    "hideWatchedVideos": {
+                        "title": "Απόκρυψη βίντεο που παρακολουθήσατε",
+                        "options": {
+                            "enableHideWatchedVideos": "Ενεργοποίηση απόκρυψης βίντεο που παρακολουθήσατε",
+                            "watchedVideosThreshold": {
+                                "title": "Όριο βίντεο που παρακολουθήσατε",
+                                "subtitle": "Ορίστε το όριο ποσοστού για την απόκρυψη των βίντεο που παρακολουθήσατε"
+                            },
+                            "setPagesToHideWatchedVideos": "Ρυθμίστε τις σελίδες για απόκρυψη βίντεο που παρακολουθήσατε"
+                        }
+                    },
+                    "screenDimming": {
+                        "title": "Συσκότιση οθόνης",
+                        "options": {
+                            "enableScreenDimming": "Ενεργοποίηση συσκότισης οθόνης",
+                            "dimmingTimeout": {
+                                "title": "Χρονικό όριο συσκότισης",
+                                "subtitle": "Ρυθμίστε το χρονικό όριο αδράνειας (σε δευτερόλεπτα) πριν συσκοτιθεί η οθόνη"
+                            },
+                            "dimmingOpacity": {
+                                "title": "Αδιαφάνεια συσκότισης",
+                                "subtitle": "Ρυθμίστε το επίπεδο αδιαφάνειας για τη μείωση της φωτεινότητας της οθόνης"
+                            }
+                        }
+                    },
+                    "disableSidebarContents": {
+                        "title": "Απενεργοποιήση περιεχομένων πλευρικής γραμμής",
+                        "subtitle": "Επιλέξτε τα περιεχόμενα της πλευρικής γραμμής για απενεργοποίηση"
+                    },
+                    "launchToOnStartup": {
+                        "title": "Εκκίνηση σε κατά την έναρξη",
+                        "subtitle": "Επιλέξτε την εξ'ορισμού σελίδα στην οποία ανοίγει το TizenTube κατά την έναρξη"
+                    },
+                    "sortSubscriptionsByAlphabet": "Ταξινόμηση εγγραφών αλφαβητικά",
+                    "categories": {
+                        "search": "Search",
+                        "home": "Home",
+                        "sports": "Sports",
+                        "news": "News",
+                        "music": "Music",
+                        "podcasts": "Podcasts",
+                        "moviesAndTv": "Movies & TV",
+                        "live": "Live",
+                        "gaming": "Gaming",
+                        "subscriptions": "Subscriptions",
+                        "library": "Library",
+                        "more": "More",
+                        "shorts": "Shorts",
+                        "searchResults": "Search Results"
+                    },
+                    "disableChannelsOnSidebar": "Disable Channels on Sidebar",
+                    "clock": {
+                        "title": "Clock",
+                        "subtitle": "Display a clock on the screen",
+                        "options": {
+                            "enableClock": "Enable Clock",
+                            "isClock12HourFormat": "Use 12-Hour Format for Clock",
+                            "clockShowSeconds": "Show Seconds on Clock",
+                            "clockHideWhenVideoPlaying": "Hide Clock While Video is Playing"
+                        }
+                    },
+                    "disableEnlargingThumbnails": "Disable Enlarged Thumbnails",
+                    "enableShrinkingThumbnails": "Enable Shrinked Thumbnails",
+                    "sortSidebarContents": {
+                        "title": "Sort Sidebar Contents",
+                        "subtitle": "Reorder sidebar contents to your preference",
+                        "moveUp": {
+                            "title": "Move Up",
+                            "subtitle": "Move this item up in the sidebar"
+                        },
+                        "moveDown": {
+                            "title": "Move Down",
+                            "subtitle": "Move this item down in the sidebar"
+                        },
+                        "addToSidebar": "Add Channel to Sidebar",
+                        "removeFromSidebar": "Remove Channel from Sidebar"
+                    }
+                }
+            },
+            "updater": {
+                "title": "Ενημερωτής TizenTube Cobalt",
+                "menuSubtitle": "Διαχειριστείτε τις ενημερώσεις του TizenTube Cobalt",
+                "versionSubtitle": "Τρέχουσα έκδοση: {{version}}",
+                "options": {
+                    "checkForUpdates": "Έλεγχος ενημερώσεων",
+                    "checkForUpdatesOnStartup": "Έλεγχος ενημερώσεων κατά την έναρξη"
+                },
+                "updateAvailable": {
+                    "title": "Update Available",
+                    "subtitle": "A new version of TizenTube Cobalt is available: {{latestVersion}}, current: {{currentVersion}}"
+                },
+                "releaseDate": "Release Date: {{date}}",
+                "updateNow": {
+                    "title": "Update Now",
+                    "subtitle": "Click to download the latest version."
+                },
+                "remindLater": {
+                    "title": "Remind Me Later",
+                    "subtitle": "Check for updates later."
+                },
+                "upToDate": {
+                    "title": "TizenTube is up to date",
+                    "subtitle": "You are using the latest version ({{version}}) of TizenTube Cobalt."
+                },
+                "checkFailed": {
+                    "title": "TizenTube update check failed",
+                    "subtitle": "Could not check for updates."
+                },
+                "downloading": {
+                    "title": "TizenTube Update",
+                    "subtitle": "Downloading update, please wait..."
+                }
+            },
+            "time": {
+                "second": "{{count}} second",
+                "seconds": "{{count}} seconds",
+                "minute": "{{count}} minute",
+                "minutes": "{{count}} minutes"
+            }
+        },
+        "ttSettings": {
+            "title": "Έναρξη TizenTube",
+            "madeByText": "Φτιαγμένο από τον Reis Can (reisxd) με ❤️",
+            "summary": "Άνοιγμα ρυθμίσεων TizenTube"
+        },
+        "supportTT": {
+            "title": "Υποστηρίξτε το TizenTube",
+            "subtitle": "❤️ Δείξτε υποστήριξη για το TizenTube και την ανάπτυξή του",
+            "content": {
+                "1": "Εάν σας αρέσει να χρησιμοποιείτε το TizenTube και θέλετε να υποστηρίξετε την ανάπτυξή του, λάβετε υπ'όψη τα εξής:",
+                "2": "1. Βάλτε αστέρι στο αποθετήριο GitHub για να αυξήσετε την ορατότητά του.",
+                "3": "2. Μοιραστείτε το TizenTube με άλλους.",
+                "4": "Εάν θέλετε να συνεισφέρετε οικονομικά, σκεφτείτε να δωρίσετε:",
+                "5": "- Buy Me A Coffee: https://www.buymeacoffee.com/reisxd (κατά προτίμηση)",
+                "6": "- Χορηγοί GitHub: https://github.com/sponsors/reisxd"
+            }
+        }
+    },
+    "welcomeMsg": {
+        "title": "Καλώς ήρθατε στο TizenTube",
+        "subtitle": "Μεταβείτε στις ρυθμίσεις και κάντε κλικ στις ρυθμίσεις TizenTube για επιλογές."
+    },
+    "sponsorblock": {
+        "segments": {
+            "sponsor": "χορηγούμενο τμήμα",
+            "intro": "εισαγωγή",
+            "outro": "έξοδος",
+            "interaction": "υπενθύμιση αλληλεπίδρασης",
+            "selfpromo": "αυτοπροβολή",
+            "preview": "ανακεφαλαίωση ή προεπισκόπηση",
+            "filler": "εφαπτόμενα τμήματα",
+            "music_offtopic": "τμήμα με μουσική εκτός θέματος",
+            "poi_highlight": "αποκορύφωμα"
+        },
+        "toasts": {
+            "skipping": "Παράλειψη {{segment}}",
+            "notSkipping": "Δεν έγινε παράλειψη του {{segment}} (έχουν παραλειφθεί {{count}} φορές)",
+            "skip": "Παράλειψη {{segment}}",
+            "skipToHighlight": "Μετάβαση στην επισήμανση"
+        }
+    },
+    "player": {
+        "playbackSpeed": {
+            "title": "Playback Speed",
+            "button": "Speed Controls",
+            "fixStuttering": "Fix stuttering (1.0001x)"
+        },
+        "miniPlayer": "Mini Player",
+        "pictureInPicture": "Picture in Picture",
+        "previous": "Previous",
+        "next": "Next",
+        "withTizenTube": "with TizenTube",
+        "share": {
+            "title": "Share",
+            "button": "Share",
+            "qrCodeScanMessage": "Scan the QR code below to share this video."
+        },
+        "screenOff": "Turn off screen"
+    },
+    "toasts": {
+        "videoAddedToQueue": "Video added to queue.",
+        "videoQueueCleared": "Video queue cleared.",
+        "sidebarContentsUpdated": {
+            "title": "Sidebar Contents Updated",
+            "subtitle": "The sidebar contents have been updated."
+        },
+        "feedbackSent": "Feedback sent."
+    },
+    "videoMenu": {
+        "notInterested": "Not interested",
+        "dontRecommendChannel": "Don't recommend channel"
+    }
+}
