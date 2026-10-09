@@ -87,7 +87,7 @@ export default function () {
     if (navigator.sendBeacon) {
         const originalSendBeacon = navigator.sendBeacon;
         navigator.sendBeacon = function (url, data) {
-            console.log("Beacon data:", data);
+            // Never log beacon payloads: they can carry account or viewing data.
             return originalSendBeacon.apply(this, [redirectUrl(url), data]);
         };
     }

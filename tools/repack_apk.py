@@ -342,9 +342,9 @@ def patch_tv_manifest_compatibility(decoded_dir: str) -> None:
 
     icon_pattern = re.compile(r'(?<![\w:])(?:android:)?icon(?:\([^)]*\))?="[^"]*"')
     if icon_pattern.search(start_tag):
-        start_tag = icon_pattern.sub(lambda m: m.group(0).split("=", 1)[0] + '="@drawable/ytark_launcher"', start_tag, count=1)
+        start_tag = icon_pattern.sub(lambda m: m.group(0).split("=", 1)[0] + '="@mipmap/ytark_launcher"', start_tag, count=1)
     else:
-        start_tag = start_tag[:-1] + ' android:icon="@drawable/ytark_launcher">'
+        start_tag = start_tag[:-1] + ' android:icon="@mipmap/ytark_launcher">'
 
     intent_filters = list(re.finditer(r'<intent-filter\b[^>]*>.*?</intent-filter\s*>', body, re.S))
     main_filter = next((item for item in intent_filters
@@ -410,11 +410,25 @@ def patch_apktool_yml(path: str, version_code: int, version_name: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# YTArk launcher icon
+# YTArk launcher icon (Alternative 2 branding artifacts)
 # ---------------------------------------------------------------------------
 
+YTARK_ICON_SOURCES = (
+    # (source under android-updater/, target under decoded res/)
+    ("ytark_launcher_fg.xml", "drawable/ytark_launcher_fg.xml"),
+    ("ytark_launcher_bg.xml", "drawable/ytark_launcher_bg.xml"),
+    ("ytark_banner.xml", "drawable/ytark_banner.xml"),
+    ("mipmap-anydpi-v26/ytark_launcher.xml", "mipmap-anydpi-v26/ytark_launcher.xml"),
+    ("mipmap-mdpi/ytark_launcher.png", "mipmap-mdpi/ytark_launcher.png"),
+    ("mipmap-hdpi/ytark_launcher.png", "mipmap-hdpi/ytark_launcher.png"),
+    ("mipmap-xhdpi/ytark_launcher.png", "mipmap-xhdpi/ytark_launcher.png"),
+    ("mipmap-xxhdpi/ytark_launcher.png", "mipmap-xxhdpi/ytark_launcher.png"),
+    ("mipmap-xxxhdpi/ytark_launcher.png", "mipmap-xxxhdpi/ytark_launcher.png"),
+)
+
+
 def patch_launcher_icon(decoded_dir: str) -> None:
-    """Replace upstream launcher icon references with the YTArk vector icon."""
+    """Replace upstream launcher icon references with the YTArk artwork set."""
     manifest_path = os.path.join(decoded_dir, "AndroidManifest.xml")
     with open(manifest_path, encoding="utf-8") as fh:
         xml = fh.read()
@@ -422,7 +436,7 @@ def patch_launcher_icon(decoded_dir: str) -> None:
     icon_pattern = r'(?<![\w:])(?:android:)?icon(?:\([^)]*\))?="[^"]*"'
     round_icon_pattern = r'(?<![\w:])(?:android:)?roundIcon(?:\([^)]*\))?="[^"]*"'
     banner_pattern = r'(?<![\w:])(?:android:)?banner(?:\([^)]*\))?="[^"]*"'
-    replacement = lambda match: match.group(0).split("=", 1)[0] + '="@drawable/ytark_launcher"'
+    replacement = lambda match: match.group(0).split("=", 1)[0] + '="@mipmap/ytark_launcher"'
     xml, icon_count = re.subn(icon_pattern, replacement, xml)
     xml, round_count = re.subn(round_icon_pattern, replacement, xml)
     xml, banner_count = re.subn(
@@ -433,7 +447,7 @@ def patch_launcher_icon(decoded_dir: str) -> None:
     if not app_tag:
         raise SystemExit("ERROR: cannot set YTArk launcher artwork without <application>.")
     app_block = app_tag.group(0)
-    for attribute, value in (("icon", "@drawable/ytark_launcher"),
+    for attribute, value in (("icon", "@mipmap/ytark_launcher"),
                              ("banner", "@drawable/ytark_banner")):
         pattern = re.compile(rf'(?<![\w:])(?:android:)?{attribute}(?:\([^)]*\))?="[^"]*"')
         if pattern.search(app_block):
@@ -445,17 +459,16 @@ def patch_launcher_icon(decoded_dir: str) -> None:
     with open(manifest_path, "w", encoding="utf-8") as fh:
         fh.write(xml)
 
-    source = os.path.join(os.path.dirname(__file__), "..", "android-updater", "ytark_launcher.xml")
-    if not os.path.isfile(source):
-        raise SystemExit(f"ERROR: YTArk launcher vector is missing: {source}")
-    target_dir = os.path.join(decoded_dir, "res", "drawable")
-    os.makedirs(target_dir, exist_ok=True)
-    shutil.copyfile(source, os.path.join(target_dir, "ytark_launcher.xml"))
-    banner_source = os.path.join(os.path.dirname(__file__), "..", "android-updater", "ytark_banner.xml")
-    if not os.path.isfile(banner_source):
-        raise SystemExit(f"ERROR: YTArk launcher banner is missing: {banner_source}")
-    shutil.copyfile(banner_source, os.path.join(target_dir, "ytark_banner.xml"))
-    print(f"[*] Launcher: rebranded {icon_count} icon and {banner_count} banner reference(s)")
+    source_root = os.path.join(os.path.dirname(__file__), "..", "android-updater")
+    for source_name, target_name in YTARK_ICON_SOURCES:
+        source = os.path.join(source_root, source_name)
+        if not os.path.isfile(source):
+            raise SystemExit(f"ERROR: YTArk branding artifact is missing: {source}")
+        target = os.path.join(decoded_dir, "res", target_name)
+        os.makedirs(os.path.dirname(target), exist_ok=True)
+        shutil.copyfile(source, target)
+    print(f"[*] Launcher: rebranded {icon_count} icon and {banner_count} banner reference(s); "
+          f"installed {len(YTARK_ICON_SOURCES)} Alternative 2 artwork resources")
 
 
 # ---------------------------------------------------------------------------
@@ -815,10 +828,21 @@ def self_test() -> None:
     normalize_android_namespace(updater_dir)
     patch_launcher_icon(updater_dir)
     patch_updater_manifest(updater_dir, "io.github.twoarchiver.ytark")
+    artwork_checks = [
+        (os.path.isfile(os.path.join(updater_dir, "res", target)), target)
+        for _source, target in YTARK_ICON_SOURCES
+    ]
+    if all(passed for passed, _what in artwork_checks):
+        print("PASS: Alternative 2 launcher artwork set installed into res/")
+    else:
+        for passed, what in artwork_checks:
+            if not passed:
+                print(f"FAIL: artwork resource missing after repack: {what}")
+                ok = False
     with open(os.path.join(updater_dir, "AndroidManifest.xml"), encoding="utf-8") as fh:
         patched_updater_manifest = fh.read()
     updater_checks = [
-        ('android:icon="@drawable/ytark_launcher"' in patched_updater_manifest,
+        ('android:icon="@mipmap/ytark_launcher"' in patched_updater_manifest,
          "application icon changed to YTArk"),
         ('android:banner="@drawable/ytark_banner"' in patched_updater_manifest,
          "Android TV launcher banner changed to YTArk"),
@@ -933,8 +957,8 @@ def main():
     ap.add_argument("--app-id", default="io.github.twoarchiver.ytark")
     ap.add_argument("--script-url", required=False,
                     help="replacement userscript URL, must end with '?v='")
-    ap.add_argument("--version-code", type=int, default=20016)
-    ap.add_argument("--version-name", default="2.0.4-ytark.16")
+    ap.add_argument("--version-code", type=int, default=20017)
+    ap.add_argument("--version-name", default="2.0.4-ytark.17")
     ap.add_argument("--apktool", default="apktool",
                     help="apktool command, e.g. 'java -jar apktool.jar'")
     ap.add_argument("--zipalign", default="zipalign")

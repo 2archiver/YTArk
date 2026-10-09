@@ -4,10 +4,16 @@ TizenTube/mods/node_modules/
 *.jks
 *.keystore
 *.p12
+*.pfx
+*.bks
+*.jceks
+*.p8
 *.private-key
 *.pem.key
 *.password
 *.passwords
+.env
+.env.*
 base/
 work/
 release-assets/

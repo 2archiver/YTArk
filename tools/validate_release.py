@@ -258,7 +258,7 @@ def validate_compiled_manifest(apk: Path, aapt: str) -> None:
         if (feature_name in OPTIONAL_TV_FEATURES or feature_name.startswith("android.hardware.sensor.")) \
                 and _boolean_attribute_is_true(_attribute_line(block, "required")):
             raise ValueError(f"Unnecessary TV-incompatible feature is marked required: {feature_name}")
-    print(f"Verified compiled TV launcher: {launcher_name.strip()}, MAIN + LEANBACK_LAUNCHER, exported, YouTube icon and YTArk banner.")
+    print(f"Verified compiled TV launcher: {launcher_name.strip()}, MAIN + LEANBACK_LAUNCHER, exported, YTArk launcher icon and banner.")
 
 
 def validate_apk(path: str, architecture: str, expected_cert_file: str,
@@ -316,7 +316,17 @@ def validate_apk(path: str, architecture: str, expected_cert_file: str,
                 raise ValueError(f"Native library is compressed instead of directly loadable: {native_path}")
         if "resources.arsc" not in names or archive.getinfo("resources.arsc").compress_type != zipfile.ZIP_STORED:
             raise ValueError("resources.arsc must be present and stored uncompressed")
-        for artwork in ("res/drawable/ytark_launcher.xml", "res/drawable/ytark_banner.xml"):
+        for artwork in (
+            "res/drawable/ytark_launcher_fg.xml",
+            "res/drawable/ytark_launcher_bg.xml",
+            "res/drawable/ytark_banner.xml",
+            "res/mipmap-anydpi-v26/ytark_launcher.xml",
+            "res/mipmap-mdpi/ytark_launcher.png",
+            "res/mipmap-hdpi/ytark_launcher.png",
+            "res/mipmap-xhdpi/ytark_launcher.png",
+            "res/mipmap-xxhdpi/ytark_launcher.png",
+            "res/mipmap-xxxhdpi/ytark_launcher.png",
+        ):
             if artwork not in names:
                 raise ValueError(f"APK is missing YTArk artwork resource: {artwork}")
         dex_files = [name for name in names if re.fullmatch(r"classes\d*\.dex", name)]

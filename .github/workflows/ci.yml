@@ -19,17 +19,18 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up Node.js
-        uses: actions/setup-node@v7.1.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: TizenTube/mods/package-lock.json
+        # actions are pinned to full commit SHAs (supply-chain hardening)
 
       - name: Set up Java 17
-        uses: actions/setup-java@v6.0.1
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: "17"
@@ -57,11 +58,13 @@ jobs:
           python3 -m unittest discover -s tools/tests -v
           bash -n tools/*.sh
           python3 tools/repack_apk.py --self-test
+          python3 tools/render_launcher_art.py --check
+          python3 tools/check_no_secrets.py --history
           python3 tools/validate_release.py emit-env --file "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'VERSION_NAME=2.0.4-ytark.16' "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'VERSION_CODE=20016' "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'APK_ARMV7=YTArk-v2.0.4-ytark.16-armv7.apk' "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'APK_ARM64=YTArk-v2.0.4-ytark.16-arm64.apk' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'VERSION_NAME=2.0.4-ytark.17' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'VERSION_CODE=20017' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'APK_ARMV7=YTArk-v2.0.4-ytark.17-armv7.apk' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'APK_ARM64=YTArk-v2.0.4-ytark.17-arm64.apk' "$RUNNER_TEMP/ytark-release.env"
           actual_cert="$(openssl x509 -in signing/YTArk-release-cert.pem -outform DER | sha256sum | awk '{print $1}')"
           expected_cert="$(grep -v '^[[:space:]]*#' signing/YTArk-cert-sha256.txt | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
           test "$actual_cert" = "$expected_cert"
