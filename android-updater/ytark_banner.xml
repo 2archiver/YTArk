@@ -3,21 +3,37 @@
     android:height="180dp"
     android:viewportWidth="320"
     android:viewportHeight="180">
-    <path
-        android:fillColor="#101010"
-        android:pathData="M0,0H320V180H0Z" />
-    <path
-        android:fillColor="#FF0000"
-        android:pathData="M56,57H136A11,11 0,0 1,147 68V112A11,11 0,0 1,136 123H56A11,11 0,0 1,45 112V68A11,11 0,0 1,56 57Z" />
-    <path
-        android:fillColor="#FFFFFF"
-        android:pathData="M82,73L112,90L82,107Z" />
-    <!-- Simple local vector lettering keeps the YTArk banner self-contained. -->
-    <path
-        android:fillColor="#00000000"
-        android:strokeColor="#FFFFFF"
+    <path android:fillColor="#FFF5F6F8"
+        android:pathData="M 0,0 H 320 V 180 H 0 Z" />
+    <group android:translateX="36.0000" android:translateY="32.0000">
+        <path android:fillColor="#FFFFFFFF"
+            android:strokeColor="#FFE7E9ED"
+            android:strokeWidth="1.3920"
+            android:pathData="M 25.5200,0.0000 H 90.4800 A 25.5200,25.5200 0 0 1 116.0000,25.5200 V 90.4800 A 25.5200,25.5200 0 0 1 90.4800,116.0000 H 25.5200 A 25.5200,25.5200 0 0 1 0.0000,90.4800 V 25.5200 A 25.5200,25.5200 0 0 1 25.5200,0.0000 Z" />
+        <path android:fillColor="#00000000"
+            android:strokeColor="#FFED1C24"
+            android:strokeWidth="5.2200"
+            android:strokeLineCap="round"
+            android:pathData="M 60.5452,91.0510 A 49.3000 29.5800 -33.00 0 1 33.6452,40.4768" />
+        <path android:fillColor="#FFED1C24"
+            android:pathData="M 38.8600,33.6400 H 77.1400 A 13.3400,13.3400 0 0 1 90.4800,46.9800 V 69.0200 A 13.3400,13.3400 0 0 1 77.1400,82.3600 H 38.8600 A 13.3400,13.3400 0 0 1 25.5200,69.0200 V 46.9800 A 13.3400,13.3400 0 0 1 38.8600,33.6400 Z" />
+        <path android:fillColor="#FFFFFFFF"
+            android:pathData="M 53.5920,44.6600 L 53.5920,71.3400 L 70.1800,58.0000 Z" />
+        <path android:fillColor="#00000000"
+            android:strokeColor="#FFFFFFFF"
+            android:strokeWidth="8.0040"
+            android:strokeLineCap="butt"
+            android:pathData="M 101.6010,49.5355 A 49.3000 29.5800 -33.00 0 1 63.6293,89.7267" />
+        <path android:fillColor="#00000000"
+            android:strokeColor="#FFED1C24"
+            android:strokeWidth="5.2200"
+            android:strokeLineCap="round"
+            android:pathData="M 101.1862,36.0232 A 49.3000 29.5800 -33.00 0 1 60.5452,91.0510" />
+    </group>
+    <path android:fillColor="#00000000"
+        android:strokeColor="#FF14181F"
         android:strokeWidth="5"
         android:strokeLineCap="round"
         android:strokeLineJoin="round"
-        android:pathData="M169,73L181,87L193,73M181,87V113M201,73H222M211.5,73V113M229,113L236,73H247L254,113M232,98H251M264,88V113M264,95C270,85 277,85 282,88M291,88V113M291,100L302,88M294,98L305,113" />
+        android:pathData="M 169,73 L 181,87 L 193,73 M 181,87 V 113 M 201,73 H 222 M 211.5,73 V 113 M 229,113 L 236,73 H 247 L 254,113 M 232,98 H 251 M 264,88 V 113 M 264,95 C 270,85 277,85 282,88 M 291,88 V 113 M 291,100 L 302,88 M 294,98 L 305,113" />
 </vector>

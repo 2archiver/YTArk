@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- YTArk Alternative 2 launcher master: light rounded-square tile, -->
+  <!-- red video play emblem, red orbital swoosh with over/under pass. -->
+  <!-- No text, no watermarks, no concept-poster content. -->
+  <path fill="#FFFFFF" stroke="#E7E9ED" stroke-width="6.14" d="M 112.6400,0.0000 H 399.3600 A 112.6400,112.6400 0 0 1 512.0000,112.6400 V 399.3600 A 112.6400,112.6400 0 0 1 399.3600,512.0000 H 112.6400 A 112.6400,112.6400 0 0 1 0.0000,399.3600 V 112.6400 A 112.6400,112.6400 0 0 1 112.6400,0.0000 Z" />
+  <path fill="none" stroke="#ED1C24" stroke-width="23.04" stroke-linecap="round" d="M 267.2338,401.8803 A 217.6000 130.5600 -33.00 0 1 148.5030,178.6563" />
+  <path fill="#ED1C24" d="M 171.5200,148.4800 H 340.4800 A 58.8800,58.8800 0 0 1 399.3600,207.3600 V 304.6400 A 58.8800,58.8800 0 0 1 340.4800,363.5200 H 171.5200 A 58.8800,58.8800 0 0 1 112.6400,304.6400 V 207.3600 A 58.8800,58.8800 0 0 1 171.5200,148.4800 Z" />
+  <path fill="#FFFFFF" d="M 236.5440,197.1200 L 236.5440,314.8800 L 309.7600,256.0000 Z" />
+  <path fill="none" stroke="#FFFFFF" stroke-width="35.33" stroke-linecap="butt" d="M 448.4458,218.6394 A 217.6000 130.5600 -33.00 0 1 280.8464,396.0353" />
+  <path fill="none" stroke="#ED1C24" stroke-width="23.04" stroke-linecap="round" d="M 446.6150,158.9989 A 217.6000 130.5600 -33.00 0 1 267.2338,401.8803" />
+</svg>

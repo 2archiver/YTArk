@@ -115,6 +115,18 @@ public final class UpdateActivity extends Activity {
         versionParams.topMargin = dp(8);
         content.addView(installedVersionText, versionParams);
 
+        TextView disclosureText = new TextView(this);
+        disclosureText.setText("Update checks run at app start and every 6 hours "
+                + "over HTTPS (api.github.com). Later snoozes them for 24 hours. "
+                + "Downloads are verified against the release SHA-256 and the YTArk "
+                + "signing certificate; Android always asks you to confirm installation.");
+        disclosureText.setTextColor(Color.rgb(140, 152, 168));
+        disclosureText.setTextSize(14);
+        LinearLayout.LayoutParams disclosureParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        disclosureParams.topMargin = dp(6);
+        content.addView(disclosureText, disclosureParams);
+
         statusText = new TextView(this);
         statusText.setTextColor(Color.WHITE);
         statusText.setTextSize(20);
