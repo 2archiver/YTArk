@@ -43,7 +43,7 @@ sed "s/@YTARK_CERT_SHA256@/${CERT_SHA256}/g" \
 
 mapfile -t SOURCES < <(find "$SOURCE" -type f -name '*.java' -print | sort)
 SOURCES+=("$WORK/generated/io/github/twoarchiver/ytark/updater/UpdaterBuildConfig.java")
-javac -Xlint:-options -source 8 -target 8 -bootclasspath "$PLATFORM" \
+javac --release 8 -classpath "$PLATFORM" \
   -d "$WORK/classes" "${SOURCES[@]}"
 jar --create --file "$WORK/ytark-updater.jar" -C "$WORK/classes" .
 "$D8" --release --min-api 24 --lib "$PLATFORM" \
