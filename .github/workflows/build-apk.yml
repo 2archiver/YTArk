@@ -4,7 +4,6 @@ on:
   push:
     branches:
       - main
-      - arena/fdb8cb92-ytark
   workflow_dispatch:
 
 permissions:
