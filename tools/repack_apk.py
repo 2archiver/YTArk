@@ -115,7 +115,8 @@ def patch_script_url(decoded_dir: str, script_url: str) -> int:
 # Manifest / apktool.yml patching
 # ---------------------------------------------------------------------------
 
-def patch_manifest(path: str, app_id: str, app_name: str) -> None:
+def patch_manifest(decoded_dir: str, app_id: str, app_name: str) -> None:
+    path = os.path.join(decoded_dir, "AndroidManifest.xml")
     with open(path, encoding="utf-8") as fh:
         xml = fh.read()
 
@@ -129,22 +130,27 @@ def patch_manifest(path: str, app_id: str, app_name: str) -> None:
     print(f"[*] Manifest: replaced {n_pkg} reference(s) to "
           f"'{OLD_PACKAGE}' -> '{app_id}'")
 
-    # Application label: the upstream manifest uses a literal label on the
-    # <application> tag. Replace whatever literal it carries.
+    # Application label: either a literal on <application>, or a @string
+    # resource reference (resolved by apktool during decode).
     app_tag = re.search(r"<application\b[^>]*>", xml, re.S)
     if not app_tag:
         raise SystemExit("ERROR: could not find <application> tag in manifest")
     block = app_tag.group(0)
     label_match = re.search(r'android:label="([^"]*)"', block)
-    if label_match:
-        old_label = label_match.group(1)
-        new_block = block.replace(
-            f'android:label="{old_label}"', f'android:label="{app_name}"', 1)
-        xml = xml.replace(block, new_block, 1)
-        print(f"[*] Manifest: application label '{old_label}' -> '{app_name}'")
+    if not label_match:
+        print("[!] Manifest: no android:label on <application> — leaving as-is.")
     else:
-        print("[!] Manifest: no literal android:label on <application>; "
-              "label may come from resources (not decoded) — leaving as-is.")
+        old_label = label_match.group(1)
+        if old_label.startswith("@string/"):
+            # Label lives in res/values/strings.xml — patch the resource.
+            res_name = old_label[len("@string/"):]
+            patch_string_resource(decoded_dir, res_name, app_name)
+        else:
+            new_block = block.replace(
+                f'android:label="{old_label}"', f'android:label="{app_name}"', 1)
+            xml = xml.replace(block, new_block, 1)
+            print(f"[*] Manifest: application label '{old_label}' -> "
+                  f"'{app_name}'")
 
     # Component names are fully qualified (dev.cobalt.app.MainActivity,
     # org.chromium.*) and untouched by the package rename — verified against
@@ -153,11 +159,31 @@ def patch_manifest(path: str, app_id: str, app_name: str) -> None:
         fh.write(xml)
 
 
+def patch_string_resource(decoded_dir: str, res_name: str, new_value: str) -> None:
+    """Set <string name="res_name">…</string> in every res/values*/strings.xml."""
+    pattern = re.compile(
+        r'(<string name="%s"[^>]*>).*?(</string>)' % re.escape(res_name), re.S)
+    patched = 0
+    for path in glob.glob(os.path.join(decoded_dir, "res", "values*", "strings.xml")):
+        with open(path, encoding="utf-8") as fh:
+            xml = fh.read()
+        xml, n = pattern.subn(lambda m: m.group(1) + new_value + m.group(2), xml)
+        if n:
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write(xml)
+            patched += n
+            print(f"[*] Resource: string '{res_name}' -> '{new_value}' "
+                  f"({os.path.relpath(path, decoded_dir)})")
+    if not patched:
+        print(f"[!] No <string name=\"{res_name}\"> found — label not changed.")
+
+
 def patch_apktool_yml(path: str, version_code: int, version_name: str) -> None:
     with open(path, encoding="utf-8") as fh:
         text = fh.read()
+    # NOTE: apktool 3.x parses versionCode as an int — keep it UNQUOTED.
     text, n_code = re.subn(
-        r"versionCode: '?\d+'?", f"versionCode: '{version_code}'", text)
+        r"versionCode: '?\d+'?", f"versionCode: {version_code}", text)
     text, n_name = re.subn(
         r"versionName: .*", f"versionName: {version_name}", text)
     if n_code != 1 or n_name != 1:
@@ -166,8 +192,8 @@ def patch_apktool_yml(path: str, version_code: int, version_name: str) -> None:
             f"(matched versionCode x{n_code}, versionName x{n_name}).")
     with open(path, "w", encoding="utf-8") as fh:
         fh.write(text)
-    print(f"[*] apktool.yml: versionCode='{version_code}', "
-          f"versionName='{version_name}'")
+    print(f"[*] apktool.yml: versionCode={version_code}, "
+          f"versionName={version_name}")
 
 
 # ---------------------------------------------------------------------------
@@ -217,8 +243,7 @@ def repack(args) -> None:
                    "--output", decoded, args.base])
 
     patch_script_url(decoded, args.script_url)
-    patch_manifest(os.path.join(decoded, "AndroidManifest.xml"),
-                   args.app_id, args.app_name)
+    patch_manifest(decoded, args.app_id, args.app_name)
     patch_apktool_yml(os.path.join(decoded, "apktool.yml"),
                       args.version_code, args.version_name)
 
@@ -308,13 +333,13 @@ def self_test() -> None:
         f'    <provider android:authorities="{OLD_PACKAGE}.fileprovider"/>\n'
         '  </application>\n'
         '</manifest>\n')
-    with tempfile.NamedTemporaryFile("w", suffix=".xml", delete=False) as fh:
+    tdir = tempfile.mkdtemp()
+    mpath = os.path.join(tdir, "AndroidManifest.xml")
+    with open(mpath, "w") as fh:
         fh.write(sample)
-        mpath = fh.name
-    patch_manifest(mpath, "io.github.personal.tubetv", "Personal Tube TV")
+    patch_manifest(tdir, "io.github.personal.tubetv", "Personal Tube TV")
     with open(mpath) as fh:
         out = fh.read()
-    os.unlink(mpath)
     checks = [
         ('package="io.github.personal.tubetv"' in out, "package attr renamed"),
         ("io.gh.reisxd.tizentube.cobalt" not in out, "no old package refs"),
@@ -354,6 +379,44 @@ def self_test() -> None:
         print("PASS: zip rewrite (libs stored, dex still deflated, arsc stored)")
     else:
         print("FAIL: zip rewrite compression methods wrong")
+        ok = False
+
+
+    # 5b. Manifest label via @string resource.
+    sample2 = (
+        '<?xml version="1.0"?>\n'
+        f'<manifest package="{OLD_PACKAGE}" versionCode="200">\n'
+        '  <application android:label="@string/app_name" android:name="dev.cobalt.app.CobaltApplication">\n'
+        '  </application>\n'
+        '</manifest>\n')
+    tdir2 = tempfile.mkdtemp()
+    os.makedirs(os.path.join(tdir2, "res", "values"))
+    with open(os.path.join(tdir2, "AndroidManifest.xml"), "w") as fh:
+        fh.write(sample2)
+    with open(os.path.join(tdir2, "res", "values", "strings.xml"), "w") as fh:
+        fh.write('<resources>\n  <string name="app_name">TizenTube</string>\n'
+                 '  <string name="other">keep</string>\n</resources>\n')
+    patch_manifest(tdir2, "io.github.personal.tubetv", "Personal Tube TV")
+    with open(os.path.join(tdir2, "res", "values", "strings.xml")) as fh:
+        res = fh.read()
+    if ('<string name="app_name">Personal Tube TV</string>' in res
+            and '<string name="other">keep</string>' in res):
+        print("PASS: @string label patched in res/values/strings.xml")
+    else:
+        print("FAIL: @string label patch")
+        ok = False
+
+    # 5c. apktool.yml versionCode must stay unquoted (apktool 3.x parseInt).
+    yml = tempfile.NamedTemporaryFile("w", suffix=".yml", delete=False)
+    yml.write("versionInfo:\n  versionCode: '200'\n  versionName: 2.0.2\n")
+    yml.close()
+    patch_apktool_yml(yml.name, 20042, "2.0.2-personal.42")
+    yml_text = open(yml.name).read()
+    os.unlink(yml.name)
+    if "versionCode: 20042" in yml_text and "versionName: 2.0.2-personal.42" in yml_text:
+        print("PASS: apktool.yml versionInfo (unquoted versionCode)")
+    else:
+        print("FAIL: apktool.yml patch produced: " + yml_text)
         ok = False
 
     print("\nSELF-TEST:", "ALL PASS" if ok else "FAILURES")
