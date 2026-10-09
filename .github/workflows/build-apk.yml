@@ -38,6 +38,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 concurrency:
   group: build-apk-${{ github.ref }}
@@ -70,10 +71,34 @@ jobs:
       - name: Build userscript (npm ci + tests + rollup)
         working-directory: TizenTube/mods
         run: |
-          npm ci --no-audit --no-fund
-          node tests/tv-controls.test.mjs
-          npm run build
-          node --check ../dist/userScript.js
+          set -o pipefail
+          mkdir -p /tmp/steplogs
+          npm ci --no-audit --no-fund 2>&1 | tee /tmp/steplogs/01-npm-ci.log \
+            || npm ci --no-audit --no-fund 2>&1 | tee /tmp/steplogs/01-npm-ci-retry.log
+          node tests/tv-controls.test.mjs 2>&1 | tee /tmp/steplogs/02-tests.log
+          npm run build 2>&1 | tee /tmp/steplogs/03-rollup-build.log
+          node --check ../dist/userScript.js 2>&1 | tee /tmp/steplogs/04-syntax-check.log
+
+      - name: Report failure logs (as issue, readable via API)
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          {
+            echo "CI failure in run $GITHUB_RUN_NUMBER"
+            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "Commit: $GITHUB_SHA"
+            echo
+            for f in /tmp/steplogs/*.log; do
+              echo "### $(basename "$f") (last 150 lines)"
+              echo '```'
+              tail -n 150 "$f"
+              echo '```'
+              echo
+            done
+          } > /tmp/failure-body.md
+          gh issue create --title "CI failure: run $GITHUB_RUN_NUMBER" \
+            --body-file /tmp/failure-body.md || true
 
       - name: Sanity-check the bundle
         run: |
