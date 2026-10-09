@@ -1,4 +1,9 @@
 TizenTube-upstream/
 TizenTube/mods/node_modules/
 *.apk
+base/
+work/
 cobalt-*/
+__pycache__/
+*.jks
+*.keystore

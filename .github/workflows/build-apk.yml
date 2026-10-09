@@ -1,0 +1,246 @@
+name: Build Personal Tube TV APKs
+
+# YouMod-inspired build pipeline:
+#   1. Build the custom TizenTube userscript from source (this repo)
+#   2. Publish it to a jsDelivr-servable git tag (cdn.jsdelivr.net is in the
+#      APK's CSP allowlist already — no CSP patching needed)
+#   3. Download the official TizenTubeCobalt APKs
+#   4. Repack: new app id + label + version, userscript URL patched in the
+#      native lib (same byte length), native libs stored uncompressed
+#   5. Sign (persistent keystore via secrets, or ephemeral per-run key)
+#   6. Verify signature + badging + patched URL, publish a GitHub Release
+#
+# Trigger manually from the Actions tab ("Run workflow"), or push a tag
+# matching "apk-v*" to cut a release hands-free.
+
+on:
+  workflow_dispatch:
+    inputs:
+      base_tag:
+        description: "TizenTubeCobalt release tag to use as base"
+        required: true
+        default: "v2.0.2"
+      app_name:
+        description: "Visible app name"
+        required: true
+        default: "Personal Tube TV"
+      app_id:
+        description: "Android application id (must differ from the official app)"
+        required: true
+        default: "io.github.personal.tubetv"
+      version_name:
+        description: "Version name (run number is appended)"
+        required: true
+        default: "2.0.2-personal"
+  push:
+    tags:
+      - "apk-v*"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-apk-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  BASE_TAG: ${{ github.event.inputs.base_tag || 'v2.0.2' }}
+  APP_NAME: ${{ github.event.inputs.app_name || 'Personal Tube TV' }}
+  APP_ID: ${{ github.event.inputs.app_id || 'io.github.personal.tubetv' }}
+  VERSION_NAME: ${{ github.event.inputs.version_name || '2.0.2-personal' }}
+  BUILD_TOOLS: "34.0.0"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ------------------------------------------------------------------
+      # 1. Build the custom userscript from source
+      # ------------------------------------------------------------------
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Build userscript (npm ci + tests + rollup)
+        working-directory: TizenTube/mods
+        run: |
+          npm ci --no-audit --no-fund
+          node tests/tv-controls.test.mjs
+          npm run build
+          node --check ../dist/userScript.js
+
+      - name: Sanity-check the bundle
+        run: |
+          for needle in "TV Quick Controls" "cleanTV" "midnightBlue" "TV_APPLY_PRESET" "TV_SET_QUALITY"; do
+            grep -q "$needle" TizenTube/dist/userScript.js || { echo "missing: $needle"; exit 1; }
+          done
+          echo "bundle OK: $(wc -c < TizenTube/dist/userScript.js) bytes"
+
+      # ------------------------------------------------------------------
+      # 2. Publish the script to a jsDelivr-servable tag
+      # ------------------------------------------------------------------
+      - name: Publish userscript tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SCRIPT_TAG: s${{ github.run_number }}
+        run: bash tools/publish_script_tag.sh TizenTube/dist/userScript.js
+
+      - name: Verify jsDelivr serves the exact script
+        env:
+          SCRIPT_TAG: s${{ github.run_number }}
+        run: |
+          URL="https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@${SCRIPT_TAG}/userScript.js"
+          echo "script URL: ${URL}"
+          curl -fsS "https://purge.jsdelivr.net/gh/${GITHUB_REPOSITORY}@${SCRIPT_TAG}/userScript.js" >/dev/null || true
+          ok=0
+          for i in $(seq 1 24); do
+            if curl -fsSL "$URL" -o /tmp/fetched.js && cmp -s /tmp/fetched.js TizenTube/dist/userScript.js; then
+              ok=1; break
+            fi
+            echo "jsDelivr not ready yet (attempt $i/24), retrying in 15s..."
+            sleep 15
+          done
+          [ "$ok" = 1 ] || { echo "ERROR: jsDelivr did not serve the script"; exit 1; }
+          echo "jsDelivr serves the exact custom script ✓"
+          # Must end with '?v=' — the app appends a timestamp at runtime.
+          echo "SCRIPT_URL=${URL}?v=" >> "$GITHUB_ENV"
+
+      # ------------------------------------------------------------------
+      # 3. Toolchain: Java, Android build-tools, apktool
+      # ------------------------------------------------------------------
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: Set up Android build-tools
+        uses: android-actions/setup-android@v3
+
+      - name: Install build-tools + apktool
+        run: |
+          sdkmanager "build-tools;${BUILD_TOOLS}" >/dev/null
+          echo "$ANDROID_HOME/build-tools/${BUILD_TOOLS}" >> "$GITHUB_PATH"
+          apktool_url=$(curl -fsSL https://api.github.com/repos/iBotPoncho/apktool/releases/latest \
+            | jq -r '.assets[] | select(.name | test("apktool_.*\\.jar$")) | .browser_download_url')
+          [ -n "$apktool_url" ] || { echo "could not locate apktool jar"; exit 1; }
+          curl -fsSL -o "$RUNNER_TEMP/apktool.jar" "$apktool_url"
+          java -jar "$RUNNER_TEMP/apktool.jar" --version
+
+      # ------------------------------------------------------------------
+      # 4. Download the official base APKs (with provenance checks)
+      # ------------------------------------------------------------------
+      - name: Download base APKs (TizenTubeCobalt ${{ env.BASE_TAG }})
+        run: |
+          mkdir -p base
+          for abi in arm arm64; do
+            url="https://github.com/reisxd/TizenTubeCobalt/releases/download/${BASE_TAG}/cobalt-${abi}.apk"
+            echo "downloading $url"
+            curl -fL --retry 3 -o "base/cobalt-${abi}.apk" "$url"
+          done
+          python3 - <<'EOF'
+          import json, os, urllib.request
+          api = f"https://api.github.com/repos/reisxd/TizenTubeCobalt/releases/tags/{os.environ['BASE_TAG']}"
+          with urllib.request.urlopen(api) as r:
+              assets = {a["name"]: a["size"] for a in json.load(r)["assets"]}
+          for name in ("cobalt-arm.apk", "cobalt-arm64.apk"):
+              expected = assets[name]
+              actual = os.path.getsize(f"base/{name}")
+              assert actual == expected, f"{name}: expected {expected} bytes, got {actual}"
+              print(f"{name}: size matches official release ({actual:,} bytes)")
+          EOF
+          sha256sum base/*.apk | tee base-apk-sha256.txt
+
+      # ------------------------------------------------------------------
+      # 5. Repack both ABIs
+      # ------------------------------------------------------------------
+      - name: Repack APKs (rename + rebrand + custom userscript URL)
+        env:
+          VERSION_CODE: ${{ 20000 + github.run_number }}
+          FULL_VERSION: ${{ env.VERSION_NAME }}.${{ github.run_number }}
+        run: |
+          python3 tools/repack_apk.py \
+            --base base/cobalt-arm.apk \
+            --out "work/personal-tubetv-${FULL_VERSION}-armeabi-v7a-unsigned.apk" \
+            --app-name "$APP_NAME" --app-id "$APP_ID" \
+            --script-url "$SCRIPT_URL" \
+            --version-code "$VERSION_CODE" --version-name "$FULL_VERSION" \
+            --apktool "java -jar $RUNNER_TEMP/apktool.jar" \
+            --zipalign "zipalign"
+          python3 tools/repack_apk.py \
+            --base base/cobalt-arm64.apk \
+            --out "work/personal-tubetv-${FULL_VERSION}-arm64-v8a-unsigned.apk" \
+            --app-name "$APP_NAME" --app-id "$APP_ID" \
+            --script-url "$SCRIPT_URL" \
+            --version-code "$VERSION_CODE" --version-name "$FULL_VERSION" \
+            --apktool "java -jar $RUNNER_TEMP/apktool.jar" \
+            --zipalign "zipalign"
+
+      # ------------------------------------------------------------------
+      # 6. Sign
+      # ------------------------------------------------------------------
+      - name: Sign APKs
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_B64 }}
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: bash tools/sign_apks.sh work
+
+      # ------------------------------------------------------------------
+      # 7. Verify
+      # ------------------------------------------------------------------
+      - name: Verify APKs (signature + badging + patched URL)
+        env:
+          VERSION_CODE: ${{ 20000 + github.run_number }}
+        run: |
+          set -eo pipefail
+          for apk in work/personal-tubetv-*.apk; do
+            echo "=== $apk ==="
+            apksigner verify --print-certs "$apk" | head -4
+            badging=$(aapt dump badging "$apk")
+            echo "$badging" | grep -q "package: name='${APP_ID}'" \
+              || { echo "FAIL: wrong package id"; exit 1; }
+            echo "$badging" | grep -q "versionCode='${VERSION_CODE}'" \
+              || { echo "FAIL: wrong versionCode"; exit 1; }
+            echo "$badging" | grep -q "application-label:'${APP_NAME}'" \
+              || { echo "FAIL: wrong label"; exit 1; }
+            echo "$badging" | grep -q "native-code" \
+              || { echo "FAIL: no native-code in badging"; exit 1; }
+            unzip -p "$apk" lib/*/libchrobalt.so | grep -a -q "cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@s${GITHUB_RUN_NUMBER}" \
+              || { echo "FAIL: patched userscript URL missing from libchrobalt.so"; exit 1; }
+          done
+          echo "all verification checks passed ✓"
+
+      # ------------------------------------------------------------------
+      # 8. Checksums + release
+      # ------------------------------------------------------------------
+      - name: Checksums
+        run: |
+          cp TizenTube/dist/userScript.js work/userScript.js
+          (cd work && sha256sum personal-tubetv-*.apk userScript.js) > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - name: Upload APKs as workflow artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: personal-tubetv-apks
+          path: |
+            work/personal-tubetv-*.apk
+            SHA256SUMS.txt
+          if-no-files-found: error
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          SCRIPT_TAG: s${{ github.run_number }}
+          VERSION_CODE: ${{ 20000 + github.run_number }}
+          FULL_VERSION: ${{ env.VERSION_NAME }}.${{ github.run_number }}
+          SIGNING_MODE_FILE: work/signing-mode.txt
+        run: bash tools/create_release.sh
