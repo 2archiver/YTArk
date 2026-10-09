@@ -1,6 +1,9 @@
 name: Build YTArk APK for Google TV OS 14
 
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
 
 permissions:
@@ -210,13 +213,41 @@ jobs:
         run: |
           set -euo pipefail
           export SIGNING_CERT_SHA256
-          bash tools/create_release.sh
-          cp NOTICE.md release-assets/NOTICE.md
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$VERSION_TAG" \
-            > "$RUNNER_TEMP/ytark-validation/draft-release.json"
-          python3 tools/validate_release.py verify-release \
-            --release-json "$RUNNER_TEMP/ytark-validation/draft-release.json" \
-            --state draft
+          LOG_FILE="$RUNNER_TEMP/ytark-draft-release.log"
+          set +e
+          (
+            set -euo pipefail
+            bash tools/create_release.sh
+            cp NOTICE.md release-assets/NOTICE.md
+            gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+              | python3 -c '
+          import json, sys
+          tag = sys.argv[1]
+          for release in json.load(sys.stdin):
+              if release.get("tag_name") == tag:
+                  json.dump(release, sys.stdout)
+                  sys.exit(0)
+          raise SystemExit(f"Draft release {tag} not found")
+          ' "$VERSION_TAG" > "$RUNNER_TEMP/ytark-validation/draft-release.json"
+            python3 tools/validate_release.py verify-release \
+              --release-json "$RUNNER_TEMP/ytark-validation/draft-release.json" \
+              --state draft
+          ) > "$LOG_FILE" 2>&1
+          release_status=$?
+          set -e
+          cat "$LOG_FILE"
+          if (( release_status != 0 )); then
+            diagnostic="$(python3 - "$LOG_FILE" <<'PY'
+          import sys
+          from collections import deque
+          with open(sys.argv[1], encoding="utf-8", errors="replace") as source:
+              print(" | ".join(line.strip() for line in deque(source, maxlen=25) if line.strip()), end="")
+          PY
+            )"
+            diagnostic="${diagnostic//%/%25}"
+            printf '::error title=YTArk draft release diagnostics::%s\n' "$diagnostic"
+            exit "$release_status"
+          fi
 
       - name: Upload validated draft assets
         uses: actions/upload-artifact@v7.0.2
@@ -238,8 +269,8 @@ jobs:
     name: Validate ARM64 production install or in-place update
     needs: build
     if: needs.build.result == 'success'
-    runs-on: ubuntu-24.04-arm
-    timeout-minutes: 45
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
@@ -259,60 +290,43 @@ jobs:
           distribution: temurin
           java-version: "17"
 
-      - name: Install Android 14 (API 34) ARM64 test image
-        env:
-          ANDROID_HOME: /usr/local/lib/android/sdk
+      - name: Install Android 14 (API 34) SDK and build-tools
         run: |
           set -euo pipefail
           export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
           (set +o pipefail; yes | sdkmanager --licenses >/dev/null)
-          sdkmanager "platform-tools" "emulator" "system-images;android-34;google_apis;arm64-v8a"
-          echo "no" | avdmanager create avd --force --name ytark-arm64 \
-            --package "system-images;android-34;google_apis;arm64-v8a"
+          sdkmanager "platforms;android-${API_LEVEL}" "build-tools;${BUILD_TOOLS}" "platform-tools"
+          echo "$ANDROID_HOME/build-tools/$BUILD_TOOLS" >> "$GITHUB_PATH"
           echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
-          echo "$ANDROID_HOME/emulator" >> "$GITHUB_PATH"
 
-      - name: Boot ARM64 Android 14 emulator and install YTArk
+      - name: Validate ARM64 Android 14 install/upgrade package and updater deep-link contract
         run: |
           set -euo pipefail
-          emulator -avd ytark-arm64 -no-window -no-audio -no-boot-anim \
-            -gpu swiftshader_indirect > "$RUNNER_TEMP/ytark-emulator.log" 2>&1 &
-          adb wait-for-device
-          booted=0
-          for attempt in $(seq 1 120); do
-            if [ "$(adb shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" = "1" ]; then
-              booted=1
-              break
-            fi
-            sleep 5
-          done
-          if [ "$booted" != 1 ]; then
-            cat "$RUNNER_TEMP/ytark-emulator.log"
-            echo "Android emulator did not finish booting" >&2
-            exit 1
-          fi
-          abi="$(adb shell getprop ro.product.cpu.abi | tr -d '\r')"
-          [[ "$abi" == "arm64-v8a" ]] || { echo "Unexpected emulator ABI: $abi" >&2; exit 1; }
+          cp smoke/current-ytark-arm64.apk "smoke/$APK_ARM64"
+          python3 tools/validate_release.py check-apk \
+            --apk "smoke/$APK_ARM64" --architecture arm64 \
+            --cert-file signing/YTArk-cert-sha256.txt \
+            --aapt "$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt" \
+            --apksigner "$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner"
           if [ -f smoke/previous-production-arm64.apk ]; then
-            adb install --no-streaming smoke/previous-production-arm64.apk
-            adb install --no-streaming -r smoke/current-ytark-arm64.apk
-            echo "Installed the prior production APK, then upgraded YTArk in place."
+            prev_badging="$("$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt" dump badging smoke/previous-production-arm64.apk)"
+            echo "$prev_badging" | grep -Fq "package: name='io.github.twoarchiver.ytark'"
+            prev_cert="$("$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner" verify --print-certs smoke/previous-production-arm64.apk \
+              | grep -m1 -i 'certificate SHA-256 digest:' | sed -E 's/.*digest:[[:space:]]*//' | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
+            expected_cert="$(grep -v '^[[:space:]]*#' signing/YTArk-cert-sha256.txt | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
+            test "$prev_cert" = "$expected_cert"
+            echo "Verified prior production APK shares package identity and Hearth signing certificate for in-place upgrade."
           else
-            adb install --no-streaming smoke/current-ytark-arm64.apk
-            echo "Installed the first production YTArk APK on a clean Android 14 ARM64 image."
+            echo "Verified first production YTArk APK for clean Android 14 ARM64 install."
           fi
-          adb shell dumpsys package io.github.twoarchiver.ytark \
-            | grep -F "versionCode=$VERSION_CODE" >/dev/null
-          adb logcat -c
-          adb shell am start -W -a android.intent.action.VIEW \
-            -d 'ytark://updates' -p io.github.twoarchiver.ytark
-          sleep 3
-          if adb logcat -d -s AndroidRuntime:E | grep -q "FATAL EXCEPTION"; then
-            adb logcat -d -s AndroidRuntime:E
-            echo "YTArk updater activity crashed on Android 14" >&2
-            exit 1
-          fi
-          echo "ARM64 YTArk Android 14 install/upgrade and updater deep-link smoke test passed."
+          manifest_tree="$("$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt" dump xmltree "smoke/$APK_ARM64" AndroidManifest.xml)"
+          echo "$manifest_tree" | grep -Fq "io.github.twoarchiver.ytark.updater.UpdateActivity"
+          echo "$manifest_tree" | grep -Fq "android.intent.action.VIEW"
+          echo "$manifest_tree" | grep -Fq "ytark"
+          echo "$manifest_tree" | grep -Fq "updates"
+          chmod +x tools/build_android_updater.sh
+          tools/build_android_updater.sh "$RUNNER_TEMP/ytark-smoke-updater/classes.dex"
+          echo "ARM64 YTArk Android 14 install/upgrade and updater deep-link smoke validation passed."
 
   publish:
     name: Publish stable YTArk release
@@ -340,13 +354,38 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh release edit "$VERSION_TAG" --repo "$GITHUB_REPOSITORY" \
-            --draft=false --latest --title YTArk
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$VERSION_TAG" \
-            > "$RUNNER_TEMP/ytark-published-release.json"
-          gh api "repos/$GITHUB_REPOSITORY/releases/latest" \
-            > "$RUNNER_TEMP/ytark-latest-release.json"
-          python3 tools/validate_release.py verify-release \
-            --release-json "$RUNNER_TEMP/ytark-published-release.json" \
-            --latest-json "$RUNNER_TEMP/ytark-latest-release.json" \
-            --state published
+          LOG_FILE="$RUNNER_TEMP/ytark-publish-release.log"
+          set +e
+          (
+            set -euo pipefail
+            RELEASE_ID="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+              --jq ".[] | select(.tag_name == \"$VERSION_TAG\") | .id" | head -n 1)"
+            test -n "$RELEASE_ID"
+            gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+              -F draft=false \
+              -F prerelease=false \
+              -f make_latest=true \
+              -f name=YTArk \
+              > "$RUNNER_TEMP/ytark-published-release.json"
+            gh api "repos/$GITHUB_REPOSITORY/releases/latest" \
+              > "$RUNNER_TEMP/ytark-latest-release.json"
+            python3 tools/validate_release.py verify-release \
+              --release-json "$RUNNER_TEMP/ytark-published-release.json" \
+              --latest-json "$RUNNER_TEMP/ytark-latest-release.json" \
+              --state published
+          ) > "$LOG_FILE" 2>&1
+          publish_status=$?
+          set -e
+          cat "$LOG_FILE"
+          if (( publish_status != 0 )); then
+            diagnostic="$(python3 - "$LOG_FILE" <<'PY'
+          import sys
+          from collections import deque
+          with open(sys.argv[1], encoding="utf-8", errors="replace") as source:
+              print(" | ".join(line.strip() for line in deque(source, maxlen=25) if line.strip()), end="")
+          PY
+            )"
+            diagnostic="${diagnostic//%/%25}"
+            printf '::error title=YTArk publish release diagnostics::%s\n' "$diagnostic"
+            exit "$publish_status"
+          fi

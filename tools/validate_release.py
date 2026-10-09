@@ -89,6 +89,9 @@ def check_version(latest_path: str) -> None:
     previous = parse_release_version_code(latest.get("body", ""))
     if previous is None:
         raise ValueError("The previous stable release is missing its versionCode metadata")
+    if latest.get("tag_name") == config["VERSION_TAG"] and current == previous:
+        print(f"Rebuilding current release {config['VERSION_TAG']} (versionCode {current}).")
+        return
     if current <= previous:
         raise ValueError(f"versionCode must increase: new {current}, published {previous}")
     if latest.get("tag_name") == config["VERSION_TAG"]:
@@ -277,8 +280,16 @@ def verify_release(release_path: str, state: str, latest_path: str | None) -> No
         if name.lower().endswith(".apk") and name != config["APK_ARM64"]:
             raise ValueError(f"Release must contain only the Google TV ARM64 APK, found: {name}")
         expected_url = f"https://github.com/2archiver/YTArk/releases/download/{config['VERSION_TAG']}/{name}"
-        if name in expected_names and asset.get("browser_download_url") != expected_url:
-            raise ValueError(f"Invalid download URL for {name}: {asset.get('browser_download_url')}")
+        draft_url_pattern = re.compile(
+            rf"^https://github\.com/2archiver/YTArk/releases/download/(?:{re.escape(config['VERSION_TAG'])}|untagged-[0-9a-fA-F]+)/{re.escape(name)}$"
+        )
+        actual_url = asset.get("browser_download_url", "")
+        if name in expected_names:
+            if state == "draft":
+                if not draft_url_pattern.fullmatch(actual_url):
+                    raise ValueError(f"Invalid draft download URL for {name}: {actual_url}")
+            elif actual_url != expected_url:
+                raise ValueError(f"Invalid download URL for {name}: {actual_url}")
 
     if state == "published" and latest_path:
         latest = json.loads(Path(latest_path).read_text(encoding="utf-8"))
