@@ -79,27 +79,6 @@ jobs:
           npm run build 2>&1 | tee /tmp/steplogs/03-rollup-build.log
           node --check ../dist/userScript.js 2>&1 | tee /tmp/steplogs/04-syntax-check.log
 
-      - name: Report failure logs (as issue, readable via API)
-        if: failure()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          {
-            echo "CI failure in run $GITHUB_RUN_NUMBER"
-            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
-            echo "Commit: $GITHUB_SHA"
-            echo
-            for f in /tmp/steplogs/*.log; do
-              echo "### $(basename "$f") (last 150 lines)"
-              echo '```'
-              tail -n 150 "$f"
-              echo '```'
-              echo
-            done
-          } > /tmp/failure-body.md
-          gh issue create --title "CI failure: run $GITHUB_RUN_NUMBER" \
-            --body-file /tmp/failure-body.md || true
-
       - name: Sanity-check the bundle
         run: |
           for needle in "TV Quick Controls" "cleanTV" "midnightBlue" "TV_APPLY_PRESET" "TV_SET_QUALITY"; do
@@ -145,29 +124,36 @@ jobs:
           distribution: "temurin"
           java-version: "17"
 
-      - name: Set up Android build-tools
-        uses: android-actions/setup-android@v3
-
       - name: Install build-tools + apktool
         run: |
-          sdkmanager "build-tools;${BUILD_TOOLS}" >/dev/null
-          echo "$ANDROID_HOME/build-tools/${BUILD_TOOLS}" >> "$GITHUB_PATH"
-          apktool_url=$(curl -fsSL https://api.github.com/repos/iBotPoncho/apktool/releases/latest \
-            | jq -r '.assets[] | select(.name | test("apktool_.*\\.jar$")) | .browser_download_url')
-          [ -n "$apktool_url" ] || { echo "could not locate apktool jar"; exit 1; }
-          curl -fsSL -o "$RUNNER_TEMP/apktool.jar" "$apktool_url"
-          java -jar "$RUNNER_TEMP/apktool.jar" --version
+          set -o pipefail
+          mkdir -p /tmp/steplogs
+          {
+            export ANDROID_HOME="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+            export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+            yes | sdkmanager --licenses >/dev/null 2>&1 || true
+            sdkmanager "build-tools;${BUILD_TOOLS}" >/dev/null
+            echo "$ANDROID_HOME/build-tools/${BUILD_TOOLS}" >> "$GITHUB_PATH"
+            sdkmanager --list_installed 2>/dev/null | grep -i build-tools | head -5
+            apktool_url=$(curl -fsSL https://api.github.com/repos/iBotPoncho/apktool/releases/latest \
+              | jq -r '.assets[] | select(.name | test("apktool_.*\\.jar$")) | .browser_download_url')
+            [ -n "$apktool_url" ] || { echo "could not locate apktool jar"; exit 1; }
+            curl -fsSL -o "$RUNNER_TEMP/apktool.jar" "$apktool_url"
+            java -jar "$RUNNER_TEMP/apktool.jar" --version
+          } 2>&1 | tee /tmp/steplogs/05-toolchain.log
 
       # ------------------------------------------------------------------
       # 4. Download the official base APKs (with provenance checks)
       # ------------------------------------------------------------------
       - name: Download base APKs (TizenTubeCobalt ${{ env.BASE_TAG }})
         run: |
+          set -o pipefail
+          LOG=/tmp/steplogs/06-download-base.log
           mkdir -p base
           for abi in arm arm64; do
             url="https://github.com/reisxd/TizenTubeCobalt/releases/download/${BASE_TAG}/cobalt-${abi}.apk"
             echo "downloading $url"
-            curl -fL --retry 3 -o "base/cobalt-${abi}.apk" "$url"
+            curl -fL --retry 3 -o "base/cobalt-${abi}.apk" "$url" 2>&1 | tee -a "$LOG"
           done
           python3 - <<'EOF'
           import json, os, urllib.request
@@ -189,24 +175,27 @@ jobs:
         env:
           RUN_NUMBER: ${{ github.run_number }}
         run: |
-          VERSION_CODE=$((20000 + RUN_NUMBER))
-          FULL_VERSION="${VERSION_NAME}.${RUN_NUMBER}"
-          python3 tools/repack_apk.py \
-            --base base/cobalt-arm.apk \
-            --out "work/personal-tubetv-${FULL_VERSION}-armeabi-v7a-unsigned.apk" \
-            --app-name "$APP_NAME" --app-id "$APP_ID" \
-            --script-url "$SCRIPT_URL" \
-            --version-code "$VERSION_CODE" --version-name "$FULL_VERSION" \
-            --apktool "java -jar $RUNNER_TEMP/apktool.jar" \
-            --zipalign "zipalign"
-          python3 tools/repack_apk.py \
-            --base base/cobalt-arm64.apk \
-            --out "work/personal-tubetv-${FULL_VERSION}-arm64-v8a-unsigned.apk" \
-            --app-name "$APP_NAME" --app-id "$APP_ID" \
-            --script-url "$SCRIPT_URL" \
-            --version-code "$VERSION_CODE" --version-name "$FULL_VERSION" \
-            --apktool "java -jar $RUNNER_TEMP/apktool.jar" \
-            --zipalign "zipalign"
+          set -o pipefail
+          {
+            VERSION_CODE=$((20000 + RUN_NUMBER))
+            FULL_VERSION="${VERSION_NAME}.${RUN_NUMBER}"
+            python3 tools/repack_apk.py \
+              --base base/cobalt-arm.apk \
+              --out "work/personal-tubetv-${FULL_VERSION}-armeabi-v7a-unsigned.apk" \
+              --app-name "$APP_NAME" --app-id "$APP_ID" \
+              --script-url "$SCRIPT_URL" \
+              --version-code "$VERSION_CODE" --version-name "$FULL_VERSION" \
+              --apktool "java -jar $RUNNER_TEMP/apktool.jar" \
+              --zipalign "zipalign"
+            python3 tools/repack_apk.py \
+              --base base/cobalt-arm64.apk \
+              --out "work/personal-tubetv-${FULL_VERSION}-arm64-v8a-unsigned.apk" \
+              --app-name "$APP_NAME" --app-id "$APP_ID" \
+              --script-url "$SCRIPT_URL" \
+              --version-code "$VERSION_CODE" --version-name "$FULL_VERSION" \
+              --apktool "java -jar $RUNNER_TEMP/apktool.jar" \
+              --zipalign "zipalign"
+          } 2>&1 | tee /tmp/steplogs/07-repack.log
 
       # ------------------------------------------------------------------
       # 6. Sign
@@ -217,7 +206,9 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: bash tools/sign_apks.sh work
+        run: |
+          set -o pipefail
+          bash tools/sign_apks.sh work 2>&1 | tee /tmp/steplogs/08-sign.log
 
       # ------------------------------------------------------------------
       # 7. Verify
@@ -227,23 +218,25 @@ jobs:
           RUN_NUMBER: ${{ github.run_number }}
         run: |
           set -eo pipefail
-          VERSION_CODE=$((20000 + RUN_NUMBER))
-          for apk in work/personal-tubetv-*.apk; do
-            echo "=== $apk ==="
-            apksigner verify --print-certs "$apk" | head -4
-            badging=$(aapt dump badging "$apk")
-            echo "$badging" | grep -q "package: name='${APP_ID}'" \
-              || { echo "FAIL: wrong package id"; exit 1; }
-            echo "$badging" | grep -q "versionCode='${VERSION_CODE}'" \
-              || { echo "FAIL: wrong versionCode"; exit 1; }
-            echo "$badging" | grep -q "application-label:'${APP_NAME}'" \
-              || { echo "FAIL: wrong label"; exit 1; }
-            echo "$badging" | grep -q "native-code" \
-              || { echo "FAIL: no native-code in badging"; exit 1; }
-            unzip -p "$apk" lib/*/libchrobalt.so | grep -a -q "cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@s${GITHUB_RUN_NUMBER}" \
-              || { echo "FAIL: patched userscript URL missing from libchrobalt.so"; exit 1; }
-          done
-          echo "all verification checks passed ✓"
+          {
+            VERSION_CODE=$((20000 + RUN_NUMBER))
+            for apk in work/personal-tubetv-*.apk; do
+              echo "=== $apk ==="
+              apksigner verify --print-certs "$apk" | head -4
+              badging=$(aapt dump badging "$apk")
+              echo "$badging" | grep -q "package: name='${APP_ID}'" \
+                || { echo "FAIL: wrong package id"; exit 1; }
+              echo "$badging" | grep -q "versionCode='${VERSION_CODE}'" \
+                || { echo "FAIL: wrong versionCode"; exit 1; }
+              echo "$badging" | grep -q "application-label:'${APP_NAME}'" \
+                || { echo "FAIL: wrong label"; exit 1; }
+              echo "$badging" | grep -q "native-code" \
+                || { echo "FAIL: no native-code in badging"; exit 1; }
+              unzip -p "$apk" lib/*/libchrobalt.so | grep -a -q "cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@s${GITHUB_RUN_NUMBER}" \
+                || { echo "FAIL: patched userscript URL missing from libchrobalt.so"; exit 1; }
+            done
+            echo "all verification checks passed ✓"
+          } 2>&1 | tee /tmp/steplogs/09-verify.log
 
       # ------------------------------------------------------------------
       # 8. Checksums + release
@@ -270,6 +263,34 @@ jobs:
           RUN_NUMBER: ${{ github.run_number }}
           SIGNING_MODE_FILE: work/signing-mode.txt
         run: |
-          VERSION_CODE=$((20000 + RUN_NUMBER))
-          FULL_VERSION="${VERSION_NAME}.${RUN_NUMBER}"
-          bash tools/create_release.sh
+          set -o pipefail
+          {
+            VERSION_CODE=$((20000 + RUN_NUMBER))
+            FULL_VERSION="${VERSION_NAME}.${RUN_NUMBER}"
+            bash tools/create_release.sh
+          } 2>&1 | tee /tmp/steplogs/11-release.log
+
+      # ------------------------------------------------------------------
+      # Failure telemetry: post log tails as an issue (readable via API
+      # even when the run's log host is unreachable)
+      # ------------------------------------------------------------------
+      - name: Report failure logs (as issue)
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          {
+            echo "CI failure in run $GITHUB_RUN_NUMBER"
+            echo "Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "Commit: $GITHUB_SHA"
+            echo
+            for f in /tmp/steplogs/*.log; do
+              echo "### $(basename "$f") (last 150 lines)"
+              echo '```'
+              tail -n 150 "$f"
+              echo '```'
+              echo
+            done
+          } > /tmp/failure-body.md
+          gh issue create --title "CI failure: run $GITHUB_RUN_NUMBER" \
+            --body-file /tmp/failure-body.md || true
