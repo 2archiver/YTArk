@@ -271,6 +271,7 @@ jobs:
           {
             VERSION_CODE=$((20000 + RUN_NUMBER))
             FULL_VERSION="${VERSION_NAME}.${RUN_NUMBER}"
+            export FULL_VERSION VERSION_CODE
             bash tools/create_release.sh
           } 2>&1 | tee /tmp/steplogs/11-release.log
 
