@@ -138,7 +138,7 @@ jobs:
             sdkmanager "build-tools;${BUILD_TOOLS}" >/dev/null
             echo "$ANDROID_HOME/build-tools/${BUILD_TOOLS}" >> "$GITHUB_PATH"
             sdkmanager --list_installed 2>/dev/null | grep -i build-tools | head -5
-            apktool_url=$(curl -fsSL https://api.github.com/repos/iBotPoncho/apktool/releases/latest \
+            apktool_url=$(curl -fsSL https://api.github.com/repos/iBotPeaches/Apktool/releases/latest \
               | jq -r '.assets[] | select(.name | test("apktool_.*\\.jar$")) | .browser_download_url')
             [ -n "$apktool_url" ] || { echo "could not locate apktool jar"; exit 1; }
             curl -fsSL -o "$RUNNER_TEMP/apktool.jar" "$apktool_url"
