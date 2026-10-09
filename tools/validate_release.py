@@ -245,6 +245,12 @@ def verify_release(release_path: str, state: str, latest_path: str | None) -> No
     for required in (APP_ID, config["VERSION_NAME"], config["VERSION_CODE"], "TizenTubeCobalt"):
         if required not in body:
             raise ValueError(f"Release notes are missing required metadata: {required}")
+    parsed_code = parse_release_version_code(body)
+    if parsed_code != int(config["VERSION_CODE"]):
+        raise ValueError(
+            "Release notes versionCode is missing or does not match the APK versionCode; "
+            "the in-app updater will reject this release"
+        )
 
     expected_names = {
         config["APK_ARM64"], "SHA256SUMS.txt", "base-apk-sha256.txt",
@@ -255,6 +261,16 @@ def verify_release(release_path: str, state: str, latest_path: str | None) -> No
     missing = expected_names - actual_names
     if missing:
         raise ValueError("Release is missing assets: " + ", ".join(sorted(missing)))
+    apk_asset = next((asset for asset in assets if asset.get("name") == config["APK_ARM64"]), None)
+    try:
+        asset_size = int(apk_asset.get("size", 0)) if apk_asset else 0
+    except (TypeError, ValueError):
+        asset_size = 0
+    if asset_size <= 0:
+        raise ValueError("The YTArk update APK must have a positive published asset size")
+    published_digest = apk_asset.get("digest", "")
+    if published_digest and not parse_sha256_digest(published_digest):
+        raise ValueError("The YTArk update APK has an invalid GitHub SHA-256 digest")
 
     for asset in assets:
         name = asset.get("name", "")

@@ -17,11 +17,16 @@ complete modified TizenTube userscript source.
 
 ## Automatic Android TV updates
 
-YTArk checks the latest **published stable** YTArk release when its Android
-process starts and every six hours while it is running. The native updater:
+Like Hearth, YTArk checks GitHub's canonical `releases/latest` API endpoint
+when its Android process starts and every six hours while it is running. The
+release workflow marks the validated YTArk build as the latest stable release.
+The native updater:
 
-- Selects the single 64-bit ARM APK built for Google TV OS 14 / Android 14
-  from the official [YTArk Releases](https://github.com/2archiver/YTArk/releases).
+- Selects the version-named, 64-bit ARM APK built for Google TV OS 14 / Android
+  14 from the official [YTArk Releases](https://github.com/2archiver/YTArk/releases).
+- Requires the release title, version tag, `versionCode`, APK filename, URL,
+  size, and SHA-256 to satisfy the checked-in release contract; it never guesses
+  an asset URL or accepts an unverified checksum.
 - Offers remote-friendly **Update Now**, **Later**, and **Check for Updates**
   controls in its Android TV notification and update screen.
 - Resumes interrupted downloads from app-private storage and checks the
@@ -47,27 +52,35 @@ subsequent YTArk updates preserve settings and app data in place.
 
 ## Signing and release setup
 
-Every release must be signed with the same production keystore. The private
-keystore and passwords are never committed; GitHub Actions requires these
-repository secrets and fails rather than creating an ephemeral signing key:
+YTArk uses the **same signing certificate as Hearth** so releases keep one
+stable Android signing identity. Its pinned SHA-256 fingerprint is
+`b9cb7e4b4d5179870e672e850f5d3661f02c248f943dbaf10cd78cd0c047eaae`; the public
+certificate is checked in under `signing/`. The updater checks both the
+candidate APK and the installed app against this fingerprint before handing an
+update to Android, as well as checking the official release URL, SHA-256,
+package ID, version, and ARM64 ABI.
 
-- `YTARK_KEYSTORE_B64` — base64-encoded PKCS#12 keystore.
-- `YTARK_KEYSTORE_PASSWORD` — keystore password.
-- `YTARK_KEY_ALIAS` — key alias (`ytark-release` when provisioned by the helper).
-- `YTARK_KEY_PASSWORD` — private-key password.
+This is Hearth's intentionally public **community** PKCS#12 signer, not a
+private production key: the keystore, alias, and password are published in the
+Hearth source. Anyone can build an APK with this signing identity. That is the
+explicit trade-off for using the same key; install YTArk only from the official
+[YTArk Releases](https://github.com/2archiver/YTArk/releases). The APK updater
+still rejects files from non-official release URLs, mismatched checksums,
+package metadata, architecture, or signer certificates. Because the community
+key is public, the certificate pin guarantees signer continuity and Android
+install compatibility—not the publisher's identity; use only the official
+YTArk release page. The signer is pinned to a specific Hearth commit and Git
+blob in `release/signing.properties`, and the build verifies the extracted
+certificate against the checked-in fingerprint before signing.
 
-After GitHub Actions secret-write access is available, provision the production
-key exactly once with:
-
-```bash
-bash tools/provision_signing_key.sh
-```
-
-The helper generates the PKCS#12 keystore in a protected temporary directory,
-sets the Actions secrets, exports only the public certificate and SHA-256
-fingerprint to `signing/`, and deletes the temporary private material. Commit
-`signing/YTArk-release-cert.pem` and `signing/YTArk-cert-sha256.txt`; never
-commit a `.p12`, `.jks`, private key, password, or base64 keystore.
+The production workflow uses this pinned community key automatically when the
+four optional `YTARK_*` Actions secrets are absent. If all four are configured,
+they must hold the same signing identity or the build fails; partial or
+mismatched configuration is never allowed. To cache the pinned key in Actions
+secrets, `bash tools/provision_signing_key.sh` is optional. It will not generate
+or rotate a key. Keep `signing/YTArk-release-cert.pem` and
+`signing/YTArk-cert-sha256.txt` in source control; never add another keystore or
+change the pinned certificate without a deliberate migration plan.
 
 ## Building and releasing
 
@@ -96,7 +109,8 @@ npm run build
 ```
 
 A full APK build requires Android SDK platform/build tools, Java 17, Apktool,
-and the production signing secrets.
+OpenSSL, and GitHub access to fetch the pinned public community keystore. Matching
+`YTARK_*` Actions secrets are optional.
 
 ## Upstream attribution
 

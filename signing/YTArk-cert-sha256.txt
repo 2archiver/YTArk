@@ -1,3 +1,3 @@
-# SHA-256 fingerprint of the permanent YTArk APK signing certificate.
-# Generated from the public certificate; this is not signing secret material.
-PENDING
+# SHA-256 fingerprint of the pinned Hearth community APK signing certificate.
+# This is public certificate metadata, not signing secret material.
+b9cb7e4b4d5179870e672e850f5d3661f02c248f943dbaf10cd78cd0c047eaae

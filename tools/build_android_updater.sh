@@ -16,11 +16,12 @@ D8="$ANDROID_HOME/build-tools/${BUILD_TOOLS}/d8"
 
 CERT_FILE="$ROOT/signing/YTArk-cert-sha256.txt"
 [ -f "$CERT_FILE" ] || { echo "Public certificate fingerprint is missing: $CERT_FILE" >&2; exit 1; }
-CERT_SHA256="$(tr -d '[:space:]:' < "$CERT_FILE" | tr '[:upper:]' '[:lower:]')"
+CERT_SHA256="$(grep -v '^[[:space:]]*#' "$CERT_FILE" | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
 [[ "$CERT_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "Invalid signing certificate SHA-256 fingerprint" >&2; exit 1; }
 
 SOURCE="$ROOT/android-updater/src/main/java"
 TEST_SOURCE="$ROOT/android-updater/src/test/java/io/github/twoarchiver/ytark/updater/UpdateVersionTest.java"
+CONTRACT_TEST_SOURCE="$ROOT/android-updater/src/test/java/io/github/twoarchiver/ytark/updater/UpdateReleaseContractTest.java"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/ytark-updater.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -29,8 +30,10 @@ trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$WORK/test-classes"
 javac --release 8 -d "$WORK/test-classes" \
   "$SOURCE/io/github/twoarchiver/ytark/updater/UpdateVersion.java" \
-  "$TEST_SOURCE"
+  "$SOURCE/io/github/twoarchiver/ytark/updater/UpdateReleaseContract.java" \
+  "$TEST_SOURCE" "$CONTRACT_TEST_SOURCE"
 java -cp "$WORK/test-classes" io.github.twoarchiver.ytark.updater.UpdateVersionTest
+java -cp "$WORK/test-classes" io.github.twoarchiver.ytark.updater.UpdateReleaseContractTest
 
 mkdir -p "$WORK/generated/io/github/twoarchiver/ytark/updater" \
   "$WORK/classes" "$WORK/dex"
@@ -40,7 +43,7 @@ sed "s/@YTARK_CERT_SHA256@/${CERT_SHA256}/g" \
 
 mapfile -t SOURCES < <(find "$SOURCE" -type f -name '*.java' -print | sort)
 SOURCES+=("$WORK/generated/io/github/twoarchiver/ytark/updater/UpdaterBuildConfig.java")
-javac -Xlint:-options -source 8 -target 8 -bootclasspath "$PLATFORM" \
+javac --release 8 -classpath "$PLATFORM" \
   -d "$WORK/classes" "${SOURCES[@]}"
 jar --create --file "$WORK/ytark-updater.jar" -C "$WORK/classes" .
 "$D8" --release --min-api 24 --lib "$PLATFORM" \

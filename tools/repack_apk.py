@@ -119,11 +119,52 @@ def patch_script_url(decoded_dir: str, script_url: str) -> int:
 # resource-id suffix, e.g. versionCode(0x0101021b)="202" — tolerate all
 # forms and preserve the matched form when rewriting.
 ATTR_ID = r"(?:\([^)]*\))?"
+ANDROID_XML_NAMESPACE = "http://schemas.android.com/apk/res/android"
 
 
 def _attr(name: str) -> str:
     return rf"(?:android:)?{name}{ATTR_ID}"
 
+
+def normalize_android_namespace(decoded_dir: str) -> None:
+    """Normalize Apktool's generated Android attribute prefix to ``android``.
+
+    Apktool 3.x may serialize the Android XML namespace as ``n0`` instead of
+    ``android``. The repacker adds new attributes and components, so normalize
+    the namespace first to keep existing and injected attributes bound alike.
+    """
+    path = os.path.join(decoded_dir, "AndroidManifest.xml")
+    with open(path, encoding="utf-8") as fh:
+        xml = fh.read()
+
+    namespace_uri = re.escape(ANDROID_XML_NAMESPACE)
+    declaration = re.compile(
+        r"""xmlns:([A-Za-z_][\w.-]*)\s*=\s*[\"']"""
+        + namespace_uri + r"""[\"']""")
+    prefixes = list(dict.fromkeys(declaration.findall(xml)))
+    if not prefixes:
+        if re.search(r"xmlns:android\s*=", xml):
+            return
+        raise SystemExit("ERROR: decoded manifest has no Android XML namespace.")
+
+    chosen = "android" if "android" in prefixes else prefixes[0]
+    for prefix in prefixes:
+        if prefix == chosen:
+            continue
+        xml = re.sub(rf"(?<![\w.-]){re.escape(prefix)}:", f"{chosen}:", xml)
+        xml = re.sub(
+            rf"\s+xmlns:{re.escape(prefix)}\s*=\s*[\"'][^\"']*[\"']",
+            "", xml, count=1)
+
+    if chosen != "android":
+        xml = re.sub(rf"(?<![\w.-]){re.escape(chosen)}:", "android:", xml)
+        xml = re.sub(rf"xmlns:{re.escape(chosen)}(?=\s*=)", "xmlns:android", xml, count=1)
+
+    if not re.search(r"xmlns:android\s*=", xml):
+        raise SystemExit("ERROR: could not normalize the decoded Android XML namespace.")
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(xml)
+    print("[*] Manifest: normalized Android XML namespace to android:")
 
 def debug_dump_manifest(path: str) -> None:
     with open(path, encoding="utf-8") as fh:
@@ -313,7 +354,7 @@ def patch_updater_manifest(decoded_dir: str, app_id: str) -> None:
     with open(path, encoding="utf-8") as fh:
         xml = fh.read()
 
-    if "xmlns:android=" not in xml:
+    if not re.search(r"xmlns:android\s*=", xml):
         raise SystemExit("ERROR: decoded manifest has no android namespace.")
     if UPDATER_PROVIDER in xml or UPDATER_ACTIVITY in xml or UPDATER_RECEIVER in xml:
         raise SystemExit("ERROR: native YTArk updater components already exist in the manifest.")
@@ -429,6 +470,7 @@ def repack(args) -> None:
     run(apktool + ["d", "--no-src", "--force",
                    "--output", decoded, args.base])
 
+    normalize_android_namespace(decoded)
     patch_script_url(decoded, args.script_url)
     debug_dump_manifest(os.path.join(decoded, "AndroidManifest.xml"))
     patch_manifest(decoded, args.app_id, args.app_name,
@@ -562,13 +604,14 @@ def self_test() -> None:
     updater_dir = tempfile.mkdtemp()
     updater_manifest = (
         '<?xml version="1.0"?>\n'
-        '<manifest xmlns:android="http://schemas.android.com/apk/res/android" '
+        '<manifest xmlns:n0="http://schemas.android.com/apk/res/android" '
         f'package="{OLD_PACKAGE}">\n'
-        '  <application android:label="TizenTube">\n'
+        '  <application n0:label="TizenTube">\n'
         '  </application>\n'
         '</manifest>\n')
     with open(os.path.join(updater_dir, "AndroidManifest.xml"), "w") as fh:
         fh.write(updater_manifest)
+    normalize_android_namespace(updater_dir)
     patch_launcher_icon(updater_dir)
     patch_updater_manifest(updater_dir, "io.github.twoarchiver.ytark")
     with open(os.path.join(updater_dir, "AndroidManifest.xml"), encoding="utf-8") as fh:
