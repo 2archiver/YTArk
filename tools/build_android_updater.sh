@@ -16,7 +16,7 @@ D8="$ANDROID_HOME/build-tools/${BUILD_TOOLS}/d8"
 
 CERT_FILE="$ROOT/signing/YTArk-cert-sha256.txt"
 [ -f "$CERT_FILE" ] || { echo "Public certificate fingerprint is missing: $CERT_FILE" >&2; exit 1; }
-CERT_SHA256="$(tr -d '[:space:]:' < "$CERT_FILE" | tr '[:upper:]' '[:lower:]')"
+CERT_SHA256="$(grep -v '^[[:space:]]*#' "$CERT_FILE" | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
 [[ "$CERT_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "Invalid signing certificate SHA-256 fingerprint" >&2; exit 1; }
 
 SOURCE="$ROOT/android-updater/src/main/java"

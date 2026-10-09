@@ -1,6 +1,9 @@
 name: Build YTArk APK for Google TV OS 14
 
 on:
+  push:
+    branches:
+      - arena/8882d89c-ytark
   workflow_dispatch:
 
 permissions:
