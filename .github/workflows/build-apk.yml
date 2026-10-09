@@ -162,9 +162,10 @@ jobs:
       # ------------------------------------------------------------------
       - name: Repack APKs (rename + rebrand + custom userscript URL)
         env:
-          VERSION_CODE: ${{ 20000 + github.run_number }}
-          FULL_VERSION: ${{ env.VERSION_NAME }}.${{ github.run_number }}
+          RUN_NUMBER: ${{ github.run_number }}
         run: |
+          VERSION_CODE=$((20000 + RUN_NUMBER))
+          FULL_VERSION="${VERSION_NAME}.${RUN_NUMBER}"
           python3 tools/repack_apk.py \
             --base base/cobalt-arm.apk \
             --out "work/personal-tubetv-${FULL_VERSION}-armeabi-v7a-unsigned.apk" \
@@ -198,9 +199,10 @@ jobs:
       # ------------------------------------------------------------------
       - name: Verify APKs (signature + badging + patched URL)
         env:
-          VERSION_CODE: ${{ 20000 + github.run_number }}
+          RUN_NUMBER: ${{ github.run_number }}
         run: |
           set -eo pipefail
+          VERSION_CODE=$((20000 + RUN_NUMBER))
           for apk in work/personal-tubetv-*.apk; do
             echo "=== $apk ==="
             apksigner verify --print-certs "$apk" | head -4
@@ -240,7 +242,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           SCRIPT_TAG: s${{ github.run_number }}
-          VERSION_CODE: ${{ 20000 + github.run_number }}
-          FULL_VERSION: ${{ env.VERSION_NAME }}.${{ github.run_number }}
+          RUN_NUMBER: ${{ github.run_number }}
           SIGNING_MODE_FILE: work/signing-mode.txt
-        run: bash tools/create_release.sh
+        run: |
+          VERSION_CODE=$((20000 + RUN_NUMBER))
+          FULL_VERSION="${VERSION_NAME}.${RUN_NUMBER}"
+          bash tools/create_release.sh
