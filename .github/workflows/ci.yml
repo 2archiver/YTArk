@@ -46,7 +46,7 @@ jobs:
             exit 1
           fi
 
-      - name: Validate Python, shell and repacker self-tests
+      - name: Validate Python, shell, signing pin and repacker self-tests
         run: |
           set -euo pipefail
           python3 -m py_compile tools/*.py
@@ -55,13 +55,21 @@ jobs:
           python3 tools/validate_release.py emit-env --file "$RUNNER_TEMP/ytark-release.env"
           grep -Fx 'VERSION_NAME=2.0.3-ytark.15' "$RUNNER_TEMP/ytark-release.env"
           grep -Fx 'APK_ARM64=YTArk-v2.0.3-ytark.15-arm64.apk' "$RUNNER_TEMP/ytark-release.env"
+          actual_cert="$(openssl x509 -in signing/YTArk-release-cert.pem -outform DER | sha256sum | awk '{print $1}')"
+          expected_cert="$(grep -v '^[[:space:]]*#' signing/YTArk-cert-sha256.txt | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
+          test "$actual_cert" = "$expected_cert"
+          grep -Fxq 'communityRepository=2archiver/Hearth' release/signing.properties
 
-      - name: Test native version comparison
+      - name: Test native updater and release metadata contracts
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/ytark-version-tests"
           javac --release 8 -d "$RUNNER_TEMP/ytark-version-tests" \
             android-updater/src/main/java/io/github/twoarchiver/ytark/updater/UpdateVersion.java \
-            android-updater/src/test/java/io/github/twoarchiver/ytark/updater/UpdateVersionTest.java
+            android-updater/src/main/java/io/github/twoarchiver/ytark/updater/UpdateReleaseContract.java \
+            android-updater/src/test/java/io/github/twoarchiver/ytark/updater/UpdateVersionTest.java \
+            android-updater/src/test/java/io/github/twoarchiver/ytark/updater/UpdateReleaseContractTest.java
           java -cp "$RUNNER_TEMP/ytark-version-tests" \
             io.github.twoarchiver.ytark.updater.UpdateVersionTest
+          java -cp "$RUNNER_TEMP/ytark-version-tests" \
+            io.github.twoarchiver.ytark.updater.UpdateReleaseContractTest

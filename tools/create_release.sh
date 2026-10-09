@@ -64,13 +64,15 @@ unknown apps**, then return to the updater. The downloaded APK stays in private
 app storage and an interrupted download can be resumed.
 
 Updates signed by this release key and using the same package ID install in place;
-Android preserves YTArk settings and app data. This release establishes the
-permanent production signing identity. If the earlier app uses a different
-package ID, install this release as a new app; Android does not transfer private
-data between package IDs. If an earlier build already uses this package ID but a
+Android preserves YTArk settings and app data. This release uses the same
+intentionally public Hearth community signing certificate shown above, pinning
+the permanent YTArk signing identity. Anyone can build with that community key;
+use only official YTArk releases. If the earlier app uses a different package
+ID, install this release as a new app; Android does not transfer private data
+between package IDs. If an earlier build already uses this package ID but a
 different temporary signing key, Android requires uninstalling that build first,
-which removes its private data. Subsequent production-signed YTArk releases can
-update in place.
+which removes its private data. Subsequent YTArk releases signed with this
+certificate can update in place.
 
 ## YTArk Quick Controls
 

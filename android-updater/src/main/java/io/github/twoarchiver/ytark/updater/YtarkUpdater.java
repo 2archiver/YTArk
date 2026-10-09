@@ -35,8 +35,6 @@ import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -46,8 +44,6 @@ final class YtarkUpdater {
     private static final String PACKAGE_NAME = "io.github.twoarchiver.ytark";
     private static final String RELEASES_API =
             "https://api.github.com/repos/2archiver/YTArk/releases/latest";
-    private static final String RELEASE_ASSET_PREFIX =
-            "https://github.com/2archiver/YTArk/releases/download/";
     private static final String PREFS_NAME = "ytark_native_updater";
     private static final String CHANNEL_ID = "ytark_updates";
     private static final int NOTIFICATION_UPDATE = 7201;
@@ -157,7 +153,7 @@ final class YtarkUpdater {
             throw new IOException("The installed or published version is not valid.", invalidVersion);
         }
 
-        long versionCode = parseVersionCode(release.optString("body", ""));
+        long versionCode = UpdateReleaseContract.parseVersionCode(release.optString("body", ""));
         if (versionCode <= installed.versionCode
                 || UpdateVersion.compare(version, installed.versionName) <= 0) {
             return null;
@@ -167,7 +163,7 @@ final class YtarkUpdater {
         if (!"arm64".equals(assetSuffix)) {
             throw new IOException("YTArk releases target 64-bit ARM Google TV devices.");
         }
-        String expectedAssetName = "YTArk-v" + version + "-arm64.apk";
+        String expectedAssetName = UpdateReleaseContract.assetNameForVersion(version);
         String nativeAbi = "arm64-v8a";
 
         JSONArray assets = release.optJSONArray("assets");
@@ -176,7 +172,7 @@ final class YtarkUpdater {
         if (apkAsset == null) {
             throw new IOException("The latest release does not include the APK for this device.");
         }
-        String downloadUrl = requireOfficialAssetUrl(
+        String downloadUrl = UpdateReleaseContract.requireOfficialAssetUrl(
                 apkAsset.optString("browser_download_url", ""), tag, expectedAssetName);
         long assetSize = apkAsset.optLong("size", -1L);
         if (assetSize <= 0 || assetSize > MAX_APK_BYTES) {
@@ -184,7 +180,7 @@ final class YtarkUpdater {
         }
 
         String publishedDigest = apkAsset.optString("digest", "").trim();
-        String digest = parseSha256Digest(publishedDigest);
+        String digest = UpdateReleaseContract.parseSha256Digest(publishedDigest);
         if (publishedDigest.length() > 0 && digest == null) {
             throw new IOException("GitHub published an invalid SHA-256 digest for the APK.");
         }
@@ -193,9 +189,10 @@ final class YtarkUpdater {
             if (checksumsAsset == null) {
                 throw new IOException("The release is missing its SHA-256 checksum file.");
             }
-            String checksumUrl = requireOfficialAssetUrl(
+            String checksumUrl = UpdateReleaseContract.requireOfficialAssetUrl(
                     checksumsAsset.optString("browser_download_url", ""), tag, "SHA256SUMS.txt");
-            digest = checksumForAsset(httpGet(checksumUrl, 256 * 1024), expectedAssetName);
+            digest = UpdateReleaseContract.checksumForAsset(
+                    httpGet(checksumUrl, 256 * 1024), expectedAssetName);
         }
 
         return new ReleaseInfo(tag, version, expectedAssetName, downloadUrl, digest,
@@ -217,51 +214,6 @@ final class YtarkUpdater {
             }
         }
         return "arm64-v8a".equals(Build.CPU_ABI) ? "arm64" : null;
-    }
-
-    private static String requireOfficialAssetUrl(String url, String tag, String assetName)
-            throws IOException {
-        String expectedUrl = RELEASE_ASSET_PREFIX + tag + "/" + assetName;
-        if (url == null || !expectedUrl.equals(url)) {
-            throw new IOException("A release asset URL does not match the official YTArk release metadata.");
-        }
-        return url;
-    }
-
-    private static long parseVersionCode(String body) throws IOException {
-        Matcher matcher = Pattern.compile("(?i)version\\s*code\\s*[:=]?\\s*(\\d+)")
-                .matcher(body == null ? "" : body);
-        if (!matcher.find()) throw new IOException("The release is missing its versionCode metadata.");
-        try {
-            return Long.parseLong(matcher.group(1));
-        } catch (NumberFormatException invalid) {
-            throw new IOException("The release versionCode is invalid.", invalid);
-        }
-    }
-
-    private static String parseSha256Digest(String digest) {
-        if (digest == null) return null;
-        String value = digest.trim().toLowerCase(Locale.US);
-        if (value.startsWith("sha256:")) value = value.substring("sha256:".length());
-        return value.matches("[0-9a-f]{64}") ? value : null;
-    }
-
-    private static String checksumForAsset(String checksumFile, String assetName) throws IOException {
-        String[] lines = checksumFile.split("\\r?\\n");
-        for (String line : lines) {
-            String trimmed = line.trim();
-            if (trimmed.length() == 0 || trimmed.startsWith("#")) continue;
-            String[] columns = trimmed.split("\\s+", 2);
-            if (columns.length != 2) continue;
-            String name = columns[1].trim();
-            if (name.startsWith("*")) name = name.substring(1);
-            if (assetName.equals(name)) {
-                String parsed = parseSha256Digest(columns[0]);
-                if (parsed != null) return parsed;
-                throw new IOException("The APK checksum in SHA256SUMS.txt is invalid.");
-            }
-        }
-        throw new IOException("The APK is not listed in SHA256SUMS.txt.");
     }
 
     private static String httpGet(String address, int maximumBytes) throws IOException {
@@ -334,10 +286,10 @@ final class YtarkUpdater {
         Notification.Builder builder = notificationBuilder(context)
                 .setSmallIcon(android.R.drawable.stat_sys_download_done)
                 .setContentTitle("YTArk update available")
-                .setContentText("Version " + release.versionName + " is ready to install.")
+                .setContentText("Version " + release.versionName + " is available to download.")
                 .setStyle(new Notification.BigTextStyle().bigText(
                         "Version " + release.versionName
-                                + " is available. Choose Update Now to download and install it."))
+                                + " is available. Choose Update Now to download it."))
                 .setContentIntent(contentIntent)
                 .setAutoCancel(true)
                 .setVisibility(Notification.VISIBILITY_PUBLIC)

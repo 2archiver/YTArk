@@ -58,21 +58,14 @@ jobs:
           gh api "repos/reisxd/TizenTubeCobalt/releases/tags/$BASE_TAG_FROM_CONFIG" \
             > "$RUNNER_TEMP/ytark-validation/base-release.json"
 
-      - name: Confirm production signing secrets are configured
+      - name: Prepare pinned YTArk signing key
         env:
+          GH_TOKEN: ${{ github.token }}
           YTARK_KEYSTORE_B64: ${{ secrets.YTARK_KEYSTORE_B64 }}
           YTARK_KEYSTORE_PASSWORD: ${{ secrets.YTARK_KEYSTORE_PASSWORD }}
           YTARK_KEY_ALIAS: ${{ secrets.YTARK_KEY_ALIAS }}
           YTARK_KEY_PASSWORD: ${{ secrets.YTARK_KEY_PASSWORD }}
-        run: |
-          set -euo pipefail
-          : "${YTARK_KEYSTORE_B64:?Missing YTARK_KEYSTORE_B64 repository secret}"
-          : "${YTARK_KEYSTORE_PASSWORD:?Missing YTARK_KEYSTORE_PASSWORD repository secret}"
-          : "${YTARK_KEY_ALIAS:?Missing YTARK_KEY_ALIAS repository secret}"
-          : "${YTARK_KEY_PASSWORD:?Missing YTARK_KEY_PASSWORD repository secret}"
-          CERT_SHA256="$(grep -v '^[[:space:]]*#' signing/YTArk-cert-sha256.txt | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
-          [[ "$CERT_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "Pinned public certificate fingerprint is not initialized" >&2; exit 1; }
-          echo "SIGNING_CERT_SHA256=$CERT_SHA256" >> "$GITHUB_ENV"
+        run: bash tools/prepare_signing_key.sh
 
       - name: Build userscript and run TV controls tests
         working-directory: TizenTube/mods
@@ -162,12 +155,7 @@ jobs:
           set -euo pipefail
           zipalign -c -p 4 "work/${APK_ARM64%.apk}-unsigned.apk"
 
-      - name: Sign with permanent production certificate
-        env:
-          YTARK_KEYSTORE_B64: ${{ secrets.YTARK_KEYSTORE_B64 }}
-          YTARK_KEYSTORE_PASSWORD: ${{ secrets.YTARK_KEYSTORE_PASSWORD }}
-          YTARK_KEY_ALIAS: ${{ secrets.YTARK_KEY_ALIAS }}
-          YTARK_KEY_PASSWORD: ${{ secrets.YTARK_KEY_PASSWORD }}
+      - name: Sign with pinned production certificate
         run: |
           set -euo pipefail
           export YTARK_EXPECTED_CERT_SHA256="$SIGNING_CERT_SHA256"

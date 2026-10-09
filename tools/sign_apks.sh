@@ -1,31 +1,28 @@
 #!/usr/bin/env bash
-# Sign each aligned YTArk APK with the one permanent production keystore.
+# Sign the aligned YTArk APK with the pinned Hearth community certificate.
 set -euo pipefail
 
 WORK="${1:?usage: sign_apks.sh <directory-with-unsigned-apks>}"
-: "${YTARK_KEYSTORE_B64:?YTARK_KEYSTORE_B64 GitHub Actions secret is required}"
-: "${YTARK_KEYSTORE_PASSWORD:?YTARK_KEYSTORE_PASSWORD GitHub Actions secret is required}"
-: "${YTARK_KEY_ALIAS:?YTARK_KEY_ALIAS GitHub Actions secret is required}"
-: "${YTARK_KEY_PASSWORD:?YTARK_KEY_PASSWORD GitHub Actions secret is required}"
+: "${YTARK_KEYSTORE_PATH:?YTARK_KEYSTORE_PATH is required}"
+: "${YTARK_STORE_PASSWORD_FILE:?YTARK_STORE_PASSWORD_FILE is required}"
+: "${YTARK_KEY_PASSWORD_FILE:?YTARK_KEY_PASSWORD_FILE is required}"
+: "${YTARK_KEY_ALIAS:?YTARK_KEY_ALIAS is required}"
 : "${YTARK_EXPECTED_CERT_SHA256:?YTARK_EXPECTED_CERT_SHA256 is required}"
+
+SIGNING_DIR="${YTARK_SIGNING_DIR:-}"
+if [ -n "$SIGNING_DIR" ]; then
+  [ "$YTARK_KEYSTORE_PATH" = "$SIGNING_DIR/ytark-release.p12" ] || {
+    echo "Refusing to clean up an unexpected YTArk signing directory" >&2; exit 1;
+  }
+  cleanup() { rm -rf -- "$SIGNING_DIR"; }
+  trap cleanup EXIT
+fi
 
 EXPECTED_CERT="$(printf '%s' "$YTARK_EXPECTED_CERT_SHA256" | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
 [[ "$EXPECTED_CERT" =~ ^[0-9a-f]{64}$ ]] || { echo "invalid expected signing certificate fingerprint" >&2; exit 1; }
-
-umask 077
-TEMP_DIR="$(mktemp -d "${RUNNER_TEMP:-/tmp}/ytark-signing.XXXXXX")"
-KEYSTORE="$TEMP_DIR/ytark-release.p12"
-STORE_PASS_FILE="$TEMP_DIR/store-password"
-KEY_PASS_FILE="$TEMP_DIR/key-password"
-cleanup() {
-  rm -rf "$TEMP_DIR"
-}
-trap cleanup EXIT
-
-printf '%s' "$YTARK_KEYSTORE_PASSWORD" > "$STORE_PASS_FILE"
-printf '%s' "$YTARK_KEY_PASSWORD" > "$KEY_PASS_FILE"
-printf '%s' "$YTARK_KEYSTORE_B64" | base64 --decode > "$KEYSTORE"
-[ -s "$KEYSTORE" ] || { echo "decoded production keystore is empty" >&2; exit 1; }
+[ -s "$YTARK_KEYSTORE_PATH" ] || { echo "YTArk signing keystore is missing or empty" >&2; exit 1; }
+[ -s "$YTARK_STORE_PASSWORD_FILE" ] || { echo "YTArk keystore password file is missing" >&2; exit 1; }
+[ -s "$YTARK_KEY_PASSWORD_FILE" ] || { echo "YTArk key password file is missing" >&2; exit 1; }
 
 shopt -s nullglob
 unsigned_apks=("$WORK"/*-unsigned.apk)
@@ -36,13 +33,13 @@ unsigned_apks=("$WORK"/*-unsigned.apk)
 
 for unsigned in "${unsigned_apks[@]}"; do
   signed="${unsigned%-unsigned.apk}.apk"
-  echo "Signing $(basename "$signed") with the permanent YTArk certificate."
+  echo "Signing $(basename "$signed") with the pinned YTArk release certificate."
   apksigner sign \
-    --ks "$KEYSTORE" \
+    --ks "$YTARK_KEYSTORE_PATH" \
     --ks-type PKCS12 \
     --ks-key-alias "$YTARK_KEY_ALIAS" \
-    --ks-pass "file:$STORE_PASS_FILE" \
-    --key-pass "file:$KEY_PASS_FILE" \
+    --ks-pass "file:$YTARK_STORE_PASSWORD_FILE" \
+    --key-pass "file:$YTARK_KEY_PASSWORD_FILE" \
     --out "$signed" \
     "$unsigned"
 
@@ -59,10 +56,8 @@ print(re.sub(r"[^0-9a-fA-F]", "", m.group(1)).lower())
     echo "FAIL: $signed has the wrong signing certificate" >&2
     exit 1
   }
-  echo "Verified APK signature and permanent certificate for $(basename "$signed")."
+  echo "Verified APK signature and pinned certificate for $(basename "$signed")."
   rm -f "$unsigned"
 done
 
-# No key material is left in the workspace or release artifact directory.
-rm -f "$WORK"/keystore* "$WORK"/ephemeral* "$WORK"/*password*
-echo "The YTArk ARM64 APK was signed and verified with the pinned production certificate."
+echo "The YTArk ARM64 APK was signed and verified with the pinned Hearth community certificate."
