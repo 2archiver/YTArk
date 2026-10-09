@@ -115,6 +115,27 @@ def patch_script_url(decoded_dir: str, script_url: str) -> int:
 # Manifest / apktool.yml patching
 # ---------------------------------------------------------------------------
 
+# apktool may render attribute names with a resource-id suffix, e.g.
+# android:versionCode(0x0101021b)="202" — tolerate that everywhere.
+ATTR_ID = r"(?:\([^)]*\))?"
+
+
+def _attr(name: str) -> str:
+    return rf"android:{name}{ATTR_ID}"
+
+
+def debug_dump_manifest(path: str) -> None:
+    with open(path, encoding="utf-8") as fh:
+        xml = fh.read()
+    print("[debug] manifest tags/attrs of interest:")
+    for m in re.findall(
+            r"<manifest[^>]*>|<application[^>]*>|<activity[^>]*|"
+            r'android:(label|versionCode|versionName)\b[^=]*="[^"]*"', xml)[:24]:
+        if isinstance(m, tuple):
+            continue
+        print("    " + m[:240])
+
+
 def patch_manifest(decoded_dir: str, app_id: str, app_name: str,
                    version_code: int = None, version_name: str = None) -> None:
     path = os.path.join(decoded_dir, "AndroidManifest.xml")
@@ -126,45 +147,64 @@ def patch_manifest(decoded_dir: str, app_id: str, app_name: str,
             f"ERROR: package '{OLD_PACKAGE}' not found in decoded manifest — "
             f"base APK layout may have changed.")
 
-    # Version attrs: apktool 3.x keeps them in the decoded manifest (they
-    # take precedence over apktool.yml on rebuild).
+    # Version attrs: apktool 3.x keeps them in the decoded manifest and
+    # aapt2 uses them on rebuild (apktool.yml versionInfo is ignored).
     if version_code is not None:
-        xml, n = re.subn(r'android:versionCode="\d+"',
+        xml, n = re.subn(rf'{_attr("versionCode")}="\d+"',
                          f'android:versionCode="{version_code}"', xml)
         print(f"[*] Manifest: versionCode attr patched (x{n})"
-              if n else "[*] Manifest: no versionCode attr (apktool.yml used)")
+              if n else "[!] Manifest: no versionCode attr found")
+        if not n:
+            # Inject the attribute into the <manifest> tag.
+            xml, n2 = re.subn(r'(<manifest\b[^>]*?)(/?>)',
+                              rf'\1 android:versionCode="{version_code}"\2',
+                              xml, count=1)
+            print(f"[*] Manifest: versionCode attr injected (x{n2})")
     if version_name is not None:
-        xml, n = re.subn(r'android:versionName="[^"]*"',
+        xml, n = re.subn(rf'{_attr("versionName")}="[^"]*"',
                          f'android:versionName="{version_name}"', xml)
         print(f"[*] Manifest: versionName attr patched (x{n})"
-              if n else "[*] Manifest: no versionName attr (apktool.yml used)")
+              if n else "[!] Manifest: no versionName attr found")
+        if not n:
+            xml, n2 = re.subn(r'(<manifest\b[^>]*?)(/?>)',
+                              rf'\1 android:versionName="{version_name}"\2',
+                              xml, count=1)
+            print(f"[*] Manifest: versionName attr injected (x{n2})")
 
     n_pkg = xml.count(OLD_PACKAGE)
     xml = xml.replace(OLD_PACKAGE, app_id)
     print(f"[*] Manifest: replaced {n_pkg} reference(s) to "
           f"'{OLD_PACKAGE}' -> '{app_id}'")
 
-    # Application label: either a literal on <application>, or a @string
-    # resource reference (resolved by apktool during decode).
-    app_tag = re.search(r"<application\b[^>]*>", xml, re.S)
-    if not app_tag:
-        raise SystemExit("ERROR: could not find <application> tag in manifest")
-    block = app_tag.group(0)
-    label_match = re.search(r'android:label="([^"]*)"', block)
-    if not label_match:
-        print("[!] Manifest: no android:label on <application> — leaving as-is.")
-    else:
-        old_label = label_match.group(1)
-        if old_label.startswith("@string/"):
-            # Label lives in res/values/strings.xml — patch the resource.
-            res_name = old_label[len("@string/"):]
-            patch_string_resource(decoded_dir, res_name, app_name)
-        else:
+    # Application/activity labels: replace every android:label value
+    # (literal or @string reference). The launcher shows the activity label
+    # when present, so patch them all.
+    patched_resources = []
+
+    def _label_repl(m):
+        attr, value = m.group(1), m.group(2)
+        if value.startswith("@string/"):
+            res_name = value[len("@string/"):]
+            patched_resources.append(res_name)
+            return m.group(0)  # reference stays; patch resource content
+        return f'{attr}="{app_name}"'
+
+    xml, n_labels = re.subn(rf'({_attr("label")})="([^"]*)"',
+                            _label_repl, xml)
+    for res_name in patched_resources:
+        patch_string_resource(decoded_dir, res_name, app_name)
+    print(f"[*] Manifest: {n_labels} label attr(s) processed "
+          f"({len(patched_resources)} via @string resource)")
+
+    if n_labels == 0:
+        # No label attributes at all — add one to <application>.
+        app_tag = re.search(r"<application\b[^>]*>", xml, re.S)
+        if app_tag:
+            block = app_tag.group(0)
             new_block = block.replace(
-                f'android:label="{old_label}"', f'android:label="{app_name}"', 1)
+                "<application", f'<application android:label="{app_name}"', 1)
             xml = xml.replace(block, new_block, 1)
-            print(f"[*] Manifest: application label '{old_label}' -> "
-                  f"'{app_name}'")
+            print(f"[*] Manifest: injected application label '{app_name}'")
 
     # Component names are fully qualified (dev.cobalt.app.MainActivity,
     # org.chromium.*) and untouched by the package rename — verified against
@@ -257,6 +297,7 @@ def repack(args) -> None:
                    "--output", decoded, args.base])
 
     patch_script_url(decoded, args.script_url)
+    debug_dump_manifest(os.path.join(decoded, "AndroidManifest.xml"))
     patch_manifest(decoded, args.app_id, args.app_name,
                    version_code=args.version_code,
                    version_name=args.version_name)
@@ -345,8 +386,9 @@ def self_test() -> None:
     sample = (
         '<?xml version="1.0"?>\n'
         f'<manifest package="{OLD_PACKAGE}"\n'
-        '          android:versionCode="200" android:versionName="2.0.2">\n'
+        '          android:versionCode(0x0101021b)="200" android:versionName(0x0101021c)="2.0.2">\n'
         '  <application android:label="TizenTube" android:name="dev.cobalt.app.CobaltApplication">\n'
+        f'    <activity android:label="TizenTube" android:name="dev.cobalt.app.MainActivity"/>\n'
         f'    <provider android:authorities="{OLD_PACKAGE}.fileprovider"/>\n'
         '  </application>\n'
         '</manifest>\n')
@@ -369,6 +411,8 @@ def self_test() -> None:
         ('android:versionCode="20042"' in out, "versionCode attr patched"),
         ('android:versionName="2.0.2-personal.42"' in out,
          "versionName attr patched"),
+        ('<activity android:label="Personal Tube TV"' in out,
+         "activity label patched"),
     ]
     for passed, what in checks:
         if not passed:
@@ -407,7 +451,7 @@ def self_test() -> None:
     sample2 = (
         '<?xml version="1.0"?>\n'
         f'<manifest package="{OLD_PACKAGE}"\n'
-        '          android:versionCode="200" android:versionName="2.0.2">\n'
+        '          android:versionCode(0x0101021b)="200" android:versionName(0x0101021c)="2.0.2">\n'
         '  <application android:label="@string/app_name" android:name="dev.cobalt.app.CobaltApplication">\n'
         '  </application>\n'
         '</manifest>\n')
