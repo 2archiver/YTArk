@@ -9,6 +9,7 @@
  */
 
 import { configRead, configWrite } from '../config.js';
+import updateStyle from '../ui/theme.js';
 
 // ---------------------------------------------------------------------------
 // Preset definitions
@@ -107,31 +108,11 @@ function undoLastPreset() {
 }
 
 // ---------------------------------------------------------------------------
-// Theme stylesheet management — single stylesheet, never accumulates
+// Theme stylesheet management — shared with ui/theme.js
 // ---------------------------------------------------------------------------
 
-let _themeStyleEl = null;
-
-function ensureThemeStyleEl() {
-  if (_themeStyleEl && _themeStyleEl.parentNode) return _themeStyleEl;
-  _themeStyleEl = document.createElement('style');
-  _themeStyleEl.setAttribute('data-tv-theme', 'true');
-  document.head.appendChild(_themeStyleEl);
-  return _themeStyleEl;
-}
-
 function updateThemeStylesheet() {
-  const el = ensureThemeStyleEl();
-  const focus = configRead('focusContainerColor');
-  const route = configRead('routeColor');
-  el.textContent = [
-    'ytlr-guide-response yt-focus-container {',
-    `  background-color: ${focus};`,
-    '}',
-    '#container {',
-    `  background-color: ${route} !important;`,
-    '}',
-  ].join('\n');
+  updateStyle();
 }
 
 // ---------------------------------------------------------------------------

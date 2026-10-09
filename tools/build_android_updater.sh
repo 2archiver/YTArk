@@ -30,6 +30,8 @@ trap 'rm -rf "$WORK"' EXIT
 mkdir -p "$WORK/test-classes"
 javac --release 8 -d "$WORK/test-classes" \
   "$SOURCE/io/github/twoarchiver/ytark/updater/UpdateVersion.java" \
+  "$SOURCE/io/github/twoarchiver/ytark/updater/NativeAbiContract.java" \
+  "$SOURCE/io/github/twoarchiver/ytark/updater/UpdateResumeContract.java" \
   "$SOURCE/io/github/twoarchiver/ytark/updater/UpdateReleaseContract.java" \
   "$TEST_SOURCE" "$CONTRACT_TEST_SOURCE"
 java -cp "$WORK/test-classes" io.github.twoarchiver.ytark.updater.UpdateVersionTest

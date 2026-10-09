@@ -9,6 +9,7 @@ import { requestNextAndNavigateChannel, getFeedbackPanelTokens, sendFeedbackToke
 import qrcode from 'qrcode-npm';
 import showGuideSettings from './ui/sidebarModification.js';
 import { applyPreset, undoLastPreset, setQuickQuality, updateThemeStylesheet } from './features/tvControls.js';
+import { resetUserAgentProfile } from './features/userAgentSpoofing.js';
 
 export default function resolveCommand(cmd, _) {
     // resolveCommand function is pretty OP, it can do from opening modals, changing client settings and way more.
@@ -203,15 +204,47 @@ function customAction(action, parameters) {
         case 'OPTIONS_SHOW':
             optionShow(parameters, parameters.update);
             break;
-        case 'SKIP':
+        case 'SKIP': {
+            const video = document.querySelector('video');
+            const targetTime = Number(parameters && parameters.time);
+            if (!video || !Number.isFinite(targetTime)) break;
+
+            const fromTime = video.currentTime;
+            if (parameters && parameters.source === 'sponsorblock' && parameters.undoable) {
+                window.__ytarkLastSponsorBlockSkip = {
+                    fromTime,
+                    toTime: targetTime,
+                    category: parameters.category || 'segment',
+                    expiresAt: Date.now() + 30000,
+                };
+            }
+
             const kE = document.createEvent('Event');
             kE.initEvent('keydown', true, true);
             kE.keyCode = 27;
             kE.which = 27;
             document.dispatchEvent(kE);
+            video.currentTime = Math.max(0, targetTime);
 
-            document.querySelector('video').currentTime = parameters.time;
+            if (parameters && parameters.source === 'sponsorblock' && parameters.undoable) {
+                const category = String(parameters.category || 'segment').replace(/_/g, ' ');
+                showToast('SponsorBlock', `Skipped ${category}. Undo is available in SponsorBlock settings for 30 seconds.`);
+            }
             break;
+        }
+        case 'SPONSORBLOCK_UNDO_SKIP': {
+            const lastSkip = window.__ytarkLastSponsorBlockSkip;
+            const video = document.querySelector('video');
+            if (!lastSkip || Date.now() > lastSkip.expiresAt || !video) {
+                window.__ytarkLastSponsorBlockSkip = null;
+                showToast('SponsorBlock', 'There is no recent manual skip to undo.');
+                break;
+            }
+            video.currentTime = Math.max(0, Number(lastSkip.fromTime) || 0);
+            window.__ytarkLastSponsorBlockSkip = null;
+            showToast('SponsorBlock', 'Undid the last manual skip.');
+            break;
+        }
         case 'TT_SETTINGS_SHOW':
             modernUI();
             break;
@@ -247,6 +280,10 @@ function customAction(action, parameters) {
             break;
         case 'CHECK_FOR_UPDATES':
             openYtArkUpdates();
+            break;
+        case 'RESET_USER_AGENT_PROFILE':
+            resetUserAgentProfile(window.h5vcc && window.h5vcc.tizentube);
+            showToast('YTArk', 'Native Cobalt User-Agent reset requested.');
             break;
         case 'GO_TO_CHANNEL':
             requestNextAndNavigateChannel(parameters);

@@ -92,6 +92,12 @@ function setAndVerify(key, value) {
 // ---------------------------------------------------------------------------
 
 describe('Config resilience', () => {
+  it('defaults ad blocking on but preserves an explicit saved opt-out', () => {
+    assert.equal(configRead('enableAdBlock'), true);
+    setAndVerify('enableAdBlock', false);
+    assert.equal(configRead('enableAdBlock'), false);
+  });
+
   it('reads default values for keys not in stored config', () => {
     // configRead should return defaults for any key not explicitly set
     const val = configRead('enableSigninReminder');

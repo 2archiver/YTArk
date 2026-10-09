@@ -1,4 +1,4 @@
-name: Build YTArk APK for Google TV OS 14
+name: Build YTArk APK candidates for Android TV
 
 on:
   push:
@@ -20,9 +20,9 @@ env:
 
 jobs:
   build:
-    name: Build and validate YTArk release
+    name: Build, package-check and draft both APKs
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 150
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
@@ -46,6 +46,11 @@ jobs:
         run: |
           set -euo pipefail
           python3 tools/validate_release.py emit-env --file "$GITHUB_ENV"
+          # GitHub applies GITHUB_ENV only to later steps; source the validated
+          # release values here too because this step fetches the pinned base.
+          set -a
+          . "$GITHUB_ENV"
+          set +a
           export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
           (set +o pipefail; yes | sdkmanager --licenses >/dev/null)
           sdkmanager "platforms;android-${API_LEVEL}" "build-tools;${BUILD_TOOLS}" "platform-tools"
@@ -56,9 +61,8 @@ jobs:
             > "$RUNNER_TEMP/ytark-validation/latest-release.json"
           python3 tools/validate_release.py check-version \
             --latest-json "$RUNNER_TEMP/ytark-validation/latest-release.json"
-          BASE_TAG_FROM_CONFIG="$(awk -F= '$1 == "baseTag" { print $2 }' release/version.properties)"
-          test -n "$BASE_TAG_FROM_CONFIG"
-          gh api "repos/reisxd/TizenTubeCobalt/releases/tags/$BASE_TAG_FROM_CONFIG" \
+          test -n "$BASE_TAG"
+          gh api "repos/reisxd/TizenTubeCobalt/releases/tags/$BASE_TAG" \
             > "$RUNNER_TEMP/ytark-validation/base-release.json"
 
       - name: Prepare pinned YTArk signing key
@@ -70,15 +74,16 @@ jobs:
           YTARK_KEY_PASSWORD: ${{ secrets.YTARK_KEY_PASSWORD }}
         run: bash tools/prepare_signing_key.sh
 
-      - name: Build userscript and run TV controls tests
+      - name: Build userscript and run feature/TV-control tests
         working-directory: TizenTube/mods
         run: |
           set -euo pipefail
           npm ci --no-audit --no-fund
-          node --test tests/tv-controls.test.mjs
+          node --test tests/*.test.mjs
           npm run build
           node --check ../dist/userScript.js
           grep -q "YTArk Quick Controls" ../dist/userScript.js
+          grep -q "YouTube Premium" ../dist/userScript.js
           grep -q "ytark://updates" ../dist/userScript.js
           if grep -Eqi 'Personal[[:space:]]+Tube[[:space:]]+TV' ../dist/userScript.js; then
             echo "Deprecated branding found in generated userscript" >&2
@@ -86,7 +91,7 @@ jobs:
           fi
           echo "Built YTArk userscript: $(wc -c < ../dist/userScript.js) bytes"
 
-      - name: Publish immutable userscript tag
+      - name: Publish immutable userscript tag and verify exact bytes
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -100,23 +105,22 @@ jobs:
               verified=true
               break
             fi
-            echo "Waiting for the immutable userscript tag to propagate ($attempt/20)."
+            echo "Waiting for immutable userscript tag propagation ($attempt/20)."
             sleep 15
           done
           if [ "$verified" != true ]; then
-            echo "jsDelivr did not serve the exact release userscript bundle" >&2
+            echo "jsDelivr did not serve the exact immutable release userscript" >&2
             exit 1
           fi
           echo "SCRIPT_URL=$SCRIPT_URL" >> "$GITHUB_ENV"
-          echo "jsDelivr serves the exact immutable YTArk userscript tag."
 
-      - name: Compile native Android updater
+      - name: Compile native updater and run Java contract tests
         run: |
           set -euo pipefail
           chmod +x tools/build_android_updater.sh
           tools/build_android_updater.sh "$RUNNER_TEMP/ytark-updater/classes.dex"
 
-      - name: Download and verify pinned TizenTubeCobalt ARM64 base APK
+      - name: Download and verify both pinned upstream Cobalt bases
         run: |
           set -euo pipefail
           python3 tools/fetch_base_apks.py \
@@ -124,6 +128,8 @@ jobs:
             --base-tag "$BASE_TAG" \
             --output-dir base \
             --checksums-out base-apk-sha256.txt
+          python3 tools/validate_release.py check-base-checksums \
+            --checksums base-apk-sha256.txt --base-dir base
 
       - name: Install pinned Apktool
         env:
@@ -136,91 +142,95 @@ jobs:
           curl -fsSL --retry 3 "$APKTOOL_URL" -o "$RUNNER_TEMP/apktool.jar"
           java -jar "$RUNNER_TEMP/apktool.jar" --version
 
-      - name: Repack one ARM64 YTArk APK for Google TV OS 14
+      - name: Repack matching ARMv7 and ARM64 Cobalt bases
         run: |
           set -euo pipefail
           mkdir -p work
-          UNSIGNED_ARM64="work/${APK_ARM64%.apk}-unsigned.apk"
           python3 tools/repack_apk.py \
-            --base base/cobalt-arm64.apk \
-            --out "$UNSIGNED_ARM64" \
+            --base base/cobalt-arm.apk --architecture armv7 \
+            --out "work/${APK_ARMV7%.apk}-unsigned.apk" \
             --updater-dex "$RUNNER_TEMP/ytark-updater/classes.dex" \
-            --app-name "$APP_NAME" \
-            --app-id "$APP_ID" \
-            --script-url "$SCRIPT_URL" \
-            --version-code "$VERSION_CODE" \
+            --app-name "$APP_NAME" --app-id "$APP_ID" \
+            --script-url "$SCRIPT_URL" --version-code "$VERSION_CODE" \
+            --version-name "$VERSION_NAME" \
+            --apktool "java -jar $RUNNER_TEMP/apktool.jar" \
+            --zipalign "$ANDROID_HOME/build-tools/$BUILD_TOOLS/zipalign"
+          python3 tools/repack_apk.py \
+            --base base/cobalt-arm64.apk --architecture arm64 \
+            --out "work/${APK_ARM64%.apk}-unsigned.apk" \
+            --updater-dex "$RUNNER_TEMP/ytark-updater/classes.dex" \
+            --app-name "$APP_NAME" --app-id "$APP_ID" \
+            --script-url "$SCRIPT_URL" --version-code "$VERSION_CODE" \
             --version-name "$VERSION_NAME" \
             --apktool "java -jar $RUNNER_TEMP/apktool.jar" \
             --zipalign "$ANDROID_HOME/build-tools/$BUILD_TOOLS/zipalign"
 
-      - name: Verify APK alignment
+      - name: Verify alignment, sign both APKs and validate compiled packages
         run: |
           set -euo pipefail
+          zipalign -c -p 4 "work/${APK_ARMV7%.apk}-unsigned.apk"
           zipalign -c -p 4 "work/${APK_ARM64%.apk}-unsigned.apk"
-
-      - name: Sign with pinned production certificate
-        run: |
-          set -euo pipefail
           export YTARK_EXPECTED_CERT_SHA256="$SIGNING_CERT_SHA256"
           bash tools/sign_apks.sh work
           mkdir -p release-assets
+          mv "work/${APK_ARMV7%.apk}.apk" "release-assets/$APK_ARMV7"
           mv "work/${APK_ARM64%.apk}.apk" "release-assets/$APK_ARM64"
+          for architecture in armv7 arm64; do
+            if [ "$architecture" = armv7 ]; then apk="$APK_ARMV7"; else apk="$APK_ARM64"; fi
+            zipalign -c -p 4 "release-assets/$apk"
+            python3 tools/validate_release.py check-apk \
+              --apk "release-assets/$apk" --architecture "$architecture" \
+              --cert-file signing/YTArk-cert-sha256.txt \
+              --aapt "$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt" \
+              --apksigner "$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner"
+          done
 
-      - name: Validate APK identity, ABI, updater components and signer
-        run: |
-          set -euo pipefail
-          python3 tools/validate_release.py check-apk \
-            --apk "release-assets/$APK_ARM64" --architecture arm64 \
-            --cert-file signing/YTArk-cert-sha256.txt \
-            --aapt "$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt" \
-            --apksigner "$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner"
-
-      - name: Create and verify release checksums
+      - name: Create and verify both APK checksums
         run: |
           set -euo pipefail
           cp TizenTube/dist/userScript.js release-assets/userScript.js
           cp base-apk-sha256.txt release-assets/base-apk-sha256.txt
           (
             cd release-assets
-            sha256sum "$APK_ARM64" userScript.js > SHA256SUMS.txt
+            sha256sum "$APK_ARMV7" "$APK_ARM64" userScript.js > SHA256SUMS.txt
           )
           python3 tools/validate_release.py check-checksums \
             --checksums release-assets/SHA256SUMS.txt \
+            --armv7 "release-assets/$APK_ARMV7" \
             --arm64 "release-assets/$APK_ARM64" \
             --user-script release-assets/userScript.js
+          python3 tools/validate_release.py check-base-checksums \
+            --checksums release-assets/base-apk-sha256.txt --base-dir base
 
-      - name: Prepare prior-version update-install smoke test
+      - name: Prepare same-ABI prior-version package candidates (static only)
         run: |
           set -euo pipefail
           mkdir -p update-smoke
-          python3 tools/prepare_update_smoke.py \
-            --latest-json "$RUNNER_TEMP/ytark-validation/latest-release.json" \
-            --artifact-dir update-smoke \
-            --output "$GITHUB_OUTPUT" \
-            --cert-file signing/YTArk-cert-sha256.txt \
-            --aapt "$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt" \
-            --apksigner "$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner"
+          : > update-smoke/eligibility.properties
+          for architecture in armv7 arm64; do
+            python3 tools/prepare_update_smoke.py \
+              --latest-json "$RUNNER_TEMP/ytark-validation/latest-release.json" \
+              --architecture "$architecture" \
+              --artifact-dir update-smoke \
+              --output update-smoke/eligibility.properties \
+              --cert-file signing/YTArk-cert-sha256.txt \
+              --aapt "$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt" \
+              --apksigner "$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner"
+          done
+          cp "release-assets/$APK_ARMV7" update-smoke/current-ytark-armv7.apk
           cp "release-assets/$APK_ARM64" update-smoke/current-ytark-arm64.apk
-          if grep -q '^eligible=true$' "$GITHUB_OUTPUT"; then
-            echo "A previous YTArk production APK is available for in-place upgrade testing."
-          else
-            echo "No matching prior production identity exists; the ARM64 smoke test will validate a fresh production install."
-          fi
+          cat update-smoke/eligibility.properties
+          echo "These checks compare package metadata and signer only; they do not run adb install or launch an emulator."
 
-      - name: Create draft release for prepublication validation
+      - name: Create draft release and validate its asset contract
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           export SIGNING_CERT_SHA256
-          LOG_FILE="$RUNNER_TEMP/ytark-draft-release.log"
-          set +e
-          (
-            set -euo pipefail
-            bash tools/create_release.sh
-            cp NOTICE.md release-assets/NOTICE.md
-            gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-              | python3 -c '
+          bash tools/create_release.sh
+          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            | python3 -c '
           import json, sys
           tag = sys.argv[1]
           for release in json.load(sys.stdin):
@@ -229,163 +239,28 @@ jobs:
                   sys.exit(0)
           raise SystemExit(f"Draft release {tag} not found")
           ' "$VERSION_TAG" > "$RUNNER_TEMP/ytark-validation/draft-release.json"
-            python3 tools/validate_release.py verify-release \
-              --release-json "$RUNNER_TEMP/ytark-validation/draft-release.json" \
-              --state draft
-          ) > "$LOG_FILE" 2>&1
-          release_status=$?
-          set -e
-          cat "$LOG_FILE"
-          if (( release_status != 0 )); then
-            diagnostic="$(python3 - "$LOG_FILE" <<'PY'
-          import sys
-          from collections import deque
-          with open(sys.argv[1], encoding="utf-8", errors="replace") as source:
-              print(" | ".join(line.strip() for line in deque(source, maxlen=25) if line.strip()), end="")
-          PY
-            )"
-            diagnostic="${diagnostic//%/%25}"
-            printf '::error title=YTArk draft release diagnostics::%s\n' "$diagnostic"
-            exit "$release_status"
-          fi
+          python3 tools/validate_release.py verify-release \
+            --release-json "$RUNNER_TEMP/ytark-validation/draft-release.json" \
+            --state draft
+          echo "The release remains a draft. Static packaging checks are not physical-device validation."
 
-      - name: Upload validated draft assets
+      - name: Upload candidate APKs and validation metadata
         uses: actions/upload-artifact@v7.0.2
         with:
-          name: ytark-release-assets
-          path: release-assets/*
+          name: ytark-dual-abi-candidates
+          path: |
+            release-assets/*
+            update-smoke/*.apk
+            update-smoke/eligibility.properties
           if-no-files-found: error
           retention-days: 30
 
-      - name: Upload ARM64 install/upgrade smoke test APKs
-        uses: actions/upload-artifact@v7.0.2
-        with:
-          name: ytark-update-smoke
-          path: update-smoke/*.apk
-          if-no-files-found: error
-          retention-days: 7
-
-  update-install-smoke:
-    name: Validate ARM64 production install or in-place update
-    needs: build
-    if: needs.build.result == 'success'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7.0.1
-
-      - name: Load expected versionCode
-        run: python3 tools/validate_release.py emit-env --file "$GITHUB_ENV"
-
-      - name: Download smoke test APKs
-        uses: actions/download-artifact@v8.0.2
-        with:
-          name: ytark-update-smoke
-          path: smoke
-
-      - name: Set up Java 17
-        uses: actions/setup-java@v6.0.1
-        with:
-          distribution: temurin
-          java-version: "17"
-
-      - name: Install Android 14 (API 34) SDK and build-tools
+      - name: Record unverified runtime acceptance
         run: |
-          set -euo pipefail
-          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
-          (set +o pipefail; yes | sdkmanager --licenses >/dev/null)
-          sdkmanager "platforms;android-${API_LEVEL}" "build-tools;${BUILD_TOOLS}" "platform-tools"
-          echo "$ANDROID_HOME/build-tools/$BUILD_TOOLS" >> "$GITHUB_PATH"
-          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
-
-      - name: Validate ARM64 Android 14 install/upgrade package and updater deep-link contract
-        run: |
-          set -euo pipefail
-          cp smoke/current-ytark-arm64.apk "smoke/$APK_ARM64"
-          python3 tools/validate_release.py check-apk \
-            --apk "smoke/$APK_ARM64" --architecture arm64 \
-            --cert-file signing/YTArk-cert-sha256.txt \
-            --aapt "$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt" \
-            --apksigner "$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner"
-          if [ -f smoke/previous-production-arm64.apk ]; then
-            prev_badging="$("$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt" dump badging smoke/previous-production-arm64.apk)"
-            echo "$prev_badging" | grep -Fq "package: name='io.github.twoarchiver.ytark'"
-            prev_cert="$("$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner" verify --print-certs smoke/previous-production-arm64.apk \
-              | grep -m1 -i 'certificate SHA-256 digest:' | sed -E 's/.*digest:[[:space:]]*//' | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
-            expected_cert="$(grep -v '^[[:space:]]*#' signing/YTArk-cert-sha256.txt | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
-            test "$prev_cert" = "$expected_cert"
-            echo "Verified prior production APK shares package identity and Hearth signing certificate for in-place upgrade."
-          else
-            echo "Verified first production YTArk APK for clean Android 14 ARM64 install."
-          fi
-          manifest_tree="$("$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt" dump xmltree "smoke/$APK_ARM64" AndroidManifest.xml)"
-          echo "$manifest_tree" | grep -Fq "io.github.twoarchiver.ytark.updater.UpdateActivity"
-          echo "$manifest_tree" | grep -Fq "android.intent.action.VIEW"
-          echo "$manifest_tree" | grep -Fq "ytark"
-          echo "$manifest_tree" | grep -Fq "updates"
-          chmod +x tools/build_android_updater.sh
-          tools/build_android_updater.sh "$RUNNER_TEMP/ytark-smoke-updater/classes.dex"
-          echo "ARM64 YTArk Android 14 install/upgrade and updater deep-link smoke validation passed."
-
-  publish:
-    name: Publish stable YTArk release
-    needs: [build, update-install-smoke]
-    if: >-
-      always() && needs.build.result == 'success' &&
-      (needs.update-install-smoke.result == 'success' || needs.update-install-smoke.result == 'skipped')
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7.0.1
-
-      - name: Load version metadata
-        run: python3 tools/validate_release.py emit-env --file "$GITHUB_ENV"
-
-      - name: Download validated draft assets
-        uses: actions/download-artifact@v8.0.2
-        with:
-          name: ytark-release-assets
-          path: release-assets
-
-      - name: Publish draft only after all release validations pass
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          LOG_FILE="$RUNNER_TEMP/ytark-publish-release.log"
-          set +e
-          (
-            set -euo pipefail
-            RELEASE_ID="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-              --jq ".[] | select(.tag_name == \"$VERSION_TAG\") | .id" | head -n 1)"
-            test -n "$RELEASE_ID"
-            gh api --method PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
-              -F draft=false \
-              -F prerelease=false \
-              -f make_latest=true \
-              -f name=YTArk \
-              > "$RUNNER_TEMP/ytark-published-release.json"
-            gh api "repos/$GITHUB_REPOSITORY/releases/latest" \
-              > "$RUNNER_TEMP/ytark-latest-release.json"
-            python3 tools/validate_release.py verify-release \
-              --release-json "$RUNNER_TEMP/ytark-published-release.json" \
-              --latest-json "$RUNNER_TEMP/ytark-latest-release.json" \
-              --state published
-          ) > "$LOG_FILE" 2>&1
-          publish_status=$?
-          set -e
-          cat "$LOG_FILE"
-          if (( publish_status != 0 )); then
-            diagnostic="$(python3 - "$LOG_FILE" <<'PY'
-          import sys
-          from collections import deque
-          with open(sys.argv[1], encoding="utf-8", errors="replace") as source:
-              print(" | ".join(line.strip() for line in deque(source, maxlen=25) if line.strip()), end="")
-          PY
-            )"
-            diagnostic="${diagnostic//%/%25}"
-            printf '::error title=YTArk publish release diagnostics::%s\n' "$diagnostic"
-            exit "$publish_status"
-          fi
+          {
+            echo "## YTArk runtime validation status"
+            echo "- ARMv7 and ARM64 packaging/manifest/signature checks ran in CI."
+            echo "- No physical Google TV / Android device was attached to this workflow."
+            echo "- Installation, launch, D-pad interaction, sign-in/guest flow, playback, 2160p streams, captions, and in-place PackageInstaller updates remain unverified."
+            echo "- The GitHub release stays in draft until a matching-ABI device acceptance report is supplied and reviewed."
+          } >> "$GITHUB_STEP_SUMMARY"

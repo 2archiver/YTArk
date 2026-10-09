@@ -1,121 +1,212 @@
 # YTArk
 
-YTArk is a standalone Android TV / Google TV application based on
-[TizenTubeCobalt](https://github.com/reisxd/TizenTubeCobalt), with YTArk Quick
-Controls and a native, user-confirmed updater. The repository also includes the
-complete modified TizenTube userscript source.
+YTArk is an independent Android TV / Google TV application based on
+[TizenTubeCobalt](https://github.com/reisxd/TizenTubeCobalt). It keeps the
+upstream YouTube TV frontend, its account/sign-in and **Continue as guest**
+flows, and the Cobalt player. YTArk adds TV-remote-friendly controls and a
+native updater that always hands installation to Android for user confirmation.
 
-## Current release identity
+## Release identity and candidate APKs
 
-| Component | Value |
+| Item | Value |
 |---|---|
-| Android package ID | `io.github.twoarchiver.ytark` |
-| Android launcher label | `YTArk` |
-| Release title | `YTArk` |
-| Version | `2.0.3-ytark.15` |
-| Google TV OS 14 / 4K APK | `YTArk-v2.0.3-ytark.15-arm64.apk` |
+| Android package | `io.github.twoarchiver.ytark` |
+| Launcher label | `YTArk` |
+| Expected release | `2.0.4-ytark.16` |
+| Expected versionCode | `20016` |
+| 32-bit userspace candidate | `YTArk-v2.0.4-ytark.16-armv7.apk` — `armeabi-v7a` |
+| 64-bit userspace candidate | `YTArk-v2.0.4-ytark.16-arm64.apk` — `arm64-v8a` |
+| Pinned Android base | TizenTubeCobalt `v2.0.2` |
 
-## Automatic Android TV updates
+These filenames identify the intended candidates, not proof that an APK has
+been built or installed. **No physical Google TV / Android TV acceptance is
+claimed by source-only or CI packaging checks.** Use the official
+[YTArk Releases](https://github.com/2archiver/YTArk/releases) page when the
+matching draft has been reviewed and published. Releases are meant to stay in
+draft until target-device installation, guest access, navigation, playback, and
+same-ABI update tests have been recorded.
 
-Like Hearth, YTArk checks GitHub's canonical `releases/latest` API endpoint
-when its Android process starts and every six hours while it is running. The
-release workflow marks the validated YTArk build as the latest stable release.
-The native updater:
+## Choose the architecture — 4K is not an ABI
 
-- Selects the version-named, 64-bit ARM APK built for Google TV OS 14 / Android
-  14 from the official [YTArk Releases](https://github.com/2archiver/YTArk/releases).
-- Requires the release title, version tag, `versionCode`, APK filename, URL,
-  size, and SHA-256 to satisfy the checked-in release contract; it never guesses
-  an asset URL or accepts an unverified checksum.
-- Offers remote-friendly **Update Now**, **Later**, and **Check for Updates**
-  controls in its Android TV notification and update screen.
-- Resumes interrupted downloads from app-private storage and checks the
-  published SHA-256, package ID, version name/code, ABI and pinned signing
-  certificate before continuing.
-- Uses Android's `PackageInstaller`; the user must explicitly select **Install
-  Update** and confirm the standard Android installer prompt. It never installs
-  silently or grants unknown-app permission on the user's behalf.
-- Opens the Android unknown-app installation permission screen when needed.
+**4K does not select an APK architecture.** Resolution, Android version, device
+marketing name, and a spoofed YouTube User-Agent do not determine which native
+APK can load. A 4K TV may run 32-bit `armeabi-v7a` userspace; some devices that
+have a 64-bit-capable CPU still run a 32-bit Android userspace. Choose by the
+ABI Android reports, not by the display resolution.
 
-Open **YTArk Quick Controls → YTArk Updates → Check for Updates** to run a check
-manually. YTArk also preserves settings and app data when a later build is
-installed over the same package ID with the same production signing key.
+On the TV, open **Settings → About** to note the exact model and Android / Google
+TV version. If ADB is available from a computer on the same network, collect:
 
-The first production build establishes the permanent signing identity. If an
-older installation uses a different package ID, install the first production
-build as a new app; Android isolates data between package IDs, so that one-time
-migration cannot transfer the old app's private data. If an older build already
-uses this package ID but has a temporary signing certificate, Android requires
-uninstalling it before the production-signed build can be installed. Uninstalling
-removes that old app's private data. After the production build is installed,
-subsequent YTArk updates preserve settings and app data in place.
+```sh
+adb connect TV_IP_ADDRESS:5555        # use the TV's shown wireless-debugging port if different
+adb shell getprop ro.product.model
+adb shell getprop ro.build.version.release
+adb shell getprop ro.build.version.sdk
+adb shell getprop ro.product.cpu.abi
+adb shell getprop ro.product.cpu.abilist
+adb shell getprop ro.product.cpu.abilist32
+adb shell getprop ro.product.cpu.abilist64
+```
 
-## Signing and release setup
+On newer Android versions, enable **Developer options → Wireless debugging**
+and pair/connect using the address and port shown on the TV. `ro.product.cpu.abilist`
+(or the equivalent ABI list from a device diagnostic tool) describes the
+available Android userspace ABIs. Select the ARM64 candidate only when
+`arm64-v8a` is supported by the installed userspace; otherwise select the
+ARMv7 candidate when `armeabi-v7a` is listed. If neither appears, neither APK
+is a supported choice. Do not rename an APK to simulate another ABI.
 
-YTArk uses the **same signing certificate as Hearth** so releases keep one
-stable Android signing identity. Its pinned SHA-256 fingerprint is
-`b9cb7e4b4d5179870e672e850f5d3661f02c248f943dbaf10cd78cd0c047eaae`; the public
-certificate is checked in under `signing/`. The updater checks both the
-candidate APK and the installed app against this fingerprint before handing an
-update to Android, as well as checking the official release URL, SHA-256,
-package ID, version, and ARM64 ABI.
+For a YTArk installation, the updater stays on the ABI embedded in the
+currently installed APK. It reads that APK's native-library directories and
+checks them against Android's supported ABI list. It will not silently turn an
+ARMv7 installation into ARM64. Cross-ABI migration has not been validated; use
+the same-ABI release unless a migration has been explicitly tested on that
+model.
 
-This is Hearth's intentionally public **community** PKCS#12 signer, not a
-private production key: the keystore, alias, and password are published in the
-Hearth source. Anyone can build an APK with this signing identity. That is the
-explicit trade-off for using the same key; install YTArk only from the official
-[YTArk Releases](https://github.com/2archiver/YTArk/releases). The APK updater
-still rejects files from non-official release URLs, mismatched checksums,
-package metadata, architecture, or signer certificates. Because the community
-key is public, the certificate pin guarantees signer continuity and Android
-install compatibility—not the publisher's identity; use only the official
-YTArk release page. The signer is pinned to a specific Hearth commit and Git
-blob in `release/signing.properties`, and the build verifies the extracted
-certificate against the checked-in fingerprint before signing.
+## Remote-friendly installation
 
-The production workflow uses this pinned community key automatically when the
-four optional `YTARK_*` Actions secrets are absent. If all four are configured,
-they must hold the same signing identity or the build fails; partial or
-mismatched configuration is never allowed. To cache the pinned key in Actions
-secrets, `bash tools/provision_signing_key.sh` is optional. It will not generate
-or rotate a key. Keep `signing/YTArk-release-cert.pem` and
-`signing/YTArk-cert-sha256.txt` in source control; never add another keystore or
-change the pinned certificate without a deliberate migration plan.
+1. From the official release page, download **one** versioned APK matching the
+   TV's reported ABI. Download `SHA256SUMS.txt` too.
+2. Verify the selected file on the computer, for example:
 
-## Building and releasing
+   ```sh
+   sha256sum -c SHA256SUMS.txt
+   ```
 
-The supported production build runs from **Actions → Build YTArk APK for Google
-TV OS 14**. It builds and tests the userscript, compiles the native updater,
-downloads the pinned 64-bit ARM TizenTubeCobalt base APK, and repacks, signs and
-validates the single Google TV OS 14 / Android 14 APK. It creates a **draft**
-release first; publication follows only after validation. An ARM64 Android 14
-emulator validates installation and the updater deep link. Once a previous
-production-signed YTArk APK exists, the workflow installs it and verifies an
-in-place upgrade; the first release uses a clean install because the earlier
-package identity is different.
+   Keep the APK filename unchanged; the checksum file names each versioned
+   asset.
+3. Copy it to the TV using USB or a trusted local-network transfer tool. Open
+   the file with a TV-compatible file manager and navigate with the remote.
+4. When Android requests permission, choose **Settings** and manually allow
+   that file manager to **Install unknown apps**. Return to the installer and
+   confirm **Install**. YTArk does not grant this permission automatically.
+5. Launch **YTArk** from the TV launcher. The native YouTube TV interface should
+   remain the main app; the first-run Google account flow and **Continue as
+   guest** action belong to the upstream frontend. YTArk does not ask for or
+   collect Google credentials.
 
-Update `release/version.properties` for each subsequent production release.
-The required version format is `<semver>-ytark.<serial>`; the serial increases by
-one and determines Android `versionCode` (`20000 + serial`). For example, the
-current `2.0.3-ytark.15` build uses versionCode `20015`.
+For subsequent releases, use YTArk's update screen or install a newer
+same-package, same-certificate build over the current one. Android's
+PackageInstaller confirmation is always manual. Do not uninstall to troubleshoot
+an update unless you understand that uninstalling can erase app data.
 
-Local userscript development:
+## What YTArk changes
 
-```bash
+### YouTube TV frontend, accounts, and guest access
+
+The repacker retains the original Cobalt MAIN activity and its YouTube TV
+frontend rather than replacing it with a phone-style WebView. Ad filtering does
+not remove feed nudges or alert/action renderers because the stock sign-in and
+**Continue as guest** actions can use those renderers. The old "Who's watching"
+preference is constrained so it does not postpone the guest account selector.
+These are source-level safeguards; guest navigation still needs to be exercised
+on a real TV before release acceptance.
+
+### Cosmetic branding and TV controls
+
+- A locally rendered YouTube-style Premium wordmark can be toggled independently
+  in **YTArk Quick Controls**. It is cosmetic only: it does not grant, imply, or
+  activate a paid YouTube subscription or entitlement.
+- The Android TV launcher label is `YTArk`; its icon uses the recognizable
+  YouTube play mark. The build checks the compiled launcher and Leanback entry.
+- Remote-accessible settings expose ad-block and SponsorBlock toggles, quality
+  selection, themes/presets, and the updater. **Ad blocking is enabled for fresh
+  installs**, but a saved user opt-out is preserved. Ad filtering is a
+  client-side modification, not a guarantee that every ad is removed.
+- SponsorBlock uses its online segment service and its own saved setting; it is
+  independent of ad blocking and the cosmetic logo.
+- Quality defaults to **Auto**. A manual ceiling is limited to quality levels
+  supplied by YouTube and recognized by the player; 2160p is not promised unless
+  that stream and device actually support it. The settings can report a
+  requested selection and the player's reported quality, not guarantee a
+  particular resolution or playback stability.
+- Native Cobalt User-Agent is the default. Experimental profiles are opt-in,
+  bounded to one reload per explicit transition, and have a reset control. A
+  User-Agent is never used to choose the APK architecture.
+
+YTArk does **not** claim video downloads, background playback, picture-in-picture,
+casting, subscription entitlements, or system-wide ad blocking. Playback,
+codecs, captions, 2160p availability, and other upstream features remain subject
+to YouTube, Cobalt, the device, and the supplied stream.
+
+### Native updates and release integrity
+
+The updater checks the official GitHub stable release, selects an APK matching
+the **installed** native ABI, validates its exact versioned filename and official
+URL, verifies the published SHA-256, package/version metadata, native library
+ABI, and pinned signer, and then uses Android's `PackageInstaller`. The user
+must choose **Install Update** and approve Android's confirmation; YTArk never
+installs silently or changes the unknown-app setting. Interrupted downloads can
+resume only when their saved URL, asset name, ABI, size, and digest still match.
+
+The release certificate is Hearth's intentionally public **community** key.
+Its SHA-256 fingerprint is pinned in `signing/YTArk-cert-sha256.txt`. A matching
+certificate means Android signer continuity and install compatibility; it does
+**not** prove publisher identity because the public keystore is available to
+others. Install only from the official YTArk repository and independently verify
+both APK checksum entries. The exact userscript bundle is included in release
+assets and is served from an immutable version tag; checking CDN bytes proves
+that those bytes were served, not that a particular TV fetched or executed the
+script.
+
+## Troubleshooting
+
+Diagnose an **install error** separately from a launch, guest-flow, or playback
+problem. Capture the complete Android error and the model / Android API / ABI
+information above before retrying.
+
+| Symptom | What to check |
+|---|---|
+| `INSTALL_FAILED_NO_MATCHING_ABIS` | The APK's native ABI does not match the TV's Android userspace. Re-check `ro.product.cpu.abilist`, download the corresponding ARMv7 or ARM64 asset, and keep its filename. Resolution is unrelated. |
+| `INSTALL_FAILED_UPDATE_INCOMPATIBLE` or signature conflict | Android has an installed package with a different signer. YTArk uses the pinned public Hearth community certificate; verify that the asset is from the official release. Do not uninstall until app-data loss is acceptable. |
+| Version downgrade | Compare the installed versionCode with the release metadata and use a newer release. Do not rename the APK or bypass Android's version check. |
+| Unknown-app / install blocked prompt | In Android Settings, manually allow the file manager used for the install, then return to the installer. This is distinct from an ABI error. |
+| Checksum mismatch, parse error, or damaged download | Delete the incomplete copy, re-download the exact versioned asset and checksum file, and verify again before opening it. |
+| Insufficient storage | Free TV storage and retry; do not delete YTArk app data as the first step. |
+| APK installs but app will not launch, guest flow is missing, or playback fails | This is a runtime compatibility issue, not proof of a wrong ABI. Record the device model, Android API, ABI, screen/message, and—if available—`adb logcat`. Do not claim the feature is supported until it is reproduced and tested on that device. |
+| Update is not offered | Confirm network access to GitHub, stable release availability, installed version, and that the installed APK ABI is still supported. The updater refuses cross-ABI migration and will report when the installed ABI cannot be verified. |
+
+If an update repeatedly fails, retain the existing installation and data while
+collecting diagnostics. Never install an APK from a mirror or substitute a
+renamed APK from another architecture.
+
+## Build and test
+
+The intended release build downloads the pinned `cobalt-arm.apk` and
+`cobalt-arm64.apk` assets from TizenTubeCobalt `v2.0.2`, verifies their GitHub
+metadata and native contents, repacks each matching base, and checks the
+compiled manifest, DEX/native payloads, alignment, signer, checksums, and draft
+release asset contract. Static packaging checks are not ARM hardware or TV
+runtime tests. No release should be published until both architectures have
+passed the documented target acceptance plan.
+
+Local userscript checks:
+
+```sh
 cd TizenTube/mods
 npm ci --no-audit --no-fund
-node --test tests/tv-controls.test.mjs
+node --test tests/*.test.mjs
 npm run build
 ```
 
-A full APK build requires Android SDK platform/build tools, Java 17, Apktool,
-OpenSSL, and GitHub access to fetch the pinned public community keystore. Matching
-`YTARK_*` Actions secrets are optional.
+Python release/repacker contract tests:
 
-## Upstream attribution
+```sh
+python3 -m py_compile tools/*.py tools/tests/*.py
+python3 -m unittest discover -s tools/tests -v
+python3 tools/repack_apk.py --self-test
+```
+
+A complete APK build additionally needs Java 17, Android SDK platform/build
+tools, Apktool, OpenSSL, GitHub access, and the pinned public community
+keystore. Update `release/version.properties` for each release; the serial
+increases monotonically and determines `versionCode` as `20000 + serial`.
+
+## Support and upstream attribution
+
+Support YTArk development: [Ko-fi](https://ko-fi.com/2archiver).
 
 YTArk retains attribution to **TizenTubeCobalt** as its Android/Cobalt base and
-to **TizenTube** for the GPL-3.0-only userscript. See `TizenTube/LICENSE`, the
-release `NOTICE.md`, and the upstream project notices. YTArk is an independent
-project and is not affiliated with YouTube, Google, TizenTube, or
-TizenTubeCobalt.
+to **TizenTube** for the GPL-3.0-only userscript. See `TizenTube/LICENSE`,
+release `NOTICE.md`, and upstream notices. YTArk is independent and is not
+affiliated with YouTube, Google, TizenTube, or TizenTubeCobalt.

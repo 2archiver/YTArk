@@ -22,6 +22,7 @@ Self-test:  python3 tools/repack_apk.py --self-test
 
 import argparse
 import glob
+import hashlib
 import os
 import re
 import shutil
@@ -252,6 +253,125 @@ def patch_manifest(decoded_dir: str, app_id: str, app_name: str,
         fh.write(xml)
 
 
+
+OPTIONAL_TV_FEATURES = {
+    "android.hardware.camera",
+    "android.hardware.camera.any",
+    "android.hardware.camera.front",
+    "android.hardware.camera.autofocus",
+    "android.hardware.camera.flash",
+    "android.hardware.location",
+    "android.hardware.location.gps",
+    "android.hardware.location.network",
+    "android.hardware.gps",
+    "android.hardware.telephony",
+    "android.hardware.telephony.gsm",
+    "android.hardware.telephony.cdma",
+}
+
+
+def _feature_required_false(tag: str, feature_name: str) -> str:
+    required = re.compile(r'((?:android:)?required(?:\([^)]*\))?\s*=\s*)"[^"]*"')
+    if required.search(tag):
+        tag = required.sub(r'\g<1>"false"', tag, count=1)
+    else:
+        close = re.search(r'\s*/?>$', tag)
+        if not close:
+            raise SystemExit(f"ERROR: malformed uses-feature entry for {feature_name}.")
+        tag = tag[:close.start()] + ' android:required="false"' + tag[close.start():]
+    return tag
+
+
+def patch_tv_manifest_compatibility(decoded_dir: str) -> None:
+    # Preserve the real Cobalt main activity while adding Google TV-safe declarations.
+    path = os.path.join(decoded_dir, "AndroidManifest.xml")
+    with open(path, encoding="utf-8") as fh:
+        xml = fh.read()
+
+    feature_pattern = re.compile(r'<uses-feature\b[^>]*?/?>', re.S)
+    found_touchscreen = False
+
+    def patch_feature(match):
+        nonlocal found_touchscreen
+        tag = match.group(0)
+        name_match = re.search(r'(?:android:)?name(?:\([^)]*\))?="([^"]+)"', tag)
+        if not name_match:
+            return tag
+        feature_name = name_match.group(1)
+        if feature_name == "android.hardware.touchscreen":
+            found_touchscreen = True
+            return _feature_required_false(tag, feature_name)
+        if feature_name in OPTIONAL_TV_FEATURES or feature_name.startswith("android.hardware.sensor."):
+            return _feature_required_false(tag, feature_name)
+        return tag
+
+    xml = feature_pattern.sub(patch_feature, xml)
+    if not found_touchscreen:
+        feature = '    <uses-feature android:name="android.hardware.touchscreen" android:required="false" />\n'
+        root_end = re.search(r'</manifest\s*>', xml)
+        if not root_end:
+            raise SystemExit("ERROR: decoded manifest has no closing </manifest> tag.")
+        xml = xml[:root_end.start()] + feature + xml[root_end.start():]
+
+    activity_pattern = re.compile(r'<activity\b[^>]*>.*?</activity\s*>', re.S)
+    activity_matches = list(activity_pattern.finditer(xml))
+    launcher_index = None
+    launcher_name = None
+    for index, match in enumerate(activity_matches):
+        block = match.group(0)
+        if 'android.intent.action.MAIN' in block:
+            launcher_index = index
+            name_match = re.search(r'(?:android:)?name(?:\([^)]*\))?="([^"]+)"', block)
+            launcher_name = name_match.group(1) if name_match else None
+            break
+
+    if launcher_index is None or not launcher_name:
+        raise SystemExit("ERROR: base APK has no real MAIN activity; refusing to invent a phone/WebView launcher.")
+
+    activity_match = activity_matches[launcher_index]
+    block = activity_match.group(0)
+    activity_open_end = block.find('>')
+    start_tag = block[:activity_open_end + 1]
+    body = block[activity_open_end + 1:]
+
+    exported_pattern = re.compile(r'((?:android:)?exported(?:\([^)]*\))?\s*=\s*)"[^"]*"')
+    if exported_pattern.search(start_tag):
+        start_tag = exported_pattern.sub(r'\g<1>"true"', start_tag, count=1)
+    else:
+        start_tag = start_tag[:-1] + ' android:exported="true">'
+
+    icon_pattern = re.compile(r'(?<![\w:])(?:android:)?icon(?:\([^)]*\))?="[^"]*"')
+    if icon_pattern.search(start_tag):
+        start_tag = icon_pattern.sub(lambda m: m.group(0).split("=", 1)[0] + '="@drawable/ytark_launcher"', start_tag, count=1)
+    else:
+        start_tag = start_tag[:-1] + ' android:icon="@drawable/ytark_launcher">'
+
+    intent_filters = list(re.finditer(r'<intent-filter\b[^>]*>.*?</intent-filter\s*>', body, re.S))
+    main_filter = next((item for item in intent_filters
+                        if 'android.intent.action.MAIN' in item.group(0)), None)
+    leanback_category = '<category android:name="android.intent.category.LEANBACK_LAUNCHER" />'
+    if main_filter:
+        filter_text = main_filter.group(0)
+        if 'android.intent.category.LEANBACK_LAUNCHER' not in filter_text:
+            filter_text = filter_text.replace('</intent-filter>', '            ' + leanback_category + '\n        </intent-filter>', 1)
+            body = body[:main_filter.start()] + filter_text + body[main_filter.end():]
+    else:
+        launcher_filter = '''
+        <intent-filter>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            <category android:name="android.intent.category.LAUNCHER" />
+        </intent-filter>
+'''
+        body += launcher_filter
+
+    new_block = start_tag + body
+    xml = xml[:activity_match.start()] + new_block + xml[activity_match.end():]
+
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(xml)
+    print("[*] Manifest: preserved MAIN activity, enforced MAIN + LEANBACK_LAUNCHER/exported, optional touchscreen/camera/telephony/location/sensor requirements")
+
 def patch_string_resource(decoded_dir: str, res_name: str, new_value: str) -> None:
     """Set <string name="res_name">…</string> in every res/values*/strings.xml."""
     pattern = re.compile(
@@ -309,18 +429,18 @@ def patch_launcher_icon(decoded_dir: str) -> None:
         banner_pattern,
         lambda match: match.group(0).split("=", 1)[0] + '="@drawable/ytark_banner"',
         xml)
-    if icon_count == 0 or banner_count == 0:
-        app_tag = re.search(r"<application\b[^>]*>", xml, re.S)
-        if not app_tag:
-            raise SystemExit("ERROR: cannot set YTArk launcher artwork without <application>.")
-        block = app_tag.group(0)
-        if icon_count == 0:
-            block = block.replace("<application", '<application android:icon="@drawable/ytark_launcher"', 1)
-            icon_count = 1
-        if banner_count == 0:
-            block = block.replace("<application", '<application android:banner="@drawable/ytark_banner"', 1)
-            banner_count = 1
-        xml = xml.replace(app_tag.group(0), block, 1)
+    app_tag = re.search(r"<application\b[^>]*>", xml, re.S)
+    if not app_tag:
+        raise SystemExit("ERROR: cannot set YTArk launcher artwork without <application>.")
+    app_block = app_tag.group(0)
+    for attribute, value in (("icon", "@drawable/ytark_launcher"),
+                             ("banner", "@drawable/ytark_banner")):
+        pattern = re.compile(rf'(?<![\w:])(?:android:)?{attribute}(?:\([^)]*\))?="[^"]*"')
+        if pattern.search(app_block):
+            app_block = pattern.sub(lambda m: m.group(0).split("=", 1)[0] + f'="{value}"', app_block, count=1)
+        else:
+            app_block = app_block.replace("<application", f'<application android:{attribute}="{value}"', 1)
+    xml = xml[:app_tag.start()] + app_block + xml[app_tag.end():]
 
     with open(manifest_path, "w", encoding="utf-8") as fh:
         fh.write(xml)
@@ -459,12 +579,91 @@ def store_uncompressed(apk_path: str) -> None:
 # Main repack flow
 # ---------------------------------------------------------------------------
 
+ARCHITECTURES = {
+    "armv7": "armeabi-v7a",
+    "arm64": "arm64-v8a",
+}
+
+
+def archive_payloads(apk_path: str):
+    with zipfile.ZipFile(apk_path) as archive:
+        names = archive.namelist()
+        native = {
+            name: archive.read(name)
+            for name in names if name.startswith("lib/") and name.endswith(".so")
+        }
+        dex = {
+            name: archive.read(name)
+            for name in names if re.fullmatch(r"classes\d*\.dex", name)
+        }
+    return native, dex
+
+
+def validate_base_architecture(base_apk: str, architecture: str) -> None:
+    abi = ARCHITECTURES.get(architecture)
+    if not abi:
+        raise SystemExit(f"ERROR: unsupported --architecture {architecture!r}.")
+    if not zipfile.is_zipfile(base_apk):
+        raise SystemExit(f"ERROR: base is not a valid APK/ZIP: {base_apk}")
+    with zipfile.ZipFile(base_apk) as archive:
+        names = archive.namelist()
+        required_library = f"lib/{abi}/libchrobalt.so"
+        if required_library not in names or archive.getinfo(required_library).file_size <= 0:
+            raise SystemExit(f"ERROR: {architecture} base is missing {required_library}.")
+        native_abis = {
+            name.split("/")[1] for name in names
+            if name.startswith("lib/") and name.endswith(".so") and len(name.split("/")) >= 3
+        }
+        if native_abis != {abi}:
+            raise SystemExit(f"ERROR: expected native libraries only for {abi}, found {sorted(native_abis)}.")
+        if not any(re.fullmatch(r"classes\d*\.dex", name) for name in names):
+            raise SystemExit("ERROR: base APK has no DEX files.")
+
+
+def verify_preserved_native_and_dex(base_apk: str, rebuilt_apk: str,
+                                    architecture: str, script_url: str) -> None:
+    validate_base_architecture(base_apk, architecture)
+    base_native, base_dex = archive_payloads(base_apk)
+    rebuilt_native, rebuilt_dex = archive_payloads(rebuilt_apk)
+    if set(base_native) != set(rebuilt_native):
+        changed = sorted(set(base_native) ^ set(rebuilt_native))
+        raise SystemExit("ERROR: repacking added or removed upstream native libraries: " + ", ".join(changed))
+
+    replacement = make_replacement_url(script_url)
+    replaced_count = 0
+    changed_native = []
+    for name, original in base_native.items():
+        expected = original.replace(OLD_SCRIPT_URL, replacement)
+        replaced_count += original.count(OLD_SCRIPT_URL)
+        if rebuilt_native[name] != expected:
+            changed_native.append(name)
+    if changed_native:
+        raise SystemExit(
+            "ERROR: repacking changed native libraries beyond the exact userscript URL replacement: "
+            + ", ".join(sorted(changed_native)))
+    expected_abi = ARCHITECTURES[architecture]
+    cobalt_library = f"lib/{expected_abi}/libchrobalt.so"
+    if cobalt_library not in rebuilt_native:
+        raise SystemExit(f"ERROR: rebuilt APK is missing the selected {expected_abi} Cobalt library.")
+    if not base_native[cobalt_library].count(OLD_SCRIPT_URL) or replaced_count <= 0:
+        raise SystemExit("ERROR: pinned Cobalt library no longer contains the expected userscript URL literal.")
+
+    for name, data in base_dex.items():
+        if rebuilt_dex.get(name) != data:
+            raise SystemExit(f"ERROR: repacking changed or removed upstream DEX file {name}.")
+    if not rebuilt_dex or not set(base_dex).issubset(rebuilt_dex):
+        raise SystemExit("ERROR: rebuilt APK is missing an upstream DEX payload.")
+    print(f"[*] Verified upstream native libraries (only the fixed-length userscript URL changed) "
+          f"and byte-identical DEX payloads for {architecture}.")
+
+
 def repack(args) -> None:
     work = tempfile.mkdtemp(prefix="repack-")
     decoded = os.path.join(work, "decoded")
     print(f"[*] Work dir: {work}")
 
     apktool = args.apktool.split()
+    validate_base_architecture(args.base, args.architecture)
 
     print(f"[*] Decoding {args.base} (dex stays raw, resources + manifest decoded)")
     run(apktool + ["d", "--no-src", "--force",
@@ -476,6 +675,7 @@ def repack(args) -> None:
     patch_manifest(decoded, args.app_id, args.app_name,
                    version_code=args.version_code,
                    version_name=args.version_name)
+    patch_tv_manifest_compatibility(decoded)
     patch_launcher_icon(decoded)
     patch_updater_manifest(decoded, args.app_id)
     inject_updater_dex(decoded, args.updater_dex)
@@ -487,6 +687,7 @@ def repack(args) -> None:
     run(apktool + ["b", decoded, "--output", unsigned])
 
     store_uncompressed(unsigned)
+    verify_preserved_native_and_dex(args.base, unsigned, args.architecture, args.script_url)
 
     aligned = os.path.join(work, "aligned.apk")
     print("[*] zipalign (-f -p 4)")
@@ -725,14 +926,15 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--self-test", action="store_true")
     ap.add_argument("--base", help="path to the official base APK")
+    ap.add_argument("--architecture", choices=("armv7", "arm64"), help="ABI of the matching upstream base")
     ap.add_argument("--out", help="output path for the repacked (unsigned) APK")
     ap.add_argument("--updater-dex", help="compiled native YTArk updater DEX")
     ap.add_argument("--app-name", default="YTArk")
     ap.add_argument("--app-id", default="io.github.twoarchiver.ytark")
     ap.add_argument("--script-url", required=False,
                     help="replacement userscript URL, must end with '?v='")
-    ap.add_argument("--version-code", type=int, default=20015)
-    ap.add_argument("--version-name", default="2.0.3-ytark.15")
+    ap.add_argument("--version-code", type=int, default=20016)
+    ap.add_argument("--version-name", default="2.0.4-ytark.16")
     ap.add_argument("--apktool", default="apktool",
                     help="apktool command, e.g. 'java -jar apktool.jar'")
     ap.add_argument("--zipalign", default="zipalign")
@@ -740,7 +942,7 @@ def main():
 
     if args.self_test:
         self_test()
-    for req in ("base", "out", "updater_dex", "script_url"):
+    for req in ("base", "architecture", "out", "updater_dex", "script_url"):
         if not getattr(args, req):
             ap.error(f"--{req.replace('_', '-')} is required")
     repack(args)

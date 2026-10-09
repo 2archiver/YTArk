@@ -1,7 +1,13 @@
 const CONFIG_KEY = 'ytaf-configuration';
 const defaultConfig = {
+  // Client-side ad filtering defaults on for fresh installs; explicit stored
+  // user choices are preserved by the missing-key-only merge below.
   enableAdBlock: true,
   enableSponsorBlock: true,
+  // A local header-only visual; it never changes account or server entitlements.
+  enablePremiumLogo: true,
+  // Native Cobalt is the safe default; profile spoofing is opt-in/experimental.
+  userAgentProfile: 'native',
   enableSponsorBlockToasts: true,
   sponsorBlockManualSkips: ['intro', 'outro', 'filler'],
   enableSponsorBlockSponsor: true,

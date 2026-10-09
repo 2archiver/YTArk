@@ -3,13 +3,11 @@
     android:height="48dp"
     android:viewportWidth="48"
     android:viewportHeight="48">
+    <!-- TV-safe inset around the recognizable YouTube play mark. -->
     <path
-        android:fillColor="#101827"
-        android:pathData="M24,2A22,22 0,1 0,24 46A22,22 0,1 0,24 2Z" />
+        android:fillColor="#FF0000"
+        android:pathData="M10,11H38A5,5 0,0 1,43 16V32A5,5 0,0 1,38 37H10A5,5 0,0 1,5 32V16A5,5 0,0 1,10 11Z" />
     <path
-        android:fillColor="#F5F7FA"
-        android:pathData="M7,11L16,11L23,20L30,11L39,11L27,26L27,38L19,38L19,26Z" />
-    <path
-        android:fillColor="#4DA3FF"
-        android:pathData="M28,20L38,26L28,32Z" />
+        android:fillColor="#FFFFFF"
+        android:pathData="M20,17.5L32,24L20,30.5Z" />
 </vector>

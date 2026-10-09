@@ -1,10 +1,22 @@
 import { configRead } from '../config.js';
+import { removeAdSlotRenderers } from './adRendererPolicy.js';
 import Chapters from '../ui/chapters.js';
 import resolveCommand from '../resolveCommand.js';
 import { timelyAction, longPressData, MenuServiceItemRenderer, ShelfRenderer, TileRenderer, ButtonRenderer } from '../ui/ytUI.js';
 import { findFeedbackToken } from '../utils/innerTubeCalls.js';
 import { PatchSettings } from '../ui/customYTSettings.js';
 import { t } from 'i18next';
+
+function codecAvailableInCurrentBrowser(format) {
+  const video = document.querySelector('video');
+  if (!video || typeof video.canPlayType !== 'function' || !format || !format.mimeType) return false;
+  try {
+    return video.canPlayType(format.mimeType) !== '';
+  } catch (_) {
+    return false;
+  }
+}
+
 
 /**
  * This is a minimal reimplementation of the following uBlock Origin rule:
@@ -19,8 +31,8 @@ const origParse = JSON.parse;
 JSON.parse = function () {
   const r = origParse.apply(this, arguments);
   try {
+    if (!r || typeof r !== 'object') return r;
     const adBlockEnabled = configRead('enableAdBlock');
-    const signinReminderEnabled = configRead('enableSigninReminder');
 
     if (r?.playbackContext?.contentPlaybackContext) {
       // Handle inline playback without ads
@@ -45,14 +57,22 @@ JSON.parse = function () {
       r.paidContentOverlay = null;
     }
 
-    if (r?.streamingData?.adaptiveFormats && configRead('preferredVideoCodec') !== 'any') {
+    if (Array.isArray(r?.streamingData?.adaptiveFormats)
+        && configRead('preferredVideoCodec') !== 'any') {
       const preferredCodec = configRead('preferredVideoCodec');
-      const hasPreferredCodec = r.streamingData.adaptiveFormats.find(format => format.mimeType.includes(preferredCodec));
-      if (hasPreferredCodec) {
-        r.streamingData.adaptiveFormats = r.streamingData.adaptiveFormats.filter(format => {
-          if (format.mimeType.startsWith('audio/')) return true;
-          return format.mimeType.includes(preferredCodec);
-        });
+      const formats = r.streamingData.adaptiveFormats;
+      const usablePreferredFormats = formats.filter(format =>
+        format && typeof format.mimeType === 'string'
+        && format.mimeType.includes(preferredCodec)
+        && codecAvailableInCurrentBrowser(format));
+      // Only filter when the current Cobalt media element reports that at least
+      // one of the actual supplied formats is playable. Otherwise retain Auto's
+      // complete stream list rather than forcing an unsupported codec.
+      if (usablePreferredFormats.length) {
+        r.streamingData.adaptiveFormats = formats.filter(format =>
+          format && typeof format.mimeType === 'string'
+          && (format.mimeType.startsWith('audio/')
+            || (format.mimeType.includes(preferredCodec) && codecAvailableInCurrentBrowser(format))));
       }
     }
 
@@ -61,25 +81,20 @@ JSON.parse = function () {
       r?.contents?.tvBrowseRenderer?.content?.tvSurfaceContentRenderer?.content
         ?.sectionListRenderer?.contents
     ) {
-      if (!signinReminderEnabled) {
-        r.contents.tvBrowseRenderer.content.tvSurfaceContentRenderer.content.sectionListRenderer.contents =
-          r.contents.tvBrowseRenderer.content.tvSurfaceContentRenderer.content.sectionListRenderer.contents.filter(
-            (elm) => !elm.feedNudgeRenderer
-          );
-      }
+      // Do not remove sign-in/feed nudges here. The TV frontend can place its
+      // "Continue as guest" action in the same renderer family.
 
       if (adBlockEnabled) {
         r.contents.tvBrowseRenderer.content.tvSurfaceContentRenderer.content.sectionListRenderer.contents =
-          r.contents.tvBrowseRenderer.content.tvSurfaceContentRenderer.content.sectionListRenderer.contents.filter(
-            (elm) => !elm.adSlotRenderer
+          removeAdSlotRenderers(
+            r.contents.tvBrowseRenderer.content.tvSurfaceContentRenderer.content.sectionListRenderer.contents
           );
 
         for (const shelve of r.contents.tvBrowseRenderer.content.tvSurfaceContentRenderer.content.sectionListRenderer.contents) {
           if (shelve.shelfRenderer && shelve.shelfRenderer.content?.horizontalListRenderer?.items) {
-            shelve.shelfRenderer.content.horizontalListRenderer.items =
-              shelve.shelfRenderer.content.horizontalListRenderer.items.filter(
-                (item) => !item.adSlotRenderer
-              );
+            shelve.shelfRenderer.content.horizontalListRenderer.items = removeAdSlotRenderers(
+              shelve.shelfRenderer.content.horizontalListRenderer.items
+            );
           }
         }
       }
@@ -172,14 +187,10 @@ JSON.parse = function () {
         r.contents.singleColumnWatchNextResults.pivot.sectionListRenderer.contents = [{}]
         r.contents.singleColumnWatchNextResults.pivot.sectionListRenderer.continuations = []
       }
-      if (!signinReminderEnabled) {
-        r.contents.singleColumnWatchNextResults.pivot.sectionListRenderer.contents =
-          r.contents.singleColumnWatchNextResults.pivot.sectionListRenderer.contents.filter(
-            (elm) => !elm.alertWithActionsRenderer
-          );
-      }
+      // Preserve alert/action renderers: some YouTube sign-in screens expose
+      // "Continue as guest" through this same stock frontend path.
       processShelves(r.contents.singleColumnWatchNextResults.pivot.sectionListRenderer.contents, false);
-      if (window.queuedVideos.videos.length > 0) {
+      if (window.queuedVideos?.videos?.length > 0) {
         const queuedVideosClone = window.queuedVideos.videos.slice();
         queuedVideosClone.unshift(TileRenderer(
           'Clear Queue',
@@ -197,25 +208,27 @@ JSON.parse = function () {
         ));
       }
     }
-    /*
-
-    Chapters are disabled due to the API removing description data which was used to generate chapters
-
-    if (r?.contents?.singleColumnWatchNextResults?.results?.results?.contents && configRead('enableChapters')) {
-      const chapterData = Chapters(r);
-      r.frameworkUpdates.entityBatchUpdate.mutations.push(chapterData);
-      resolveCommand({
-        "clickTrackingParams": "null",
-        "loadMarkersCommand": {
-          "visibleOnLoadKeys": [
-            chapterData.entityKey
-          ],
-          "entityKeys": [
-            chapterData.entityKey
-          ]
+    if (configRead('enableChapters')) {
+      try {
+        const chapterData = Chapters(r);
+        const mutations = r?.frameworkUpdates?.entityBatchUpdate?.mutations;
+        if (chapterData && Array.isArray(mutations)
+            && !mutations.some(mutation => mutation?.entityKey === chapterData.entityKey)) {
+          mutations.push(chapterData);
+          resolveCommand({
+            clickTrackingParams: 'null',
+            loadMarkersCommand: {
+              visibleOnLoadKeys: [chapterData.entityKey],
+              entityKeys: [chapterData.entityKey]
+            }
+          });
         }
-      });
-    }*/
+      } catch (error) {
+        // Description-derived chapters are best-effort; stock playback and
+        // chapter controls remain available if this frontend shape changes.
+        console.warn('[YTArk chapters] Could not augment this video:', error);
+      }
+    }
 
     // Manual SponsorBlock Skips
 
@@ -225,8 +238,10 @@ JSON.parse = function () {
           r.playerOverlays.playerOverlayRenderer.timelyActionRenderers.filter(a => a.timelyActionRenderer.type !== 'TIMELY_ACTION_TYPE_SHOPPING' &&
             a.timelyActionRenderer.type !== 'TIMELY_ACTION_TYPE_NFL_WATERMARK');
       } else r.playerOverlays.playerOverlayRenderer.timelyActionRenderers = [];
-      if (configRead('sponsorBlockManualSkips').length > 0) {
-        const manualSkippedSegments = configRead('sponsorBlockManualSkips');
+      const manualSkipCategories = configRead('sponsorBlockManualSkips');
+      if (configRead('enableSponsorBlock') && Array.isArray(manualSkipCategories)
+          && manualSkipCategories.length > 0) {
+        const manualSkippedSegments = manualSkipCategories;
         if (window?.sponsorblock?.segments) {
           for (const segment of window.sponsorblock.segments) {
             if (manualSkippedSegments.includes(segment.category)) {
@@ -239,7 +254,10 @@ JSON.parse = function () {
                     customAction: {
                       action: 'SKIP',
                       parameters: {
-                        time: segment.segment[1]
+                        time: segment.segment[1],
+                        source: 'sponsorblock',
+                        category: segment.category,
+                        undoable: true
                       }
                     }
                   }
@@ -324,7 +342,7 @@ JSON.parse = function () {
 
 const origStringify = JSON.stringify;
 JSON.stringify = function (value, replacer, space) {
-  if (value?.playbackContext?.contentPlaybackContext) {
+  if (configRead('enableAdBlock') && value?.playbackContext?.contentPlaybackContext) {
     const copiedValue = JSON.parse(origStringify(value));
     if (!copiedValue.playbackContext.contentPlaybackContext.isInlinePlaybackNoAd) {
       copiedValue.playbackContext.contentPlaybackContext.isInlinePlaybackNoAd = true;
@@ -398,45 +416,49 @@ function addPreviews(items) {
 }
 
 function deArrowify(items) {
+  if (!Array.isArray(items) || !configRead('enableDeArrow')) return;
   for (const item of items) {
-    if (item.adSlotRenderer) {
-      const index = items.indexOf(item);
-      items.splice(index, 1);
-      continue;
-    }
-    if (!item.tileRenderer && item.lockupViewModel) continue;
-    if (!item?.lockupViewModel?.contentType !== 'LOCKUP_CONTENT_TYPE_VIDEO') continue;
-    if (configRead('enableDeArrow')) {
-      const videoID = item.tileRenderer.contentId || item.lockupViewModel.contentId;
-      fetch(`https://sponsor.ajay.app/api/branding?videoID=${videoID}`).then(res => res.json()).then(data => {
-        if (data.titles.length > 0) {
-          const mostVoted = data.titles.reduce((max, title) => max.votes > title.votes ? max : title);
-          item.tileRenderer ?
-            item.tileRenderer.metadata.tileMetadataRenderer.title.simpleText = mostVoted.title
-            : item.lockupViewModel.metadata.lockupMetadataViewModel.title.content = mostVoted.title;
-        }
+    const isLockupVideo = item?.lockupViewModel?.contentType === 'LOCKUP_CONTENT_TYPE_VIDEO';
+    if (!item?.tileRenderer && !isLockupVideo) continue;
+    const videoID = item.tileRenderer?.contentId || item.lockupViewModel?.contentId;
+    if (!videoID) continue;
 
-        if (data.thumbnails.length > 0 && configRead('enableDeArrowThumbnails')) {
-          const mostVotedThumbnail = data.thumbnails.reduce((max, thumbnail) => max.votes > thumbnail.votes ? max : thumbnail);
-          if (mostVotedThumbnail.timestamp) {
-            item.tileRenderer ?
-              item.tileRenderer.header.tileHeaderRenderer.thumbnail.thumbnails = [
-                {
-                  url: `https://dearrow-thumb.ajay.app/api/v1/getThumbnail?videoID=${videoID}&time=${mostVotedThumbnail.timestamp}`,
-                  width: 1280,
-                  height: 640
-                }
-              ] : item.lockupViewModel.contentImage.thumbnailViewModel.image.sources = [
-                {
-                  url: `https://dearrow-thumb.ajay.app/api/v1/getThumbnail?videoID=${videoID}&time=${mostVotedThumbnail.timestamp}`,
-                  width: 1280,
-                  height: 640
-                }
-              ]
+    fetch(`https://sponsor.ajay.app/api/branding?videoID=${encodeURIComponent(videoID)}`)
+      .then(res => {
+        if (!res.ok) throw new Error(`DeArrow request returned HTTP ${res.status}`);
+        return res.json();
+      })
+      .then(data => {
+        const titles = Array.isArray(data?.titles) ? data.titles : [];
+        const thumbnails = Array.isArray(data?.thumbnails) ? data.thumbnails : [];
+        if (titles.length) {
+          const mostVoted = titles.reduce((max, title) => max.votes > title.votes ? max : title);
+          if (mostVoted && typeof mostVoted.title === 'string') {
+            if (item.tileRenderer?.metadata?.tileMetadataRenderer?.title) {
+              item.tileRenderer.metadata.tileMetadataRenderer.title.simpleText = mostVoted.title;
+            } else if (item.lockupViewModel?.metadata?.lockupMetadataViewModel?.title) {
+              item.lockupViewModel.metadata.lockupMetadataViewModel.title.content = mostVoted.title;
+            }
           }
         }
-      }).catch(() => { });
-    }
+
+        if (thumbnails.length && configRead('enableDeArrowThumbnails')) {
+          const mostVotedThumbnail = thumbnails.reduce((max, thumbnail) => max.votes > thumbnail.votes ? max : thumbnail);
+          if (mostVotedThumbnail?.timestamp) {
+            const url = `https://dearrow-thumb.ajay.app/api/v1/getThumbnail?videoID=${encodeURIComponent(videoID)}&time=${encodeURIComponent(mostVotedThumbnail.timestamp)}`;
+            if (item.tileRenderer?.header?.tileHeaderRenderer?.thumbnail) {
+              item.tileRenderer.header.tileHeaderRenderer.thumbnail.thumbnails = [
+                { url, width: 1280, height: 640 }
+              ];
+            } else if (item.lockupViewModel?.contentImage?.thumbnailViewModel?.image) {
+              item.lockupViewModel.contentImage.thumbnailViewModel.image.sources = [
+                { url, width: 1280, height: 640 }
+              ];
+            }
+          }
+        }
+      })
+      .catch(() => { });
   }
 }
 

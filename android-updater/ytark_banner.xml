@@ -4,12 +4,20 @@
     android:viewportWidth="320"
     android:viewportHeight="180">
     <path
-        android:fillColor="#101827"
+        android:fillColor="#101010"
         android:pathData="M0,0H320V180H0Z" />
     <path
-        android:fillColor="#F5F7FA"
-        android:pathData="M112,46L145,46L160,68L175,46L208,46L176,88L176,137L144,137L144,88Z" />
+        android:fillColor="#FF0000"
+        android:pathData="M56,57H136A11,11 0,0 1,147 68V112A11,11 0,0 1,136 123H56A11,11 0,0 1,45 112V68A11,11 0,0 1,56 57Z" />
     <path
-        android:fillColor="#4DA3FF"
-        android:pathData="M179,81L215,101L179,121Z" />
+        android:fillColor="#FFFFFF"
+        android:pathData="M82,73L112,90L82,107Z" />
+    <!-- Simple local vector lettering keeps the YTArk banner self-contained. -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M169,73L181,87L193,73M181,87V113M201,73H222M211.5,73V113M229,113L236,73H247L254,113M232,98H251M264,88V113M264,95C270,85 277,85 282,88M291,88V113M291,100L302,88M294,98L305,113" />
 </vector>

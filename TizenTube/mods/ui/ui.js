@@ -10,13 +10,36 @@ import { pipToFullscreen } from '../features/pictureInPicture.js';
 import getCommandExecutor from './customCommandExecution.js';
 import { t } from 'i18next';
 
-// It just works, okay?
-const interval = setInterval(() => {
-  const videoElement = document.querySelector('video');
-  if (videoElement) {
-    execute_once_dom_loaded();
-    patchResolveCommand();
-    clearInterval(interval);
+// Initialize the remote settings controls when the TV DOM exists; requiring a
+// video element here would make settings unavailable on a quiet home screen.
+let startupChecks = 0;
+let controlsInitialized = false;
+let resolverPatched = false;
+const MAX_STARTUP_CHECKS = 160;
+const startupInterval = setInterval(() => {
+  startupChecks += 1;
+  if (!controlsInitialized && document.body) {
+    try {
+      execute_once_dom_loaded();
+      controlsInitialized = true;
+    } catch (error) {
+      console.warn('[YTArk] TV controls are waiting for the app DOM:', error);
+    }
+  }
+
+  if (!resolverPatched && window._yttv) {
+    const hasResolver = Object.keys(window._yttv).some(key => {
+      const module = window._yttv[key];
+      return module && module.instance && typeof module.instance.resolveCommand === 'function';
+    });
+    if (hasResolver) {
+      patchResolveCommand();
+      resolverPatched = true;
+    }
+  }
+
+  if ((controlsInitialized && resolverPatched) || startupChecks >= MAX_STARTUP_CHECKS) {
+    clearInterval(startupInterval);
   }
 }, 250);
 
@@ -81,44 +104,47 @@ function execute_once_dom_loaded() {
     true
   );
 
-  uiContainer.addEventListener(
-    'keydown',
-    (evt) => {
-      console.info('uiContainer key event:', evt.type, evt.keyCode, evt);
-      if (evt.keyCode !== 404 && evt.keyCode !== 172) {
-        if (evt.keyCode in ARROW_KEY_CODE) {
-          navigate(ARROW_KEY_CODE[evt.keyCode]);
-        } else if (evt.keyCode === 13 || evt.keyCode === 32) {
-          // "OK" button
-          console.log('OK button pressed');
-          const focusedElement = document.querySelector(':focus');
-          if (focusedElement.type === 'checkbox') {
-            focusedElement.checked = !focusedElement.checked;
-            focusedElement.dispatchEvent(new Event('change'));
-          }
-          evt.preventDefault();
-          evt.stopPropagation();
-          return;
-        } else if (evt.keyCode === 27 && document.querySelector(':focus').type !== 'text') {
-          // Back button
-          uiContainer.style.display = 'none';
-          uiContainer.blur();
-        } else if (document.querySelector(':focus').type === 'text' && evt.keyCode === 27) {
-          const focusedElement = document.querySelector(':focus');
-          focusedElement.value = focusedElement.value.slice(0, -1);
-        }
+  let previousFocus = null;
+  uiContainer.addEventListener('keydown', (evt) => {
+    const focusedElement = document.activeElement || document.querySelector(':focus');
+    const tag = String(focusedElement && focusedElement.tagName || '').toLowerCase();
+    const isTextEntry = tag === 'input' || tag === 'textarea' || tag === 'select'
+      || (focusedElement && (focusedElement.isContentEditable
+        || focusedElement.getAttribute?.('contenteditable') === 'true'));
 
-
-        if (evt.key === 'Enter' || evt.Uc?.key === 'Enter') {
-          // If the focused element is a text input, emit a change event.
-          if (document.querySelector(':focus').type === 'text') {
-            document.querySelector(':focus').dispatchEvent(new Event('change'));
-          }
-        }
+    if (evt.keyCode === 27 && !isTextEntry) {
+      evt.preventDefault();
+      evt.stopPropagation();
+      uiContainer.style.display = 'none';
+      uiContainer.blur();
+      if (previousFocus && previousFocus.isConnected && typeof previousFocus.focus === 'function') {
+        previousFocus.focus();
       }
-    },
-    true
-  );
+      return;
+    }
+    if (isTextEntry) {
+      if ((evt.key === 'Enter' || evt.keyCode === 13) && focusedElement) {
+        focusedElement.dispatchEvent(new Event('change'));
+      }
+      return;
+    }
+
+    if (evt.keyCode in ARROW_KEY_CODE) {
+      navigate(ARROW_KEY_CODE[evt.keyCode]);
+      evt.preventDefault();
+      evt.stopPropagation();
+    } else if (evt.keyCode === 13 || evt.keyCode === 32) {
+      if (!focusedElement) return;
+      if (focusedElement.type === 'checkbox') {
+        focusedElement.checked = !focusedElement.checked;
+        focusedElement.dispatchEvent(new Event('change'));
+      } else if (evt.keyCode === 13 && typeof focusedElement.click === 'function') {
+        focusedElement.click();
+      }
+      evt.preventDefault();
+      evt.stopPropagation();
+    }
+  }, true);
 
   try {
     uiContainer.innerHTML = `
@@ -142,86 +168,86 @@ function execute_once_dom_loaded() {
     });
   } catch (e) { }
 
-  var eventHandler = (evt) => {
-    // We handle key events ourselves.
-    console.info(
-      'Key event:',
-      evt.type,
-      evt.keyCode,
-      evt.keyCode,
-      evt.defaultPrevented
-    );
+  const handledRemoteKeys = new Set();
+  const isTextEntryTarget = (target) => {
+    if (!target) return false;
+    const tag = String(target.tagName || '').toLowerCase();
+    return tag === 'input' || tag === 'textarea' || tag === 'select'
+      || target.isContentEditable === true
+      || target.getAttribute?.('contenteditable') === 'true';
+  };
 
-    if (evt.keyCode in keys) {
+  const eventHandler = (evt) => {
+    // Only act on keydown. keypress/keyup used to open duplicate settings on
+    // remotes that synthesize a full key event sequence.
+    if (evt.type !== 'keydown') return true;
+    if (isTextEntryTarget(evt.target)) return true;
+
+    if (evt.keyCode in keys && !evt.repeat) {
       const percentage = keys[evt.keyCode] * 10;
       const video = document.querySelector('video');
-      video.currentTime = (percentage / 100) * video.duration;
+      if (video && Number.isFinite(video.duration) && video.duration > 0) {
+        video.currentTime = (percentage / 100) * video.duration;
+      }
     }
 
     const container = document.getElementById('container');
-
     if (window.screenTurnedOffAt && Date.now() - window.screenTurnedOffAt > 1000) {
       for (const child of document.body.children) {
         if (child.tagName.toLowerCase() === 'script' || child.tagName.toLowerCase() === 'svg') continue;
-
         child.style.setProperty('display', 'block', 'important');
       }
       window.screenTurnedOffAt = null;
     }
 
-    if (configRead('enableScreenDimming')) {
-      if (keyTimeout) {
-        clearTimeout(keyTimeout);
-      }
+    if (configRead('enableScreenDimming') && container) {
+      if (keyTimeout) clearTimeout(keyTimeout);
       container.style.setProperty('opacity', '1', 'important');
       keyTimeout = setTimeout(() => {
         const videoPlayer = document.querySelector('.html5-video-player');
-        const playerStateObject = videoPlayer.getPlayerStateObject();
-        if (playerStateObject.isPlaying) return;
-        container.style.setProperty('opacity', (1 - configRead('dimmingOpacity')).toString(), 'important');
+        const state = videoPlayer && typeof videoPlayer.getPlayerStateObject === 'function'
+          ? videoPlayer.getPlayerStateObject() : null;
+        if (state && state.isPlaying) return;
+        container.style.setProperty('opacity', String(1 - configRead('dimmingOpacity')), 'important');
       }, configRead('dimmingTimeout') * 1000);
     }
-    if (evt.keyCode == 403) {
-      console.info('Taking over!');
+
+    if (evt.keyCode === 403 || evt.keyCode === 404) {
+      if (evt.repeat || handledRemoteKeys.has(evt.keyCode)) return false;
+      handledRemoteKeys.add(evt.keyCode);
       evt.preventDefault();
       evt.stopPropagation();
-      if (evt.type === 'keydown') {
-        try {
-          if (uiContainer.style.display === 'none') {
-            console.info('Showing and focusing!');
-            uiContainer.style.display = 'block';
-            uiContainer.focus();
-          } else {
-            console.info('Hiding!');
-            uiContainer.style.display = 'none';
-            uiContainer.blur();
+      if (evt.keyCode === 403) {
+        if (uiContainer.style.display === 'none') {
+          previousFocus = document.activeElement;
+          uiContainer.style.display = 'block';
+          uiContainer.focus();
+        } else {
+          uiContainer.style.display = 'none';
+          uiContainer.blur();
+          if (previousFocus && previousFocus.isConnected && typeof previousFocus.focus === 'function') {
+            previousFocus.focus();
           }
-        } catch (e) { }
-      }
-      return false;
-    } else if (evt.keyCode == 404) {
-      if (evt.type === 'keydown') {
+        }
+      } else {
         modernUI();
       }
-    } else if (evt.keyCode == 39) {
-      // Right key, for PiP
-      if (evt.type === 'keydown') {
-        if (document.querySelector('ytlr-search-text-box > .zylon-focus') && window.isPipPlaying) {
-          const ytlrPlayer = document.querySelector('ytlr-player');
-          ytlrPlayer.style.setProperty('background-color', 'rgb(0, 0, 0)');
-          pipToFullscreen();
-        }
-      }
-    };
-    return true;
-  }
+      return false;
+    }
 
-  // Red, Green, Yellow, Blue
-  // 403, 404, 405, 406
-  // ---, 172, 170, 191
+    if (evt.keyCode === 39 && window.isPipPlaying
+        && document.querySelector('ytlr-search-text-box > .zylon-focus')) {
+      const ytlrPlayer = document.querySelector('ytlr-player');
+      if (ytlrPlayer) {
+        ytlrPlayer.style.setProperty('background-color', 'rgb(0, 0, 0)');
+        pipToFullscreen();
+      }
+    }
+    return true;
+  };
+
   document.addEventListener('keydown', eventHandler, true);
-  document.addEventListener('keypress', eventHandler, true);
-  document.addEventListener('keyup', eventHandler, true);
+  document.addEventListener('keyup', (evt) => handledRemoteKeys.delete(evt.keyCode), true);
   if (configRead('showWelcomeToast')) {
     setTimeout(() => {
       showToast(t('welcomeMsg.title'), t('welcomeMsg.subtitle'));

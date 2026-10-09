@@ -32,6 +32,7 @@ import java.net.URL;
 import java.security.MessageDigest;
 import java.security.SignatureException;
 import java.util.Locale;
+import java.util.Properties;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -143,7 +144,7 @@ final class YtarkUpdater {
         }
 
         String tag = release.optString("tag_name", "").trim();
-        if (tag.length() == 0 || !tag.startsWith("v")) {
+        if (!tag.matches("v\\d+\\.\\d+\\.\\d+-ytark\\.[1-9]\\d*")) {
             throw new IOException("The latest stable release has an invalid version tag.");
         }
         String version = tag.substring(1);
@@ -153,18 +154,21 @@ final class YtarkUpdater {
             throw new IOException("The installed or published version is not valid.", invalidVersion);
         }
 
+        if (!("v" + version).equals(tag)) {
+            throw new IOException("The release tag and version name do not match.");
+        }
         long versionCode = UpdateReleaseContract.parseVersionCode(release.optString("body", ""));
+        if (versionCode != UpdateReleaseContract.expectedVersionCodeForVersion(version)) {
+            throw new IOException("The release versionCode does not match its YTArk version serial.");
+        }
         if (versionCode <= installed.versionCode
                 || UpdateVersion.compare(version, installed.versionName) <= 0) {
             return null;
         }
 
-        String assetSuffix = supportedAssetSuffix();
-        if (!"arm64".equals(assetSuffix)) {
-            throw new IOException("YTArk releases target 64-bit ARM Google TV devices.");
-        }
-        String expectedAssetName = UpdateReleaseContract.assetNameForVersion(version);
-        String nativeAbi = "arm64-v8a";
+        String assetSuffix = supportedAssetSuffix(context);
+        String nativeAbi = NativeAbiContract.nativeAbiForSuffix(assetSuffix);
+        String expectedAssetName = UpdateReleaseContract.assetNameForVersion(version, assetSuffix);
 
         JSONArray assets = release.optJSONArray("assets");
         if (assets == null) throw new IOException("The latest release has no downloadable assets.");
@@ -195,25 +199,80 @@ final class YtarkUpdater {
                     httpGet(checksumUrl, 256 * 1024), expectedAssetName);
         }
 
-        return new ReleaseInfo(tag, version, expectedAssetName, downloadUrl, digest,
+        ReleaseInfo result = new ReleaseInfo(tag, version, expectedAssetName, downloadUrl, digest,
                 nativeAbi, versionCode, assetSize);
+        validateReleaseContract(result);
+        return result;
     }
 
     private static JSONObject findAsset(JSONArray assets, String expectedName) {
+        JSONObject found = null;
         for (int i = 0; i < assets.length(); i++) {
             JSONObject asset = assets.optJSONObject(i);
-            if (asset != null && expectedName.equals(asset.optString("name", ""))) return asset;
-        }
-        return null;
-    }
-
-    private static String supportedAssetSuffix() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            for (String abi : Build.SUPPORTED_ABIS) {
-                if ("arm64-v8a".equals(abi)) return "arm64";
+            if (asset != null && expectedName.equals(asset.optString("name", ""))) {
+                if (found != null) return null;
+                found = asset;
             }
         }
-        return "arm64-v8a".equals(Build.CPU_ABI) ? "arm64" : null;
+        return found;
+    }
+
+    private static void validateReleaseContract(ReleaseInfo release) throws IOException {
+        if (release == null || release.versionName == null || release.tag == null
+                || release.assetName == null || release.nativeAbi == null
+                || release.sha256 == null || release.downloadUrl == null) {
+            throw new IOException("The YTArk update metadata is incomplete.");
+        }
+        if (!("v" + release.versionName).equals(release.tag)
+                || release.versionCode != UpdateReleaseContract.expectedVersionCodeForVersion(release.versionName)) {
+            throw new IOException("The YTArk release tag, version, and versionCode do not match.");
+        }
+        String suffix = NativeAbiContract.assetSuffixForNativeAbi(release.nativeAbi);
+        String expectedName = UpdateReleaseContract.assetNameForVersion(release.versionName, suffix);
+        if (!expectedName.equals(release.assetName)) {
+            throw new IOException("The YTArk APK filename does not match the selected architecture.");
+        }
+        UpdateReleaseContract.requireOfficialAssetUrl(release.downloadUrl, release.tag, release.assetName);
+        if (UpdateReleaseContract.parseSha256Digest(release.sha256) == null
+                || release.assetSize <= 0 || release.assetSize > MAX_APK_BYTES) {
+            throw new IOException("The YTArk APK checksum or published size is invalid.");
+        }
+    }
+
+    private static String supportedAssetSuffix(Context context) throws IOException {
+        String[] supportedAbis;
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            supportedAbis = Build.SUPPORTED_ABIS;
+        } else {
+            supportedAbis = new String[] { Build.CPU_ABI, Build.CPU_ABI2 };
+        }
+        String installedAbi = installedNativeAbi(context);
+        return NativeAbiContract.assetSuffixForInstalledAbi(installedAbi, supportedAbis);
+    }
+
+    /** Read the ABI of this installed YTArk APK instead of choosing a different
+     * ABI merely because the device supports it. */
+    private static String installedNativeAbi(Context context) throws IOException {
+        String sourcePath = context.getApplicationInfo().sourceDir;
+        if (sourcePath == null || sourcePath.length() == 0) {
+            throw new IOException("Could not locate the installed YTArk APK to verify its ABI.");
+        }
+        java.util.HashSet<String> abis = new java.util.HashSet<>();
+        try (ZipFile installedApk = new ZipFile(sourcePath)) {
+            java.util.Enumeration<? extends ZipEntry> entries = installedApk.entries();
+            while (entries.hasMoreElements()) {
+                String name = entries.nextElement().getName();
+                if (name.startsWith("lib/") && name.endsWith(".so")) {
+                    String[] components = name.split("/");
+                    if (components.length >= 3) abis.add(components[1]);
+                }
+            }
+        }
+        if (abis.size() != 1) {
+            throw new IOException("Could not verify one installed YTArk ABI from the current APK. "
+                    + "Automatic cross-ABI updates are disabled; use the matching versioned APK manually.");
+        }
+        return abis.iterator().next();
     }
 
     private static String httpGet(String address, int maximumBytes) throws IOException {
@@ -404,29 +463,43 @@ final class YtarkUpdater {
 
     private static File downloadRelease(Context context, ReleaseInfo release,
                                         DownloadCallback callback) throws Exception {
+        validateReleaseContract(release);
         File directory = new File(context.getFilesDir(), "ytark_updates");
         if (!directory.exists() && !directory.mkdirs()) {
             throw new IOException("YTArk could not create secure update storage.");
         }
         File apk = new File(directory, release.assetName);
         File partial = new File(directory, release.assetName + ".part");
+        File partialMetadata = new File(directory, release.assetName + ".part.properties");
 
         if (apk.isFile()) {
             try {
                 verifyDownloadedApk(context, apk, release);
+                deleteIfPresent(partial);
+                deleteIfPresent(partialMetadata);
                 return apk;
             } catch (Exception invalid) {
                 if (!apk.delete()) Log.w(TAG, "Could not remove invalid cached update", invalid);
             }
         }
 
+        if (partial.isFile() && !partialMetadataMatches(partialMetadata, release)) {
+            // A same-name .part file is not enough to resume: tags can be
+            // replaced or metadata can change. URL, digest, size, and ABI all
+            // need to match the exact current selection.
+            deleteIfPresent(partial);
+            deleteIfPresent(partialMetadata);
+        } else if (!partial.isFile()) {
+            deleteIfPresent(partialMetadata);
+        }
+
         long existing = partial.isFile() ? partial.length() : 0L;
         if (existing < 0 || existing >= release.assetSize) {
-            if (!partial.delete() && partial.exists()) {
-                throw new IOException("Could not reset an incomplete update download.");
-            }
+            deleteIfPresent(partial);
+            deleteIfPresent(partialMetadata);
             existing = 0L;
         }
+        if (!partial.isFile()) writePartialMetadata(partialMetadata, release);
 
         HttpURLConnection connection = openConnection(release.downloadUrl);
         long startOffset = existing;
@@ -435,16 +508,22 @@ final class YtarkUpdater {
             connection.setRequestProperty("Accept", "application/vnd.android.package-archive");
             if (existing > 0) connection.setRequestProperty("Range", "bytes=" + existing + "-");
             int status = connection.getResponseCode();
-            boolean append = existing > 0 && status == HttpURLConnection.HTTP_PARTIAL;
+            boolean append = UpdateResumeContract.shouldAppend(existing, status);
             if (append) {
                 String contentRange = connection.getHeaderField("Content-Range");
-                if (contentRange == null || !contentRange.startsWith("bytes " + existing + "-")) {
-                    throw new IOException("The server returned an invalid resume response.");
+                if (!UpdateResumeContract.validContentRange(contentRange, existing, release.assetSize)) {
+                    deleteIfPresent(partial);
+                    deleteIfPresent(partialMetadata);
+                    throw new IOException("The server returned an invalid resume response; the partial download was discarded.");
                 }
             } else if (status == HttpURLConnection.HTTP_OK) {
                 startOffset = 0L;
                 append = false;
             } else {
+                if (existing > 0) {
+                    deleteIfPresent(partial);
+                    deleteIfPresent(partialMetadata);
+                }
                 throw new IOException("The APK download returned HTTP " + status + ".");
             }
 
@@ -456,7 +535,9 @@ final class YtarkUpdater {
                 while ((count = input.read(buffer)) != -1) {
                     downloaded += count;
                     if (downloaded > release.assetSize || downloaded > MAX_APK_BYTES) {
-                        throw new IOException("The downloaded APK is larger than its published size.");
+                        deleteIfPresent(partial);
+                        deleteIfPresent(partialMetadata);
+                        throw new IOException("The downloaded APK is larger than its published size; the partial download was discarded.");
                     }
                     output.write(buffer, 0, count);
                     long now = System.currentTimeMillis();
@@ -476,12 +557,54 @@ final class YtarkUpdater {
 
         String downloadedDigest = sha256(partial);
         if (!release.sha256.equalsIgnoreCase(downloadedDigest)) {
-            partial.delete();
+            deleteIfPresent(partial);
+            deleteIfPresent(partialMetadata);
             throw new SecurityException("The downloaded APK failed its SHA-256 integrity check.");
         }
         if (apk.exists() && !apk.delete()) throw new IOException("Could not replace the cached APK.");
         if (!partial.renameTo(apk)) throw new IOException("Could not finalize the verified APK download.");
+        deleteIfPresent(partialMetadata);
         return apk;
+    }
+
+    private static boolean partialMetadataMatches(File metadata, ReleaseInfo release) {
+        if (!metadata.isFile()) return false;
+        Properties properties = new Properties();
+        try (InputStream input = new FileInputStream(metadata)) {
+            properties.load(input);
+            return UpdateResumeContract.metadataMatches(properties, release.assetName,
+                    release.downloadUrl, release.sha256, release.assetSize, release.nativeAbi);
+        } catch (IOException invalid) {
+            return false;
+        }
+    }
+
+    private static void writePartialMetadata(File metadata, ReleaseInfo release) throws IOException {
+        Properties properties = new Properties();
+        properties.setProperty("asset", release.assetName);
+        properties.setProperty("url", release.downloadUrl);
+        properties.setProperty("sha256", release.sha256);
+        properties.setProperty("size", Long.toString(release.assetSize));
+        properties.setProperty("abi", release.nativeAbi);
+        File temporary = new File(metadata.getParentFile(), metadata.getName() + ".tmp");
+        try (FileOutputStream output = new FileOutputStream(temporary)) {
+            properties.store(output, "YTArk verified resume metadata");
+            output.getFD().sync();
+        }
+        if (metadata.exists() && !metadata.delete()) {
+            deleteIfPresent(temporary);
+            throw new IOException("Could not replace update resume metadata.");
+        }
+        if (!temporary.renameTo(metadata)) {
+            deleteIfPresent(temporary);
+            throw new IOException("Could not save update resume metadata.");
+        }
+    }
+
+    private static void deleteIfPresent(File file) throws IOException {
+        if (file.exists() && !file.delete()) {
+            throw new IOException("Could not discard stale YTArk update data.");
+        }
     }
 
     private static void reportProgress(Context context, ReleaseInfo release, long downloaded,
@@ -506,6 +629,11 @@ final class YtarkUpdater {
 
     private static void verifyDownloadedApk(Context context, File apk, ReleaseInfo release)
             throws Exception {
+        validateReleaseContract(release);
+        String deviceAbi = NativeAbiContract.nativeAbiForSuffix(supportedAssetSuffix(context));
+        if (!deviceAbi.equals(release.nativeAbi)) {
+            throw new SecurityException("The saved update is for a different Android ABI; select a matching YTArk APK.");
+        }
         if (apk == null || !apk.isFile() || apk.length() != release.assetSize) {
             throw new IOException("The downloaded APK is incomplete. Select Update Now to resume it.");
         }
@@ -582,11 +710,23 @@ final class YtarkUpdater {
     }
 
     private static void verifyNativeArchitecture(File apk, String nativeAbi) throws IOException {
+        String suffix = NativeAbiContract.assetSuffixForNativeAbi(nativeAbi);
         String requiredLibrary = "lib/" + nativeAbi + "/libchrobalt.so";
         try (ZipFile zip = new ZipFile(apk)) {
             ZipEntry library = zip.getEntry(requiredLibrary);
             if (library == null || library.getSize() <= 0) {
                 throw new SecurityException("The downloaded APK is not built for this device architecture.");
+            }
+            java.util.Enumeration<? extends ZipEntry> entries = zip.entries();
+            while (entries.hasMoreElements()) {
+                ZipEntry entry = entries.nextElement();
+                String name = entry.getName();
+                if (!name.startsWith("lib/") || !name.endsWith(".so")) continue;
+                String[] components = name.split("/");
+                if (components.length < 3 || !nativeAbi.equals(components[1])) {
+                    throw new SecurityException("The downloaded " + suffix
+                            + " APK contains a native library for the wrong ABI: " + name);
+                }
             }
         }
     }
@@ -635,7 +775,16 @@ final class YtarkUpdater {
         if (tag.length() == 0 || version.length() == 0 || asset.length() == 0
                 || url.length() == 0 || sha.length() != 64 || abi.length() == 0
                 || code <= 0 || size <= 0) return null;
-        return new ReleaseInfo(tag, version, asset, url, sha, abi, code, size);
+        ReleaseInfo release = new ReleaseInfo(tag, version, asset, url, sha, abi, code, size);
+        try {
+            validateReleaseContract(release);
+            String normalizedSha = UpdateReleaseContract.parseSha256Digest(sha);
+            if (normalizedSha == null || !normalizedSha.equalsIgnoreCase(sha)) return null;
+            return release;
+        } catch (IOException invalid) {
+            Log.w(TAG, "Discarding stale pending update metadata", invalid);
+            return null;
+        }
     }
 
     static void clearPendingUpdate(Context context) {
@@ -644,6 +793,8 @@ final class YtarkUpdater {
         if (apk != null) {
             File partial = new File(apk.getParentFile(), apk.getName() + ".part");
             if (partial.exists()) partial.delete();
+            File partialMetadata = new File(apk.getParentFile(), apk.getName() + ".part.properties");
+            if (partialMetadata.exists()) partialMetadata.delete();
         }
         preferences(context).edit().remove("pending_path").remove("pending_tag")
                 .remove("pending_version").remove("pending_asset").remove("pending_url")
