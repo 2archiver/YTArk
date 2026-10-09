@@ -21,10 +21,10 @@ import validate_release
 class DualAbiReleaseContractTests(unittest.TestCase):
     def test_expected_version_and_asset_names(self):
         config = validate_release.load_config()
-        self.assertEqual(config["VERSION_NAME"], "2.0.4-ytark.16")
-        self.assertEqual(config["VERSION_CODE"], "20016")
-        self.assertEqual(config["APK_ARMV7"], "YTArk-v2.0.4-ytark.16-armv7.apk")
-        self.assertEqual(config["APK_ARM64"], "YTArk-v2.0.4-ytark.16-arm64.apk")
+        self.assertEqual(config["VERSION_NAME"], "2.0.4-ytark.17")
+        self.assertEqual(config["VERSION_CODE"], "20017")
+        self.assertEqual(config["APK_ARMV7"], "YTArk-v2.0.4-ytark.17-armv7.apk")
+        self.assertEqual(config["APK_ARM64"], "YTArk-v2.0.4-ytark.17-arm64.apk")
         self.assertEqual(validate_release.apk_filename(config["VERSION_NAME"], "armv7"), config["APK_ARMV7"])
         self.assertEqual(validate_release.apk_filename(config["VERSION_NAME"], "arm64"), config["APK_ARM64"])
         with self.assertRaises(ValueError):
@@ -184,7 +184,7 @@ class DualAbiReleaseContractTests(unittest.TestCase):
             self.assertIn('android.intent.category.LEANBACK_LAUNCHER', first)
             self.assertIn('android:name="android.hardware.touchscreen" android:required="false"', first)
             self.assertIn('android:name="android.hardware.camera" android:required="false"', first)
-            self.assertIn('android:icon="@drawable/ytark_launcher"', first)
+            self.assertIn('android:icon="@mipmap/ytark_launcher"', first)
             self.assertIn('android:banner="@drawable/ytark_banner"', first)
             repack_apk.patch_tv_manifest_compatibility(str(root))
             second = manifest.read_text(encoding="utf-8")
@@ -226,7 +226,7 @@ class DualAbiReleaseContractTests(unittest.TestCase):
         E: category (line=14)
           A: android:name(0x01010003)="android.intent.category.LEANBACK_LAUNCHER"
 """
-        resources = """resource 0x7f080001 io.github.twoarchiver.ytark:drawable/ytark_launcher
+        resources = """resource 0x7f080001 io.github.twoarchiver.ytark:mipmap/ytark_launcher
 resource 0x7f080002 io.github.twoarchiver.ytark:drawable/ytark_banner
 """
         with patch.object(validate_release, "run", side_effect=[tree, resources]):

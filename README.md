@@ -12,10 +12,10 @@ native updater that always hands installation to Android for user confirmation.
 |---|---|
 | Android package | `io.github.twoarchiver.ytark` |
 | Launcher label | `YTArk` |
-| Expected release | `2.0.4-ytark.16` |
-| Expected versionCode | `20016` |
-| 32-bit userspace candidate | `YTArk-v2.0.4-ytark.16-armv7.apk` — `armeabi-v7a` |
-| 64-bit userspace candidate | `YTArk-v2.0.4-ytark.16-arm64.apk` — `arm64-v8a` |
+| Expected release | `2.0.4-ytark.17` |
+| Expected versionCode | `20017` |
+| 32-bit userspace candidate | `YTArk-v2.0.4-ytark.17-armv7.apk` — `armeabi-v7a` |
+| 64-bit userspace candidate | `YTArk-v2.0.4-ytark.17-arm64.apk` — `arm64-v8a` |
 | Pinned Android base | TizenTubeCobalt `v2.0.2` |
 
 These filenames identify the intended candidates, not proof that an APK has
@@ -90,6 +90,22 @@ same-package, same-certificate build over the current one. Android's
 PackageInstaller confirmation is always manual. Do not uninstall to troubleshoot
 an update unless you understand that uninstalling can erase app data.
 
+## Feature matrix
+
+| Feature | Status |
+|---|---|
+| YouTube TV frontend (feeds, search, playback) | Upstream Cobalt `v2.0.2`, kept stock |
+| Google sign-in / Continue as guest | Upstream flows, preserved; not modified by YTArk |
+| Client-side ad blocking | **On by default**, user-visible toggle in YTArk Quick Controls |
+| SponsorBlock segment skipping | **On by default**, category settings preserved |
+| DeArrow titles/thumbnails | On by default (title only unless thumbnails enabled) |
+| Quality selection | Auto default, manual ceiling; no resolution promises |
+| Cosmetic "YouTube Premium" wordmark | Off-able local visual only — **never** a subscription or entitlement |
+| Native updater | Verified SHA-256 + signer + ABI, manual Android installer |
+| ARMv7 (`armeabi-v7a`) APK | Confirmed-good target |
+| ARM64 (`arm64-v8a`) APK | Shipped; use only when the TV's userspace reports `arm64-v8a` |
+| Background playback, PiP, casting, downloads, system-wide ad blocking | **Not claimed** |
+
 ## What YTArk changes
 
 ### YouTube TV frontend, accounts, and guest access
@@ -107,8 +123,10 @@ on a real TV before release acceptance.
 - A locally rendered YouTube-style Premium wordmark can be toggled independently
   in **YTArk Quick Controls**. It is cosmetic only: it does not grant, imply, or
   activate a paid YouTube subscription or entitlement.
-- The Android TV launcher label is `YTArk`; its icon uses the recognizable
-  YouTube play mark. The build checks the compiled launcher and Leanback entry.
+- The Android TV launcher label is `YTArk`. Its **Alternative 2** icon is a
+  light rounded-square tile with a red video play emblem and a red orbital
+  swoosh (master artwork and rights notes in `branding/`). The build checks the
+  compiled launcher and Leanback entry.
 - Remote-accessible settings expose ad-block and SponsorBlock toggles, quality
   selection, themes/presets, and the updater. **Ad blocking is enabled for fresh
   installs**, but a saved user opt-out is preserved. Ad filtering is a
@@ -131,13 +149,17 @@ to YouTube, Cobalt, the device, and the supplied stream.
 
 ### Native updates and release integrity
 
-The updater checks the official GitHub stable release, selects an APK matching
-the **installed** native ABI, validates its exact versioned filename and official
-URL, verifies the published SHA-256, package/version metadata, native library
-ABI, and pinned signer, and then uses Android's `PackageInstaller`. The user
-must choose **Install Update** and approve Android's confirmation; YTArk never
-installs silently or changes the unknown-app setting. Interrupted downloads can
-resume only when their saved URL, asset name, ABI, size, and digest still match.
+The updater checks the official GitHub stable release **at app start and every
+six hours** (clearly disclosed on the update screen; the **Later** action
+snoozes notifications for 24 hours; all checks use HTTPS to `api.github.com`).
+It selects an APK matching the **installed** native ABI, validates its exact
+versioned filename and official URL, verifies the published SHA-256,
+package/version metadata, native library ABI, and pinned signer, and then uses
+Android's `PackageInstaller`. The user must choose **Install Update** and
+approve Android's confirmation; YTArk never installs silently and does not
+grant the unknown-app permission automatically. Interrupted downloads can
+resume only when their saved URL, asset name, ABI, size, and digest still
+match.
 
 The release certificate is Hearth's intentionally public **community** key.
 Its SHA-256 fingerprint is pinned in `signing/YTArk-cert-sha256.txt`. A matching
@@ -148,6 +170,44 @@ both APK checksum entries. The exact userscript bundle is included in release
 assets and is served from an immutable version tag; checking CDN bytes proves
 that those bytes were served, not that a particular TV fetched or executed the
 script.
+
+## Privacy and your Google account
+
+**Your Google account data stays between your TV and Google.** YTArk adds no
+analytics, no telemetry, no crash reporting, and no project-operated servers;
+it never reads, stores, or logs Google account identifiers, cookies, or OAuth
+tokens. External services contacted by YTArk-added code are limited to
+SponsorBlock/DeArrow (`sponsor.ajay.app` — video ID hash prefixes only),
+GitHub (update metadata and APK downloads), and jsDelivr (userscript bytes).
+Google sign-in, token refresh, playback, subscriptions, and search use the
+stock upstream YouTube TV stack over its normal Google endpoints — ad blocking
+and SponsorBlock never intercept or redirect them. The full inventory,
+storage details, and honest limitations (this is **not** anonymity and it does
+**not** block Google's own tracking) are in [`docs/PRIVACY.md`](docs/PRIVACY.md).
+
+## Release signing and update integrity
+
+Releases are signed with Hearth's intentionally public **community** key so
+Android keeps accepting in-place upgrades with the same certificate
+(`b9cb7e…47eaae`). Because that key is public by design, a matching
+certificate proves *Android signer continuity*, **not** publisher identity —
+always install from this repository and verify `SHA256SUMS.txt`. The recorded
+signing identity, exposure analysis, and the explicit key-migration plan are in
+[`docs/SIGNING.md`](docs/SIGNING.md). No keystore, private key, or credential
+is ever committed here; CI scans the tree and full history for secret material.
+
+## Known limitations
+
+- Physical Google TV acceptance (install, sign-in, playback, D-pad, same-ABI
+  update) is recorded per device; source and CI checks are not hardware tests.
+- A server-side Google token invalidation or upstream auth change can require
+  re-login after an update; permanent sessions are not guaranteed.
+- Ad blocking is client-side and cannot guarantee every ad is removed;
+  SponsorBlock depends on community segment data at `sponsor.ajay.app`.
+- The cosmetic Premium wordmark never implies a paid subscription or any
+  server-side entitlement.
+- Cross-ABI migration (ARMv7 ↔ ARM64) is untested; the updater always stays on
+  the installed ABI.
 
 ## Troubleshooting
 
@@ -195,6 +255,8 @@ Python release/repacker contract tests:
 python3 -m py_compile tools/*.py tools/tests/*.py
 python3 -m unittest discover -s tools/tests -v
 python3 tools/repack_apk.py --self-test
+python3 tools/render_launcher_art.py --check   # branding artifacts match the geometry source
+python3 tools/check_no_secrets.py --history    # no key material in tree or history
 ```
 
 A complete APK build additionally needs Java 17, Android SDK platform/build

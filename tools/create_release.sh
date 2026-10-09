@@ -74,13 +74,14 @@ troubleshooting step.
 
 ## Automatic update prompts
 
-YTArk checks the official stable GitHub release metadata when the Android app
-starts and periodically while it runs. The native updater chooses an APK from
-Android's supported ABI list, verifies the exact official URL, versioned
-filename, size, SHA-256, package, native library ABI, and pinned certificate,
-then opens Android's standard PackageInstaller. The user must choose **Install
-Update** and approve Android's confirmation. YTArk never installs silently and
-does not grant unknown-app permission automatically.
+YTArk checks the official stable GitHub release metadata over HTTPS when the
+Android app starts and every six hours while it runs; the update screen
+discloses this and **Later** snoozes prompts for 24 hours. The native updater
+chooses an APK from Android's supported ABI list, verifies the exact official
+URL, versioned filename, size, SHA-256, package, native library ABI, and
+pinned certificate, then opens Android's standard PackageInstaller. The user
+must choose **Install Update** and approve Android's confirmation. YTArk never
+installs silently and does not grant unknown-app permission automatically.
 
 An in-place update requires the same package ID and signing certificate. This
 repository intentionally uses Hearth's public community signing key: certificate
@@ -88,6 +89,14 @@ continuity does not prove publisher identity. Install only release assets from
 the official YTArk repository. This release does not perform automatic migration from a 32-bit installation
 to a 64-bit APK. The updater reads the native ABI embedded in the installed
 YTArk APK, confirms Android still supports it, and selects a same-ABI asset.
+
+## Privacy
+
+YTArk adds no analytics, telemetry, or crash reporting and never reads or logs
+Google account identifiers, cookies, or OAuth tokens — sign-in stays in the
+stock YouTube TV stack between your TV and Google. SponsorBlock lookups send
+only hashed video-ID prefixes; update checks reach api.github.com over HTTPS.
+Full disclosure: \\`docs/PRIVACY.md\\` in the source repository.
 
 ## Integrity and source
 

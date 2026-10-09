@@ -6,8 +6,9 @@ on:
       - main
   workflow_dispatch:
 
+# Least privilege by default; only the publishing jobs get contents: write.
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: ytark-release-${{ github.ref }}
@@ -19,26 +20,110 @@ env:
   BUILD_TOOLS: "34.0.0"
 
 jobs:
-  build:
-    name: Build, package-check and draft both APKs
+  publish-userscript-tag:
+    name: Build userscript and publish immutable tag
     runs-on: ubuntu-latest
-    timeout-minutes: 150
+    timeout-minutes: 30
+    if: github.repository == '2archiver/YTArk'
+    permissions:
+      contents: write
+    outputs:
+      script_url: ${{ steps.script.outputs.script_url }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7.0.1
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: TizenTube/mods/package-lock.json
+
+      - name: Load release version
+        run: python3 tools/validate_release.py emit-env --file "$GITHUB_ENV"
+
+      - name: Build userscript and run feature/TV-control tests
+        working-directory: TizenTube/mods
+        run: |
+          set -euo pipefail
+          npm ci --no-audit --no-fund
+          node --test tests/*.test.mjs
+          npm run build
+          node --check ../dist/userScript.js
+          grep -q "YTArk Quick Controls" ../dist/userScript.js
+          grep -q "YouTube Premium" ../dist/userScript.js
+          grep -q "ytark://updates" ../dist/userScript.js
+          if grep -Eqi 'Personal[[:space:]]+Tube[[:space:]]+TV' ../dist/userScript.js; then
+            echo "Deprecated branding found in generated userscript" >&2
+            exit 1
+          fi
+          echo "Built YTArk userscript: $(wc -c < ../dist/userScript.js) bytes"
+
+      - name: Publish immutable userscript tag and verify exact bytes
+        id: script
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          bash tools/publish_script_tag.sh TizenTube/dist/userScript.js
+          SCRIPT_URL="https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@${SCRIPT_TAG}/userScript.js?v="
+          SERVED="$RUNNER_TEMP/served-userScript.js"
+          verified=false
+          for attempt in $(seq 1 20); do
+            if curl -fsSL "$SCRIPT_URL" -o "$SERVED" && cmp -s TizenTube/dist/userScript.js "$SERVED"; then
+              verified=true
+              break
+            fi
+            echo "Waiting for immutable userscript tag propagation ($attempt/20)."
+            sleep 15
+          done
+          if [ "$verified" != true ]; then
+            echo "jsDelivr did not serve the exact immutable release userscript" >&2
+            exit 1
+          fi
+          echo "script_url=$SCRIPT_URL" >> "$GITHUB_OUTPUT"
+
+      - name: Upload built userscript
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ytark-user-script
+          path: TizenTube/dist/userScript.js
+          if-no-files-found: error
+          retention-days: 7
+
+  build-apk-candidates:
+    name: Build, package-check both APKs
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    needs: publish-userscript-tag
+    if: github.repository == '2archiver/YTArk'
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Set up Java 17
-        uses: actions/setup-java@v6.0.1
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
         with:
           distribution: temurin
           java-version: "17"
 
       - name: Set up Node.js
-        uses: actions/setup-node@v7.1.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
-          cache: npm
-          cache-dependency-path: TizenTube/mods/package-lock.json
+
+      - name: Download verified userscript bundle
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: ytark-user-script
+          path: TizenTube/dist
 
       - name: Load release version and install Android build tools
         env:
@@ -64,6 +149,7 @@ jobs:
           test -n "$BASE_TAG"
           gh api "repos/reisxd/TizenTubeCobalt/releases/tags/$BASE_TAG" \
             > "$RUNNER_TEMP/ytark-validation/base-release.json"
+          echo "SCRIPT_URL=${{ needs.publish-userscript-tag.outputs.script_url }}" >> "$GITHUB_ENV"
 
       - name: Prepare pinned YTArk signing key
         env:
@@ -73,46 +159,6 @@ jobs:
           YTARK_KEY_ALIAS: ${{ secrets.YTARK_KEY_ALIAS }}
           YTARK_KEY_PASSWORD: ${{ secrets.YTARK_KEY_PASSWORD }}
         run: bash tools/prepare_signing_key.sh
-
-      - name: Build userscript and run feature/TV-control tests
-        working-directory: TizenTube/mods
-        run: |
-          set -euo pipefail
-          npm ci --no-audit --no-fund
-          node --test tests/*.test.mjs
-          npm run build
-          node --check ../dist/userScript.js
-          grep -q "YTArk Quick Controls" ../dist/userScript.js
-          grep -q "YouTube Premium" ../dist/userScript.js
-          grep -q "ytark://updates" ../dist/userScript.js
-          if grep -Eqi 'Personal[[:space:]]+Tube[[:space:]]+TV' ../dist/userScript.js; then
-            echo "Deprecated branding found in generated userscript" >&2
-            exit 1
-          fi
-          echo "Built YTArk userscript: $(wc -c < ../dist/userScript.js) bytes"
-
-      - name: Publish immutable userscript tag and verify exact bytes
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          bash tools/publish_script_tag.sh TizenTube/dist/userScript.js
-          SCRIPT_URL="https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@${SCRIPT_TAG}/userScript.js?v="
-          SERVED="$RUNNER_TEMP/ytark-validation/served-userScript.js"
-          verified=false
-          for attempt in $(seq 1 20); do
-            if curl -fsSL "$SCRIPT_URL" -o "$SERVED" && cmp -s TizenTube/dist/userScript.js "$SERVED"; then
-              verified=true
-              break
-            fi
-            echo "Waiting for immutable userscript tag propagation ($attempt/20)."
-            sleep 15
-          done
-          if [ "$verified" != true ]; then
-            echo "jsDelivr did not serve the exact immutable release userscript" >&2
-            exit 1
-          fi
-          echo "SCRIPT_URL=$SCRIPT_URL" >> "$GITHUB_ENV"
 
       - name: Compile native updater and run Java contract tests
         run: |
@@ -222,12 +268,50 @@ jobs:
           cat update-smoke/eligibility.properties
           echo "These checks compare package metadata and signer only; they do not run adb install or launch an emulator."
 
+      - name: Upload candidate APKs and validation metadata
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ytark-dual-abi-candidates
+          path: |
+            release-assets/*
+            update-smoke/*.apk
+            update-smoke/eligibility.properties
+          if-no-files-found: error
+          retention-days: 30
+
+  publish-draft-release:
+    name: Create validated draft release
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    needs: build-apk-candidates
+    if: github.repository == '2archiver/YTArk'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Load release version
+        run: |
+          set -euo pipefail
+          python3 tools/validate_release.py emit-env --file "$GITHUB_ENV"
+
+      - name: Download candidate APKs and validation metadata
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: ytark-dual-abi-candidates
+          path: staging
+
       - name: Create draft release and validate its asset contract
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          export SIGNING_CERT_SHA256
+          export SIGNING_CERT_SHA256="$(grep -v '^[[:space:]]*#' signing/YTArk-cert-sha256.txt | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
+          mkdir -p release-assets
+          mv staging/release-assets/* release-assets/
           bash tools/create_release.sh
           gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
             | python3 -c '
@@ -238,22 +322,11 @@ jobs:
                   json.dump(release, sys.stdout)
                   sys.exit(0)
           raise SystemExit(f"Draft release {tag} not found")
-          ' "$VERSION_TAG" > "$RUNNER_TEMP/ytark-validation/draft-release.json"
+          ' "$VERSION_TAG" > "$RUNNER_TEMP/draft-release.json"
           python3 tools/validate_release.py verify-release \
-            --release-json "$RUNNER_TEMP/ytark-validation/draft-release.json" \
+            --release-json "$RUNNER_TEMP/draft-release.json" \
             --state draft
           echo "The release remains a draft. Static packaging checks are not physical-device validation."
-
-      - name: Upload candidate APKs and validation metadata
-        uses: actions/upload-artifact@v7.0.2
-        with:
-          name: ytark-dual-abi-candidates
-          path: |
-            release-assets/*
-            update-smoke/*.apk
-            update-smoke/eligibility.properties
-          if-no-files-found: error
-          retention-days: 30
 
       - name: Record unverified runtime acceptance
         run: |
