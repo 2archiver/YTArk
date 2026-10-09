@@ -3,7 +3,7 @@ package io.github.twoarchiver.ytark.updater;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
-import android.app.PackageInstaller;
+import android.content.pm.PackageInstaller;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
