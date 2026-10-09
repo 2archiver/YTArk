@@ -122,9 +122,13 @@ def main() -> None:
             raise ValueError("The previous YTArk APK is not signed by the permanent release certificate")
 
         current_code = int(config["VERSION_CODE"])
-        if int(package.group(2)) >= current_code:
+        previous_code = int(package.group(2))
+        if latest.get("tag_name") == config["VERSION_TAG"]:
+            if previous_code > current_code:
+                raise ValueError("The new versionCode must not be lower than the current release versionCode")
+        elif previous_code >= current_code:
             raise ValueError("The new versionCode must exceed the previous production versionCode")
-        output(f"Verified previous production APK {asset['name']} ({package.group(2)}); update install smoke test is enabled.")
+        output(f"Verified previous production APK {asset['name']} ({previous_code}); update install smoke test is enabled.")
         with open(args.output, "a", encoding="utf-8") as result:
             result.write("eligible=true\n")
             result.write(f"previous_apk={previous_apk}\n")

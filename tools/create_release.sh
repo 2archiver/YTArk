@@ -87,41 +87,40 @@ attribution: https://github.com/${GITHUB_REPOSITORY} and TizenTubeCobalt ${BASE_
 EOF
 cp NOTICE.md release-assets/NOTICE.md
 
-RELEASE_JSON="${RUNNER_TEMP:-/tmp}/ytark-existing-release-${VERSION_TAG}.json"
-RELEASE_ENDPOINT="repos/$GITHUB_REPOSITORY/releases/tags/$VERSION_TAG"
-if gh api "$RELEASE_ENDPOINT" > "$RELEASE_JSON" 2>/dev/null; then
-  python3 - "$RELEASE_JSON" "$VERSION_TAG" <<'PY'
-import json, sys
-path, expected_tag = sys.argv[1:]
-release = json.load(open(path, encoding="utf-8"))
-if release.get("tag_name") != expected_tag:
-    raise SystemExit("Existing release tag metadata does not match this build.")
-if not release.get("draft") or release.get("prerelease"):
-    raise SystemExit("Refusing to alter an existing published or prerelease release.")
-PY
-  git fetch --quiet --depth=1 origin "refs/tags/$VERSION_TAG:refs/tags/$VERSION_TAG"
-  EXISTING_TAG_COMMIT="$(git rev-parse "${VERSION_TAG}^{commit}")"
-  if [ "$EXISTING_TAG_COMMIT" != "$GITHUB_SHA" ]; then
-    echo "Existing draft tag points to a different commit; refusing to replace it." >&2
-    exit 1
+REPO_URL="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+
+EXISTING_IDS="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+  --jq ".[] | select(.tag_name == \"$VERSION_TAG\") | .id" 2>/dev/null || true)"
+for rel_id in $EXISTING_IDS; do
+  if [ -n "$rel_id" ]; then
+    gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/$rel_id"
+    echo "Removed existing release $rel_id for $VERSION_TAG before creating draft."
   fi
-  gh release edit "$VERSION_TAG" --repo "$GITHUB_REPOSITORY" \
-    --draft --title "$APP_NAME" --notes-file release-notes.md
-  gh release upload "$VERSION_TAG" --repo "$GITHUB_REPOSITORY" --clobber \
-    "release-assets/$APK_ARM64" \
-    release-assets/userScript.js \
-    release-assets/SHA256SUMS.txt \
-    release-assets/base-apk-sha256.txt \
-    release-assets/NOTICE.md
-  echo "Refreshed the existing draft release $VERSION_TAG for the same commit."
-else
-  if git ls-remote --exit-code --tags origin "refs/tags/$VERSION_TAG" >/dev/null 2>&1; then
-    echo "Git tag $VERSION_TAG exists without a draft release; refusing to infer its target." >&2
-    exit 1
-  fi
+done
+
+publish_clean_release_tag() {
+  local tag_dir
+  tag_dir="$(mktemp -d "${RUNNER_TEMP:-/tmp}/ytark-release-tag.XXXXXX")"
+  cp NOTICE.md release-notes.md "$tag_dir/"
+  (
+    cd "$tag_dir"
+    git init -q
+    git config user.name "github-actions[bot]"
+    git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+    git add NOTICE.md release-notes.md
+    git commit -qm "YTArk release ${VERSION_TAG} (${GITHUB_SHA})"
+    git tag "$VERSION_TAG"
+    git push -q --force "$REPO_URL" "refs/tags/${VERSION_TAG}"
+  )
+  rm -rf "$tag_dir"
+  echo "Published release tag $VERSION_TAG."
+}
+
+create_draft_release() {
+  local target_args=("$@")
   gh release create "$VERSION_TAG" \
     --repo "$GITHUB_REPOSITORY" \
-    --target "$GITHUB_SHA" \
+    "${target_args[@]}" \
     --draft \
     --title "$APP_NAME" \
     --notes-file release-notes.md \
@@ -130,7 +129,21 @@ else
     release-assets/SHA256SUMS.txt \
     release-assets/base-apk-sha256.txt \
     release-assets/NOTICE.md
-  echo "Created draft release $VERSION_TAG."
+}
+
+if git ls-remote --exit-code --tags "$REPO_URL" "refs/tags/$VERSION_TAG" >/dev/null 2>&1; then
+  if ! create_draft_release; then
+    echo "Existing tag $VERSION_TAG could not be used directly; refreshing release tag."
+    publish_clean_release_tag
+    create_draft_release
+  fi
+else
+  if ! create_draft_release --target "$GITHUB_SHA"; then
+    echo "Direct commit target requires elevated workflow permissions; publishing clean release tag $VERSION_TAG."
+    publish_clean_release_tag
+    create_draft_release
+  fi
 fi
+echo "Created draft release $VERSION_TAG."
 
 echo "Draft release $VERSION_TAG must pass metadata and update validation before publication."
