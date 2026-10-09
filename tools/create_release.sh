@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Create a draft YTArk release. CI validates its metadata and assets before publishing.
+# Create a draft YTArk release. Publication is a separate, manually reviewed step.
 set -euo pipefail
 
 : "${GH_TOKEN:?GH_TOKEN is required}"
@@ -12,13 +12,16 @@ set -euo pipefail
 : "${BASE_TAG:?BASE_TAG is required}"
 : "${APP_ID:=io.github.twoarchiver.ytark}"
 : "${APP_NAME:=YTArk}"
+: "${APK_ARMV7:?APK_ARMV7 is required}"
 : "${APK_ARM64:?APK_ARM64 is required}"
 : "${SIGNING_CERT_SHA256:?SIGNING_CERT_SHA256 is required}"
 
 [ "$APP_NAME" = "YTArk" ] || { echo "release title must be YTArk" >&2; exit 1; }
-[ -f "release-assets/$APK_ARM64" ] || {
-  echo "the validated Google TV ARM64 APK release asset is missing" >&2; exit 1;
-}
+for apk in "$APK_ARMV7" "$APK_ARM64"; do
+  [ -f "release-assets/$apk" ] || {
+    echo "the validated architecture-specific APK release asset is missing: $apk" >&2; exit 1;
+  }
+done
 
 cat > NOTICE.md <<EOF
 # YTArk notices and provenance
@@ -32,13 +35,17 @@ cat > NOTICE.md <<EOF
   \`TizenTube/\`; the exact bundled script is attached as \`userScript.js\`.
 - Project-specific native updater, release tooling, and TV controls are part of
   YTArk. The base-project attribution is retained; YTArk is not affiliated with
-  YouTube, Google, TizenTube or TizenTubeCobalt.
+  YouTube, Google, TizenTube, or TizenTubeCobalt.
 EOF
 
 cat > release-notes.md <<EOF
 # YTArk ${VERSION_NAME}
 
-A standalone Android TV / Google TV release built from TizenTubeCobalt ${BASE_TAG}.
+An independent Android TV / Google TV build based on TizenTubeCobalt ${BASE_TAG}.
+The package retains YouTube's TV frontend and Cobalt player; these APKs have
+passed source, packaging, compiled-manifest, ABI, checksum, alignment and
+signer checks. Physical TV installation and playback are not claimed unless
+separately recorded on a named device.
 
 | | |
 |---|---|
@@ -46,55 +53,73 @@ A standalone Android TV / Google TV release built from TizenTubeCobalt ${BASE_TA
 | Android package | \`${APP_ID}\` |
 | Version | ${VERSION_NAME} (versionCode ${VERSION_CODE}) |
 | Release signing certificate | SHA-256 \`${SIGNING_CERT_SHA256}\` |
-| Google TV OS 14 / 4K ARM64 | \`${APK_ARM64}\` (arm64-v8a) |
+| ARMv7 APK | \`${APK_ARMV7}\` (armeabi-v7a) |
+| ARM64 APK | \`${APK_ARM64}\` (arm64-v8a) |
 | Upstream base | TizenTubeCobalt \`${BASE_TAG}\` |
 
-## Automatic updates
+## Choose and install the APK
 
-YTArk checks the official stable YTArk releases when the app starts and every six
-hours while its process is running. On Google TV, the update notification offers
-**Update Now**, **Later**, and **Check for Updates**. The native updater chooses the
-64-bit ARM APK, checks the release SHA-256, package ID, version, ABI and pinned
-signing certificate, and then opens Android's standard package installer.
+Use the APK matching the Android userspace ABI reported by the device: use the
+ARMv7 build for 32-bit \`armeabi-v7a\` userspace, and use ARM64 when
+\`arm64-v8a\` is supported. **4K does not select an APK architecture.** A
+Google TV model name, resolution, or spoofed YouTube user-agent is not an ABI
+probe. Collect model/ABI/API data with the commands in the YTArk README.
 
-The install is never silent. Select **Install Update** in YTArk, then review and
-confirm the Android installer prompt. If Android asks for permission to install
-unknown apps, allow YTArk in **Settings → Apps → Special app access → Install
-unknown apps**, then return to the updater. The downloaded APK stays in private
-app storage and an interrupted download can be resumed.
+Download exactly one matching versioned APK above, copy it to Google TV (USB or
+a trusted local transfer tool), open it with a file manager, and approve the
+Android installer. Unknown-app installation permission remains a manual Android
+Settings approval. For updates, use the YTArk update screen or install the same
+package/signer build over the existing app; do not uninstall as a default
+troubleshooting step.
 
-Updates signed by this release key and using the same package ID install in place;
-Android preserves YTArk settings and app data. This release uses the same
-intentionally public Hearth community signing certificate shown above, pinning
-the permanent YTArk signing identity. Anyone can build with that community key;
-use only official YTArk releases. If the earlier app uses a different package
-ID, install this release as a new app; Android does not transfer private data
-between package IDs. If an earlier build already uses this package ID but a
-different temporary signing key, Android requires uninstalling that build first,
-which removes its private data. Subsequent YTArk releases signed with this
-certificate can update in place.
+## Automatic update prompts
 
-## YTArk Quick Controls
+YTArk checks the official stable GitHub release metadata when the Android app
+starts and periodically while it runs. The native updater chooses an APK from
+Android's supported ABI list, verifies the exact official URL, versioned
+filename, size, SHA-256, package, native library ABI, and pinned certificate,
+then opens Android's standard PackageInstaller. The user must choose **Install
+Update** and approve Android's confirmation. YTArk never installs silently and
+does not grant unknown-app permission automatically.
 
-**YTArk Quick Controls** are the first item in YTArk settings: presets, one-level
-undo, quick quality selection, and TV-focused visibility controls.
+An in-place update requires the same package ID and signing certificate. This
+repository intentionally uses Hearth's public community signing key: certificate
+continuity does not prove publisher identity. Install only release assets from
+the official YTArk repository. This release does not perform automatic migration from a 32-bit installation
+to a 64-bit APK. The updater reads the native ABI embedded in the installed
+YTArk APK, confirms Android still supports it, and selects a same-ABI asset.
 
 ## Integrity and source
 
-Verify the attached APK against \`SHA256SUMS.txt\`. The release also includes the
-exact userscript bundle, base APK checksums, and \`NOTICE.md\`. Source and upstream
-attribution: https://github.com/${GITHUB_REPOSITORY} and TizenTubeCobalt ${BASE_TAG}.
+Verify both APK choices independently against \`SHA256SUMS.txt\`. The release also
+includes both pinned TizenTubeCobalt base checksums, the exact userscript bundle,
+and \`NOTICE.md\`. Source and upstream attribution: https://github.com/${GITHUB_REPOSITORY}
+and TizenTubeCobalt ${BASE_TAG}.
 EOF
 cp NOTICE.md release-assets/NOTICE.md
 
 REPO_URL="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+EXISTING_RELEASES_JSON="$(mktemp "${RUNNER_TEMP:-/tmp}/ytark-existing-releases.XXXXXX.json")"
+gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" > "$EXISTING_RELEASES_JSON"
+EXISTING_IDS="$(python3 - "$EXISTING_RELEASES_JSON" "$VERSION_TAG" <<'PYRELEASE'
+import json
+import sys
 
-EXISTING_IDS="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-  --jq ".[] | select(.tag_name == \"$VERSION_TAG\") | .id" 2>/dev/null || true)"
+path, tag = sys.argv[1:]
+with open(path, encoding="utf-8") as stream:
+    releases = json.load(stream)
+for release in releases:
+    if release.get("tag_name") == tag:
+        if not release.get("draft"):
+            raise SystemExit(f"Refusing to replace already-published stable release {tag}")
+        print(release.get("id", ""))
+PYRELEASE
+)"
+rm -f "$EXISTING_RELEASES_JSON"
 for rel_id in $EXISTING_IDS; do
   if [ -n "$rel_id" ]; then
     gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/$rel_id"
-    echo "Removed existing release $rel_id for $VERSION_TAG before creating draft."
+    echo "Removed existing draft $rel_id for $VERSION_TAG before creating a new draft."
   fi
 done
 
@@ -124,6 +149,7 @@ create_draft_release() {
     --draft \
     --title "$APP_NAME" \
     --notes-file release-notes.md \
+    "release-assets/$APK_ARMV7" \
     "release-assets/$APK_ARM64" \
     release-assets/userScript.js \
     release-assets/SHA256SUMS.txt \
@@ -144,6 +170,5 @@ else
     create_draft_release
   fi
 fi
-echo "Created draft release $VERSION_TAG."
-
-echo "Draft release $VERSION_TAG must pass metadata and update validation before publication."
+echo "Created draft release $VERSION_TAG with both ARMv7 and ARM64 candidates."
+echo "Do not publish until device installation, launch, navigation, playback, and same-ABI update acceptance tests are recorded."

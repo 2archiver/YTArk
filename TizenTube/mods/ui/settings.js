@@ -62,7 +62,7 @@ export default function modernUI(update, parameters) {
                     menuId: 'tt-tv-quick-quality',
                     menuHeader: {
                         title: 'Quick Quality',
-                        subtitle: 'Request a preferred stream quality'
+                        subtitle: `Selected: ${window.__ytarkQualityStatus?.selected || configRead('preferredVideoQuality')}; actual: ${window.__ytarkQualityStatus?.actual || 'not reported by player'}`
                     },
                     options: QUALITY_LEVELS.map(level => ({
                         name: level === 'auto' ? 'Auto' : level + 'p',
@@ -71,6 +71,42 @@ export default function modernUI(update, parameters) {
                         value: level === 'auto' ? 'auto' : level + 'p'
                     }))
                 },
+                // --- Independent client-side controls ---
+                {
+                    name: 'Ad blocking',
+                    subtitle: `Currently ${configRead('enableAdBlock') ? 'ON' : 'OFF'}; enabled by default. Independent of SponsorBlock and the logo.`,
+                    icon: 'DOLLAR_SIGN',
+                    value: 'enableAdBlock'
+                },
+                {
+                    name: 'YouTube Premium logo — cosmetic',
+                    subtitle: 'Visual only; it does not enable or claim a paid subscription.',
+                    icon: 'VIDEO_YOUTUBE',
+                    value: 'enablePremiumLogo'
+                },
+                {
+                    name: 'User-Agent profile (experimental)',
+                    subtitle: `Selected: ${configRead('userAgentProfile') || 'native'}; native Cobalt is recommended.`,
+                    icon: 'SETTINGS',
+                    value: null,
+                    menuId: 'ytark-user-agent-profile',
+                    menuHeader: {
+                        title: 'User-Agent profile',
+                        subtitle: 'Does not change the updater APK architecture.'
+                    },
+                    options: [
+                        { name: 'Native Cobalt (recommended)', key: 'userAgentProfile', value: 'native' },
+                        { name: 'Android TV 32-bit (experimental)', key: 'userAgentProfile', value: 'androidTv32' },
+                        { name: 'Android TV 64-bit (experimental)', key: 'userAgentProfile', value: 'androidTv64' },
+                        { name: 'TCL Android TV 32-bit (experimental)', key: 'userAgentProfile', value: 'tclTv32' },
+                        { name: 'Fire TV 32-bit (experimental)', key: 'userAgentProfile', value: 'fireTv32' }
+                    ]
+                },
+                buttonItem(
+                    { title: 'Reset User-Agent profile', subtitle: 'Recovery: restore native Cobalt behavior' },
+                    { icon: 'UNDO' },
+                    [{ customAction: { action: 'RESET_USER_AGENT_PROFILE' } }]
+                ),
                 // --- Individual quick toggles ---
                 {
                     name: 'Hide Shorts',
@@ -119,7 +155,11 @@ export default function modernUI(update, parameters) {
             options: [
                 {
                     name: 'GitHub',
-                    link: 'https://github.com/reisxd/TizenTube',
+                    link: 'https://github.com/2archiver/YTArk',
+                },
+                {
+                    name: 'Ko-fi',
+                    link: 'https://ko-fi.com/2archiver',
                 },
                 {
                     name: 'YouTube',
@@ -175,20 +215,20 @@ export default function modernUI(update, parameters) {
             })
         },
         {
-            name: t('settings.options.adBlock'),
-            icon: 'DOLLAR_SIGN',
-            value: 'enableAdBlock'
-        },
-        {
             name: t('settings.options.sponsorblock.title'),
             icon: 'MONEY_HAND',
             value: null,
             menuId: 'tt-sponsorblock-settings',
             menuHeader: {
                 title: t('settings.options.sponsorblock.title'),
-                subtitle: 'https://sponsor.ajay.app/'
+                subtitle: `Currently ${configRead('enableSponsorBlock') ? 'ON' : 'OFF'} · https://sponsor.ajay.app/`
             },
             options: [
+                buttonItem(
+                    { title: 'Undo last manual skip', subtitle: window.__ytarkLastSponsorBlockSkip && Date.now() < window.__ytarkLastSponsorBlockSkip.expiresAt ? 'Undo the most recent SponsorBlock skip' : 'No recent manual skip to undo' },
+                    { icon: 'UNDO' },
+                    [{ customAction: { action: 'SPONSORBLOCK_UNDO_SKIP' } }]
+                ),
                 {
                     name: t('settings.options.sponsorblock.options.enableSB'),
                     icon: 'MONEY_HAND',
