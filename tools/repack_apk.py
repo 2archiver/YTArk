@@ -3,14 +3,16 @@
 repack_apk.py — Repack TizenTubeCobalt APK into a personalized build.
 
 What it does (per APK):
-  1. apktool decode (resources + dex stay raw: --no-res --no-src)
+  1. apktool decode (dex stays raw: --no-src; resources + manifest decode
+     to text — apktool 3.x leaves the manifest binary under --no-res)
   2. Patch AndroidManifest.xml: new package id, new authorities, new label
   3. Patch apktool.yml: new versionCode / versionName
   4. Binary-patch the userscript URL inside lib/*/*.so
      (same-host jsDelivr URL, same byte length, zero-padded query —
       keeps the CSP allowlist in the same .so valid)
   5. apktool build
-  6. Re-zip with native libs stored uncompressed (extractNativeLibs=false compat)
+  6. Re-zip with lib/*.so AND resources.arsc stored uncompressed
+     (extractNativeLibs=false + targetSdk 30+ requirements)
   7. zipalign -p 4
 
 Signing is left to the caller (apksigner).
@@ -172,19 +174,21 @@ def patch_apktool_yml(path: str, version_code: int, version_name: str) -> None:
 # Zip handling
 # ---------------------------------------------------------------------------
 
-def store_native_libs_uncompressed(apk_path: str) -> None:
-    """Rewrite the zip with lib/*.so stored (not deflated).
+def store_uncompressed(apk_path: str) -> None:
+    """Rewrite the zip with lib/*.so and resources.arsc stored (not deflated).
 
     Modern Android (targetSdk 30+, extractNativeLibs unset/false) requires
-    uncompressed page-aligned native libs. zipalign -p afterwards handles
-    the alignment; this handles the compression method.
+    uncompressed, page-aligned native libs, and an uncompressed 4-byte
+    aligned resources.arsc. zipalign -p afterwards handles alignment; this
+    handles the compression methods.
     """
+    force_stored = lambda name: name.startswith("lib/") or name == "resources.arsc"
     tmp = apk_path + ".tmp"
     with zipfile.ZipFile(apk_path) as zin, \
             zipfile.ZipFile(tmp, "w") as zout:
         for item in zin.infolist():
             data = zin.read(item.filename)
-            if item.filename.startswith("lib/") and \
+            if force_stored(item.filename) and \
                     item.compress_type != zipfile.ZIP_STORED:
                 info = zipfile.ZipInfo(item.filename, item.date_time)
                 info.compress_type = zipfile.ZIP_STORED
@@ -194,7 +198,7 @@ def store_native_libs_uncompressed(apk_path: str) -> None:
             else:
                 zout.writestr(item, data)
     os.replace(tmp, apk_path)
-    print(f"[*] Rewrote zip: lib/*.so stored uncompressed")
+    print("[*] Rewrote zip: lib/*.so + resources.arsc stored uncompressed")
 
 
 # ---------------------------------------------------------------------------
@@ -208,8 +212,8 @@ def repack(args) -> None:
 
     apktool = args.apktool.split()
 
-    print(f"[*] Decoding {args.base} (resources + dex stay raw)")
-    run(apktool + ["d", "--no-res", "--no-src", "--force",
+    print(f"[*] Decoding {args.base} (dex stays raw, resources + manifest decoded)")
+    run(apktool + ["d", "--no-src", "--force",
                    "--output", decoded, args.base])
 
     patch_script_url(decoded, args.script_url)
@@ -222,7 +226,7 @@ def repack(args) -> None:
     print("[*] Rebuilding APK")
     run(apktool + ["b", decoded, "--output", unsigned])
 
-    store_native_libs_uncompressed(unsigned)
+    store_uncompressed(unsigned)
 
     aligned = os.path.join(work, "aligned.apk")
     print("[*] zipalign (-f -p 4)")
@@ -337,7 +341,7 @@ def self_test() -> None:
                     compress_type=zipfile.ZIP_DEFLATED)
         zf.writestr("classes.dex", b"\0" * 64,
                     compress_type=zipfile.ZIP_DEFLATED)
-    store_native_libs_uncompressed(zpath)
+    store_uncompressed(zpath)
     with zipfile.ZipFile(zpath) as zf:
         lib_stored = zf.getinfo("lib/arm64-v8a/libchrobalt.so").compress_type \
             == zipfile.ZIP_STORED
