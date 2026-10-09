@@ -34,11 +34,6 @@ JSON.parse = function () {
     if (!r || typeof r !== 'object') return r;
     const adBlockEnabled = configRead('enableAdBlock');
 
-    if (r?.playbackContext?.contentPlaybackContext) {
-      // Handle inline playback without ads
-      console.log(r.playbackContext.contentPlaybackContext);
-    }
-
     if (r.adPlacements && adBlockEnabled) {
       r.adPlacements = [];
     }
