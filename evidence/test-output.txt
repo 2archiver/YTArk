@@ -1,0 +1,238 @@
+Setting key enableUpdater to false
+Setting key videoSpeed to 2
+Setting key enableAdBlock to false
+Setting key videoSpeed to 1.5
+Setting key enableClock to true
+Setting key enableShorts to true
+Setting key enablePreviews to true
+Setting key tvLastPresetSnapshot to {"presetKey":"cleanTV","snapshot":{"enableShorts":true,"enablePreviews":true,"enableHideEndScreenCards":false,"hideRelatedVideosPlayer":false,"enablePaidPromotionOverlay":true,"enableYouThereRenderer":true}}
+Setting key tvActivePreset to cleanTV
+Setting key enableShorts to false
+Setting key enablePreviews to false
+Setting key enableHideEndScreenCards to true
+Setting key hideRelatedVideosPlayer to true
+Setting key enablePaidPromotionOverlay to false
+Setting key enableYouThereRenderer to false
+Setting key focusContainerColor to #0f0f0f
+Setting key routeColor to #0f0f0f
+Setting key tvLastPresetSnapshot to {"presetKey":"midnightBlue","snapshot":{"focusContainerColor":"#0f0f0f","routeColor":"#0f0f0f"}}
+Setting key tvActivePreset to midnightBlue
+Setting key focusContainerColor to #0a1628
+Setting key routeColor to #0d1f3c
+Setting key focusContainerColor to #0a1628
+Setting key routeColor to #0d1f3c
+Setting key tvLastPresetSnapshot to {"presetKey":"classicDark","snapshot":{"focusContainerColor":"#0a1628","routeColor":"#0d1f3c"}}
+Setting key tvActivePreset to classicDark
+Setting key focusContainerColor to #0f0f0f
+Setting key routeColor to #0f0f0f
+Setting key enableShorts to true
+Setting key enablePreviews to true
+Setting key tvLastPresetSnapshot to {"presetKey":"cleanTV","snapshot":{"enableShorts":true,"enablePreviews":true,"enableHideEndScreenCards":true,"hideRelatedVideosPlayer":true,"enablePaidPromotionOverlay":false,"enableYouThereRenderer":false}}
+Setting key tvActivePreset to cleanTV
+Setting key enableShorts to false
+Setting key enablePreviews to false
+Setting key enableHideEndScreenCards to true
+Setting key hideRelatedVideosPlayer to true
+Setting key enablePaidPromotionOverlay to false
+Setting key enableYouThereRenderer to false
+Setting key enableShorts to true
+Setting key enablePreviews to true
+Setting key enableHideEndScreenCards to true
+Setting key hideRelatedVideosPlayer to true
+Setting key enablePaidPromotionOverlay to false
+Setting key enableYouThereRenderer to false
+Setting key tvActivePreset to null
+Setting key tvLastPresetSnapshot to null
+Setting key tvLastPresetSnapshot to null
+Setting key tvLastPresetSnapshot to {"presetKey":"cleanTV","snapshot":{"enableShorts":true,"enablePreviews":true,"enableHideEndScreenCards":true,"hideRelatedVideosPlayer":true,"enablePaidPromotionOverlay":false,"enableYouThereRenderer":false}}
+Setting key tvActivePreset to cleanTV
+Setting key enableShorts to false
+Setting key enablePreviews to false
+Setting key enableHideEndScreenCards to true
+Setting key hideRelatedVideosPlayer to true
+Setting key enablePaidPromotionOverlay to false
+Setting key enableYouThereRenderer to false
+Setting key enableShorts to true
+Setting key focusContainerColor to #0f0f0f
+Setting key tvLastPresetSnapshot to {"presetKey":"cleanTV","snapshot":{"enableShorts":true,"enablePreviews":false,"enableHideEndScreenCards":true,"hideRelatedVideosPlayer":true,"enablePaidPromotionOverlay":false,"enableYouThereRenderer":false}}
+Setting key tvActivePreset to cleanTV
+Setting key enableShorts to false
+Setting key enablePreviews to false
+Setting key enableHideEndScreenCards to true
+Setting key hideRelatedVideosPlayer to true
+Setting key enablePaidPromotionOverlay to false
+Setting key enableYouThereRenderer to false
+Setting key tvLastPresetSnapshot to {"presetKey":"midnightBlue","snapshot":{"focusContainerColor":"#0f0f0f","routeColor":"#0f0f0f"}}
+Setting key tvActivePreset to midnightBlue
+Setting key focusContainerColor to #0a1628
+Setting key routeColor to #0d1f3c
+Setting key focusContainerColor to #0f0f0f
+Setting key routeColor to #0f0f0f
+Setting key tvActivePreset to null
+Setting key tvLastPresetSnapshot to null
+Setting key tvQuickQuality to 1080
+Setting key preferredVideoQuality to 1080p
+Setting key tvQuickQuality to auto
+Setting key preferredVideoQuality to auto
+TAP version 13
+# Subtest: Config resilience
+    # Subtest: reads default values for keys not in stored config
+    ok 1 - reads default values for keys not in stored config
+      ---
+      duration_ms: 1.195863
+      type: 'test'
+      ...
+    # Subtest: does not crash when localStorage write fails
+    ok 2 - does not crash when localStorage write fails
+      ---
+      duration_ms: 0.640656
+      type: 'test'
+      ...
+    1..2
+ok 1 - Config resilience
+  ---
+  duration_ms: 3.202225
+  type: 'suite'
+  ...
+# Subtest: TV Presets — Clean TV
+    # Subtest: hides Shorts, previews, end cards, related; preserves others
+    ok 1 - hides Shorts, previews, end cards, related; preserves others
+      ---
+      duration_ms: 2.194273
+      type: 'test'
+      ...
+    1..1
+ok 2 - TV Presets — Clean TV
+  ---
+  duration_ms: 2.4176
+  type: 'suite'
+  ...
+# Subtest: TV Presets — Midnight Blue
+    # Subtest: changes theme colors to midnight blue
+    ok 1 - changes theme colors to midnight blue
+      ---
+      duration_ms: 0.673606
+      type: 'test'
+      ...
+    1..1
+ok 3 - TV Presets — Midnight Blue
+  ---
+  duration_ms: 0.858036
+  type: 'suite'
+  ...
+# Subtest: TV Presets — Classic Dark
+    # Subtest: resets colors to classic dark
+    ok 1 - resets colors to classic dark
+      ---
+      duration_ms: 2.042338
+      type: 'test'
+      ...
+    1..1
+ok 4 - TV Presets — Classic Dark
+  ---
+  duration_ms: 2.556882
+  type: 'suite'
+  ...
+# Subtest: Preset undo
+    # Subtest: restores values from before the last preset
+    ok 1 - restores values from before the last preset
+      ---
+      duration_ms: 1.40396
+      type: 'test'
+      ...
+    # Subtest: returns false when no snapshot exists
+    ok 2 - returns false when no snapshot exists
+      ---
+      duration_ms: 0.285841
+      type: 'test'
+      ...
+    # Subtest: saves a snapshot when applying a preset
+    ok 3 - saves a snapshot when applying a preset
+      ---
+      duration_ms: 0.563074
+      type: 'test'
+      ...
+    # Subtest: only undoes the last preset, not earlier ones
+    ok 4 - only undoes the last preset, not earlier ones
+      ---
+      duration_ms: 0.635859
+      type: 'test'
+      ...
+    1..4
+ok 5 - Preset undo
+  ---
+  duration_ms: 3.395314
+  type: 'suite'
+  ...
+# Subtest: Quality selection
+    # Subtest: QUALITY_LEVELS contains expected levels
+    ok 1 - QUALITY_LEVELS contains expected levels
+      ---
+      duration_ms: 1.085143
+      type: 'test'
+      ...
+    # Subtest: setQuickQuality writes preferredVideoQuality correctly
+    ok 2 - setQuickQuality writes preferredVideoQuality correctly
+      ---
+      duration_ms: 0.349278
+      type: 'test'
+      ...
+    # Subtest: setQuickQuality auto writes "auto"
+    ok 3 - setQuickQuality auto writes "auto"
+      ---
+      duration_ms: 0.225432
+      type: 'test'
+      ...
+    1..3
+ok 6 - Quality selection
+  ---
+  duration_ms: 1.837921
+  type: 'suite'
+  ...
+# Subtest: Updater disabled
+    # Subtest: enableUpdater was set to false at import time
+    ok 1 - enableUpdater was set to false at import time
+      ---
+      duration_ms: 0.132183
+      type: 'test'
+      ...
+    1..1
+ok 7 - Updater disabled
+  ---
+  duration_ms: 0.230697
+  type: 'suite'
+  ...
+# Subtest: PRESETS definitions
+    # Subtest: cleanTV hides Shorts and previews
+    ok 1 - cleanTV hides Shorts and previews
+      ---
+      duration_ms: 0.149893
+      type: 'test'
+      ...
+    # Subtest: midnightBlue sets dark blue colors
+    ok 2 - midnightBlue sets dark blue colors
+      ---
+      duration_ms: 0.120849
+      type: 'test'
+      ...
+    # Subtest: classicDark resets to default dark
+    ok 3 - classicDark resets to default dark
+      ---
+      duration_ms: 0.127623
+      type: 'test'
+      ...
+    1..3
+ok 8 - PRESETS definitions
+  ---
+  duration_ms: 0.574947
+  type: 'suite'
+  ...
+1..8
+# tests 16
+# suites 8
+# pass 16
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 39.739256

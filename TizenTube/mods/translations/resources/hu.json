@@ -1,0 +1,308 @@
+{
+    "__contributors": [
+        "reisxd"
+    ],
+    "settings": {
+        "options": {
+            "socialMedia": {
+                "title": "Közösségi Média Linkek",
+                "qrCodeScanMessage": "Nyisd meg a(z) {{name}} oldalt a QR kód szkennelésével!",
+                "announcements": "Announcements",
+                "group": "Group",
+                "website": "Website",
+                "githubSponsors": "GitHub Sponsors"
+            },
+            "adBlock": "Hirdetésblokkolás",
+            "sponsorblock": {
+                "title": "SponsorBlock beállítások",
+                "options": {
+                    "enableSB": "SponsorBlock bekapcsolása",
+                    "manualSkip": "SponsorBlock szegmens manuális átugrása",
+                    "segments": "Szegmensek",
+                    "categories": {
+                        "sponsor": "Szponzor átugrása",
+                        "intro": "Bevezető (intró) átugrása",
+                        "outro": "Lezárás (outró) átugrása",
+                        "interaction": "Interakció átugrása",
+                        "selfpromo": "Önpromó átugrása",
+                        "preview": "Ízelítő/visszatekintő átugrása",
+                        "filler": "Filler/kitekintő rész átugrása",
+                        "music_offtopic": "Nem kapcsolódó, zenés rész átugrása",
+                        "highlights": "Kiemelt részek bekapcsolása"
+                    },
+                    "showSBToasts": "SponsorBlock Toast-ok megjelenítése"
+                }
+            },
+            "dearrow": {
+                "title": "DeArrow beállítások",
+                "options": {
+                    "enableDA": "DeArrow bekapcsolása",
+                    "enableDAThumbnails": "DeArrow indexképek bekapcsolása"
+                }
+            },
+            "misc": {
+                "title": "Egyéb beállítások",
+                "options": {
+                    "endScreenCards": "Videó végi ajánlások (záróképernyő) elrejtése",
+                    "youThereRenderer": "'Még nézed?...' megjelenítő bekapcsolása",
+                    "paidPromoOverlay": "'Fizetett promóciót tartalmaz' üzenet bekapcsolása",
+                    "whosWatching": {
+                        "title": "'Ki nézi?' menü",
+                        "options": {
+                            "enableWW": "'Ki nézi?' menü bekapcsolása",
+                            "permaEnableWW": "'Ki nézi?' menü végleges bekapcsolása",
+                            "enableWWOnExit": "'Ki nézi?' menü bekapcsolása kilépéskor"
+                        }
+                    },
+                    "fixUI": "Felhasználói felület javítása",
+                    "hqThumbnails": "Magas minőségű indexképek bekapcsolása",
+                    "longPress": "Hosszan lenyomva tartott funkciók",
+                    "shorts": "Short-ok bekapcsolása",
+                    "videoPreviews": "Videó előnézet kapcsolása",
+                    "ttWelcomeMsg": "TizenTube indítóüzenet megjelenítése",
+                    "guestSignInReminder": "Vendég fiók bejelentkezés emlékeztető megjelenítése",
+                    "reloadHomeOnStartup": "Kezdőképernyő újratöltése indításkor"
+                }
+            },
+            "subtitles": {
+                "title": "Felirat beállítások",
+                "options": {
+                    "showLocalSubtitle": "Helyi feliratok megjelenítése",
+                    "showHiddenSubtitles": "Rejtett feliratok megjelenítése"
+                }
+            },
+            "videoPlayer": {
+                "title": "Videólejátszó beállítások",
+                "subtitle": "A videólejátszó funkcióinak testreszabása",
+                "options": {
+                    "patching": {
+                        "title": "Kezelőfelület javítása",
+                        "options": {
+                            "enableVPUIPatching": "Videólejátszó kezelőfelület javításának bekapcsolása",
+                            "previousNextBtns": "Előző és Következő gombok bekapcsolása",
+                            "showSuperThxBtn": "Szuperköszönet gomb megjelenítése",
+                            "showSpeedCtrlBtn": "Lejátszási sebesség megjelenítése",
+                            "showAIAskBtn": "Show Ask Button",
+                            "addMPBtn": "Show Mini Player Button",
+                            "swapMPWithPIP": "Swap Mini Player Button with PiP Button"
+                        }
+                    },
+                    "preferredVideoQuality": {
+                        "title": "Preferált minőség",
+                        "subtitle": "Válaszd ki a kívánt videóminőséget, ami a lejátszás indításánál lesz alkalmazva (ha elérhető)"
+                    },
+                    "speedSettings": {
+                        "title": "Sebesség lépésközei",
+                        "subtitle": "Adja meg az videólejátszási sebesség választható értékeit"
+                    },
+                    "preferredVideoCodec": {
+                        "title": "Preferált videó kódek",
+                        "subtitle": "Válaszd ki a preferált kódeket a lejásztáshoz"
+                    },
+                    "afr": "Autómatikus képkockasebesség",
+                    "afrPauseDuration": {
+                        "title": "Képkockasebesség váltási szünet időtartalma",
+                        "subtitle": "Állítsa be a videó lejátszásának szüneteltetési idejét (másodpercben) a képkockasebesség módosításakor"
+                    },
+                    "codecAny": "Any",
+                    "qualityAuto": "Auto",
+                    "hideRelatedVideosPlayer": "Hide Related Videos"
+                }
+            },
+            "uiSettings": {
+                "title": "Felhasználói felület beállításai",
+                "subtitle": "Felület testreszabása",
+                "options": {
+                    "hideWatchedVideos": {
+                        "title": "Megtekintett videók elrejtése",
+                        "options": {
+                            "enableHideWatchedVideos": "Megtekintett videók elrejtésének bekapcsolása",
+                            "watchedVideosThreshold": {
+                                "title": "Megtekintés határérték",
+                                "subtitle": "Állítsd be azt az értéket, hogy hány százaléktól számít megtekintettnek a videó"
+                            },
+                            "setPagesToHideWatchedVideos": "Oldalak beállítása a megtekintett videók elrejtéséhez"
+                        }
+                    },
+                    "screenDimming": {
+                        "title": "Képernyő sötétítése",
+                        "options": {
+                            "enableScreenDimming": "Képernyő sötétítésének bekapcsolása",
+                            "dimmingTimeout": {
+                                "title": "Sötétítés időtúllépése",
+                                "subtitle": "Állítsd be inaktivitási időkorlátot (másodpercben), mielőtt a képernyő elsötétül"
+                            },
+                            "dimmingOpacity": {
+                                "title": "Sötétítés mértéke",
+                                "subtitle": "Állítsd be áttetszőség erősségét"
+                            }
+                        }
+                    },
+                    "disableSidebarContents": {
+                        "title": "Oldalsáv tartalmának letiltása",
+                        "subtitle": "Válaszd ki az oldalsáv elemeit a letiltásukhoz"
+                    },
+                    "launchToOnStartup": {
+                        "title": "Kiválasztott kezdőoldal indításkor",
+                        "subtitle": "Válaszd ki azt az oldalt, amit a TizenTube nyit meg indításkor"
+                    },
+                    "categories": {
+                        "search": "Search",
+                        "home": "Home",
+                        "sports": "Sports",
+                        "news": "News",
+                        "music": "Music",
+                        "podcasts": "Podcasts",
+                        "moviesAndTv": "Movies & TV",
+                        "live": "Live",
+                        "gaming": "Gaming",
+                        "subscriptions": "Subscriptions",
+                        "library": "Library",
+                        "more": "More",
+                        "shorts": "Shorts",
+                        "searchResults": "Search Results"
+                    },
+                    "sortSubscriptionsByAlphabet": "Sort Subscriptions Alphabetically",
+                    "disableChannelsOnSidebar": "Disable Channels on Sidebar",
+                    "clock": {
+                        "title": "Clock",
+                        "subtitle": "Display a clock on the screen",
+                        "options": {
+                            "enableClock": "Enable Clock",
+                            "isClock12HourFormat": "Use 12-Hour Format for Clock",
+                            "clockShowSeconds": "Show Seconds on Clock",
+                            "clockHideWhenVideoPlaying": "Hide Clock While Video is Playing"
+                        }
+                    },
+                    "disableEnlargingThumbnails": "Disable Enlarged Thumbnails",
+                    "enableShrinkingThumbnails": "Enable Shrinked Thumbnails",
+                    "sortSidebarContents": {
+                        "title": "Sort Sidebar Contents",
+                        "subtitle": "Reorder sidebar contents to your preference",
+                        "moveUp": {
+                            "title": "Move Up",
+                            "subtitle": "Move this item up in the sidebar"
+                        },
+                        "moveDown": {
+                            "title": "Move Down",
+                            "subtitle": "Move this item down in the sidebar"
+                        },
+                        "addToSidebar": "Add Channel to Sidebar",
+                        "removeFromSidebar": "Remove Channel from Sidebar"
+                    }
+                }
+            },
+            "time": {
+                "second": "{{count}} second",
+                "seconds": "{{count}} seconds",
+                "minute": "{{count}} minute",
+                "minutes": "{{count}} minutes"
+            },
+            "updater": {
+                "title": "TizenTube Cobalt Updater",
+                "menuSubtitle": "Manage TizenTube Cobalt updates",
+                "versionSubtitle": "Current version: {{version}}",
+                "options": {
+                    "checkForUpdates": "Check for updates",
+                    "checkForUpdatesOnStartup": "Check for updates on startup"
+                },
+                "updateAvailable": {
+                    "title": "Update Available",
+                    "subtitle": "A new version of TizenTube Cobalt is available: {{latestVersion}}, current: {{currentVersion}}"
+                },
+                "releaseDate": "Release Date: {{date}}",
+                "updateNow": {
+                    "title": "Update Now",
+                    "subtitle": "Click to download the latest version."
+                },
+                "remindLater": {
+                    "title": "Remind Me Later",
+                    "subtitle": "Check for updates later."
+                },
+                "upToDate": {
+                    "title": "TizenTube is up to date",
+                    "subtitle": "You are using the latest version ({{version}}) of TizenTube Cobalt."
+                },
+                "checkFailed": {
+                    "title": "TizenTube update check failed",
+                    "subtitle": "Could not check for updates."
+                },
+                "downloading": {
+                    "title": "TizenTube Update",
+                    "subtitle": "Downloading update, please wait..."
+                }
+            }
+        },
+        "ttSettings": {
+            "title": "TizenTube beállítások",
+            "madeByText": "Készítette: Reis Can (reisxd) csupa ❤️-vel",
+            "summary": "Nyisd meg a TizenTube beállításokat"
+        },
+        "supportTT": {
+            "title": "Támogasd a TizenTube-ot",
+            "subtitle": "❤️ Fejezd ki a köszöneted a TizenTube és azok fejlesztései felé",
+            "content": {
+                "1": "Ha tetszik a TizenTube és támogatnád a fejlesztését:",
+                "2": "1. Csillagozd be a GitHub-on, hogy többekhez eljusson",
+                "3": "2. Oszd meg a TizenTube-ot másokkal",
+                "4": "Ha anyagilag is szeretnéd támogatni, a következő linkeken megteheted:",
+                "5": "- Hívj meg egy kávéra: https://www.buymeacoffee.com/reisxd (inkább ezen)",
+                "6": "- GitHub szponzorok: https://github.com/sponsors/reisxd"
+            }
+        }
+    },
+    "welcomeMsg": {
+        "title": "Üdvözöl a TizenTube!",
+        "subtitle": "A testreszabáshoz navigálj a TizenTube beállításokra"
+    },
+    "sponsorblock": {
+        "segments": {
+            "sponsor": "szponzorált szegmens",
+            "intro": "intró",
+            "outro": "outró",
+            "interaction": "interakció emlékeztető",
+            "selfpromo": "önpromó",
+            "preview": "visszatekintő/ízelítő",
+            "filler": "kitekintő/filler",
+            "music_offtopic": "nem-zenei rész",
+            "poi_highlight": "kiemelt rész"
+        },
+        "toasts": {
+            "skipping": "{{segment}} átugorva",
+            "notSkipping": "{{segment}} nincs átugorva ({{count}} alkalommal átugrova)",
+            "skip": "{{segment}} átugrása",
+            "skipToHighlight": "Ugrás a kiemelt részhez"
+        }
+    },
+    "player": {
+        "playbackSpeed": {
+            "title": "Playback Speed",
+            "button": "Speed Controls",
+            "fixStuttering": "Fix stuttering (1.0001x)"
+        },
+        "miniPlayer": "Mini Player",
+        "pictureInPicture": "Picture in Picture",
+        "previous": "Previous",
+        "next": "Next",
+        "withTizenTube": "with TizenTube",
+        "share": {
+            "title": "Share",
+            "button": "Share",
+            "qrCodeScanMessage": "Scan the QR code below to share this video."
+        },
+        "screenOff": "Turn off screen"
+    },
+    "toasts": {
+        "videoAddedToQueue": "Video added to queue.",
+        "videoQueueCleared": "Video queue cleared.",
+        "sidebarContentsUpdated": {
+            "title": "Sidebar Contents Updated",
+            "subtitle": "The sidebar contents have been updated."
+        },
+        "feedbackSent": "Feedback sent."
+    },
+    "videoMenu": {
+        "notInterested": "Not interested",
+        "dontRecommendChannel": "Don't recommend channel"
+    }
+}

@@ -1,0 +1,392 @@
+import { configWrite, configRead } from './config.js';
+import { enablePip } from './features/pictureInPicture.js';
+import modernUI, { optionShow } from './ui/settings.js';
+import { speedSettings } from './ui/speedUI.js';
+import { showToast, buttonItem, showModal, QrCodeRenderer, overlayPanelItemListRenderer, overlayMessageRenderer } from './ui/ytUI.js';
+import checkForUpdates from './features/updater.js';
+import { t } from 'i18next';
+import { requestNextAndNavigateChannel, getFeedbackPanelTokens, sendFeedbackToken } from './utils/innerTubeCalls.js';
+import qrcode from 'qrcode-npm';
+import showGuideSettings from './ui/sidebarModification.js';
+import { applyPreset, undoLastPreset, setQuickQuality, updateThemeStylesheet } from './features/tvControls.js';
+
+export default function resolveCommand(cmd, _) {
+    // resolveCommand function is pretty OP, it can do from opening modals, changing client settings and way more.
+    // Because the client might change, we should find it first.
+
+    for (const key in window._yttv) {
+        if (window._yttv[key] && window._yttv[key].instance && window._yttv[key].instance.resolveCommand) {
+            return window._yttv[key].instance.resolveCommand(cmd, _);
+        }
+    }
+}
+
+export function findFunction(funcName) {
+    for (const key in window._yttv) {
+        if (window._yttv[key] && window._yttv[key][funcName] && typeof window._yttv[key][funcName] === 'function') {
+            return window._yttv[key][funcName];
+        }
+    }
+}
+
+// Patch resolveCommand to be able to change TizenTube settings
+
+export function patchResolveCommand() {
+    for (const key in window._yttv) {
+        if (window._yttv[key] && window._yttv[key].instance && window._yttv[key].instance.resolveCommand) {
+
+            const ogResolve = window._yttv[key].instance.resolveCommand;
+            window._yttv[key].instance.resolveCommand = function (cmd, _) {
+                if (cmd.setClientSettingEndpoint) {
+                    // Command to change client settings. Use TizenTube configuration to change settings.
+                    for (const settings of cmd.setClientSettingEndpoint.settingDatas) {
+                        if (!settings.clientSettingEnum.item.includes('_')) {
+                            for (const setting of cmd.setClientSettingEndpoint.settingDatas) {
+                                const valName = Object.keys(setting).find(key => key.includes('Value'));
+                                const value = valName === 'intValue' ? Number(setting[valName]) : setting[valName];
+                                if (valName === 'arrayValue') {
+                                    const arr = configRead(setting.clientSettingEnum.item);
+                                    if (arr.includes(value)) {
+                                        arr.splice(arr.indexOf(value), 1);
+                                    } else {
+                                        arr.push(value);
+                                    }
+                                    configWrite(setting.clientSettingEnum.item, arr);
+                                } else configWrite(setting.clientSettingEnum.item, value);
+                            }
+                        } else if (settings.clientSettingEnum.item === 'I18N_LANGUAGE') {
+                            const lang = settings.stringValue;
+                            const date = new Date();
+                            date.setFullYear(date.getFullYear() + 10);
+                            document.cookie = `PREF=hl=${lang}; expires=${date.toUTCString()};`;
+                            resolveCommand({
+                                signalAction: {
+                                    signal: 'RELOAD_PAGE'
+                                }
+                            });
+                            return true;
+                        }
+                    }
+                } else if (cmd.customAction) {
+                    customAction(cmd.customAction.action, cmd.customAction.parameters);
+                    return true;
+                } else if (cmd?.signalAction?.customAction) {
+                    customAction(cmd.signalAction.customAction.action, cmd.signalAction.customAction.parameters);
+                    return true;
+                } else if (cmd?.showEngagementPanelEndpoint?.customAction) {
+                    customAction(cmd.showEngagementPanelEndpoint.customAction.action, cmd.showEngagementPanelEndpoint.customAction.parameters);
+                    return true;
+                } else if (cmd?.playlistEditEndpoint?.customAction) {
+                    customAction(cmd.playlistEditEndpoint.customAction.action, cmd.playlistEditEndpoint.customAction.parameters);
+                    return true;
+                } else if (cmd?.openPopupAction?.uniqueId === 'playback-settings') {
+                    // Patch the playback settings popup to use TizenTube speed settings
+                    const items = cmd.openPopupAction.popup.overlaySectionRenderer.overlay.overlayTwoPanelRenderer.actionPanel.overlayPanelRenderer.content.overlayPanelItemListRenderer.items;
+                    for (const item of items) {
+                        if (item?.compactLinkRenderer?.icon?.iconType === 'SLOW_MOTION_VIDEO') {
+                            item.compactLinkRenderer.subtitle && (item.compactLinkRenderer.subtitle.simpleText = t('player.withTizenTube'));
+                            item.compactLinkRenderer.serviceEndpoint = {
+                                clickTrackingParams: "null",
+                                signalAction: {
+                                    customAction: {
+                                        action: 'TT_SPEED_SETTINGS_SHOW',
+                                        parameters: []
+                                    }
+                                }
+                            };
+                        }
+                    }
+
+                    cmd.openPopupAction.popup.overlaySectionRenderer.overlay.overlayTwoPanelRenderer.actionPanel.overlayPanelRenderer.content.overlayPanelItemListRenderer.items.splice(2, 0,
+                        buttonItem(
+                            { title: t('player.miniPlayer') },
+                            { icon: 'CLEAR_COOKIES' }, [
+                            {
+                                customAction: {
+                                    action: 'ENTER_MP'
+                                }
+                            }
+                        ])
+                    );
+
+                    cmd.openPopupAction.popup.overlaySectionRenderer.overlay.overlayTwoPanelRenderer.actionPanel.overlayPanelRenderer.content.overlayPanelItemListRenderer.items.splice(3, 0,
+                        buttonItem(
+                            { title: t('player.share.button') },
+                            { icon: 'OPEN_IN_NEW' }, [
+                            {
+                                customAction: {
+                                    action: 'SHARE'
+                                }
+                            }
+                        ])
+                    );
+
+                    cmd.openPopupAction.popup.overlaySectionRenderer.overlay.overlayTwoPanelRenderer.actionPanel.overlayPanelRenderer.content.overlayPanelItemListRenderer.items.splice(3, 0,
+                        buttonItem(
+                            { title: t('player.screenOff') },
+                            { icon: 'EYE_OFF' }, [
+                            {
+                                customAction: {
+                                    action: 'SCREEN_OFF'
+                                }
+                            }
+                        ])
+                    );
+
+                    if (window.h5vcc && window.h5vcc.tizentube && window.h5vcc.tizentube.HasSystemFeature &&
+                        window.h5vcc.tizentube.HasSystemFeature('android.software.picture_in_picture')) {
+                        cmd.openPopupAction.popup.overlaySectionRenderer.overlay.overlayTwoPanelRenderer.actionPanel.overlayPanelRenderer.content.overlayPanelItemListRenderer.items.splice(3, 0,
+                            buttonItem(
+                                { title: t('player.pictureInPicture') },
+                                { icon: 'TV' }, [
+                                {
+                                    customAction: {
+                                        action: 'ENTER_PIP'
+                                    }
+                                },
+                                {
+                                    signalAction: {
+                                        signal: 'POPUP_BACK'
+                                    }
+                                }
+                            ])
+                        );
+                    }
+                } else if (cmd?.watchEndpoint?.videoId) {
+                    window.isPipPlaying = false;
+                    const ytlrPlayerContainer = document.querySelector('ytlr-player-container');
+                    ytlrPlayerContainer.style.removeProperty('z-index');
+                }
+
+                if (cmd.customAction) return window._yttv[key].instance.resolveCommand(cmd, _);
+
+                if (cmd.commandExecutorCommand && cmd.commandExecutorCommand.commands) {
+                    for (const command of cmd.commandExecutorCommand.commands) {
+                        if (command.customAction) {
+                            customAction(command.customAction.action, command.customAction.parameters);
+                        } else if (command.signalAction?.customAction) {
+                            customAction(command.signalAction.customAction.action, command.signalAction.customAction.parameters);
+                        } else if (command.showEngagementPanelEndpoint?.customAction) {
+                            customAction(command.showEngagementPanelEndpoint.customAction.action, command.showEngagementPanelEndpoint.customAction.parameters);
+                        } else if (command.playlistEditEndpoint?.customAction) {
+                            customAction(command.playlistEditEndpoint.customAction.action, command.playlistEditEndpoint.customAction.parameters);
+                        } else {
+                            window._yttv[key].instance.resolveCommand(command, _);
+                        }
+                    }
+                    return true;
+                }
+
+                if (cmd?.requestAccountSelectorCommand
+                    && cmd.requestAccountSelectorCommand?.identityActionContext?.eventTrigger === 'ACCOUNT_EVENT_TRIGGER_ON_EXIT') {
+                    if (!configRead('enableWhosWatchingMenuOnAppExit')) {
+                        ogResolve.call(this, {
+                            signalAction: {
+                                signal: 'EXIT_APP'
+                            }
+                        });
+                        return false;
+                    }
+                }
+
+                return ogResolve.call(this, cmd, _);
+            }
+        }
+    }
+}
+
+function customAction(action, parameters) {
+    switch (action) {
+        case 'SETTINGS_UPDATE':
+            modernUI(true, parameters);
+            break;
+        case 'OPTIONS_SHOW':
+            optionShow(parameters, parameters.update);
+            break;
+        case 'SKIP':
+            const kE = document.createEvent('Event');
+            kE.initEvent('keydown', true, true);
+            kE.keyCode = 27;
+            kE.which = 27;
+            document.dispatchEvent(kE);
+
+            document.querySelector('video').currentTime = parameters.time;
+            break;
+        case 'TT_SETTINGS_SHOW':
+            modernUI();
+            break;
+        case 'TT_SPEED_SETTINGS_SHOW':
+            speedSettings();
+            break;
+        case 'UPDATE_REMIND_LATER':
+            configWrite('dontCheckUpdateUntil', parameters);
+            break;
+        case 'UPDATE_DOWNLOAD':
+            window.h5vcc.tizentube.InstallAppFromURL(parameters);
+            showToast(t('settings.options.updater.downloading.title'), t('settings.options.updater.downloading.subtitle'));
+            break;
+        case 'SET_PLAYER_SPEED':
+            const speed = Number(parameters);
+            document.querySelector('video').playbackRate = speed;
+            break;
+        case 'ENTER_MP':
+            enablePip();
+            break;
+        case 'ENTER_PIP':
+            window.h5vcc.tizentube.EnterPIP();
+            break;
+        case 'SHOW_TOAST':
+            showToast('TizenTube', parameters);
+            break;
+        case 'ADD_TO_QUEUE':
+            window.queuedVideos.videos.push(parameters);
+            showToast('TizenTube', t('toasts.videoAddedToQueue'));
+            break;
+        case 'CLEAR_QUEUE':
+            window.queuedVideos.videos = [];
+            showToast('TizenTube', t('toasts.videoQueueCleared'));
+            break;
+        case 'CHECK_FOR_UPDATES':
+            checkForUpdates(true);
+            break;
+        case 'GO_TO_CHANNEL':
+            requestNextAndNavigateChannel(parameters);
+            break;
+        case 'NOT_INTERESTED':
+            markFeedback(parameters, 0, true);
+            break;
+        case 'DONT_RECOMMEND_CHANNEL':
+            markFeedback(parameters, 1, false);
+            break;
+        case 'FEEDBACK_REASON':
+            sendFeedbackToken(parameters.token)
+                .then(() => {
+                    resolveCommand({
+                        signalAction: {
+                            signal: 'POPUP_BACK'
+                        }
+                    });
+                    showToast('TizenTube', t('toasts.feedbackSent'));
+                })
+                .catch(err => console.error('TizenTube: failed to send feedback:', err));
+            break;
+        case 'SHARE':
+            const videoPlayer = document.querySelector('.html5-video-player');
+            const videoData = videoPlayer.getVideoData();
+            const videoId = videoData.video_id;
+            const shareUrl = `https://www.youtube.com/watch?v=${videoId}`;
+
+            const qr = qrcode.qrcode(6, 'H');
+            qr.addData(shareUrl);
+            qr.make();
+
+            const qrDataImgTag = qr.createImgTag(8, 8);
+            const qrDataUrl = qrDataImgTag.match(/src="([^"]+)"/)[1];
+
+            showModal({
+                title: t('player.share.title'),
+            }, overlayPanelItemListRenderer([
+                overlayMessageRenderer(t('player.share.qrCodeScanMessage')),
+                QrCodeRenderer(qrDataUrl)
+            ]), 'tt-share-modal');
+            break;
+        case 'SHOW_GUIDE_BUTTONS':
+            showGuideSettings('SHOW_GUIDE_BUTTONS', parameters);
+            break;
+        case 'RELOAD_GUIDE_OPTIONS':
+            showGuideSettings(parameters.settingType, true);
+            break;
+        case 'MOVE_GUIDE_BUTTON':
+            showGuideSettings('MOVE_GUIDE_BUTTON', parameters);
+            break;
+        case 'SHOW_GUIDE_SETTINGS':
+            showGuideSettings(parameters);
+            break;
+        case 'ADD_OR_REMOVE_CHANNEL_TO_SIDEBAR':
+            const sortedSidebarContents = configRead('sidebarContentsOrder');
+
+            if (sortedSidebarContents.find(item => item.browseId === parameters.browseId)) {
+                sortedSidebarContents.splice(sortedSidebarContents.findIndex(item => item.browseId === parameters.browseId), 1);
+            } else {
+                sortedSidebarContents.push({
+                    browseId: parameters.browseId,
+                    title: parameters.title,
+                });
+            }
+            configWrite('sidebarContentsOrder', sortedSidebarContents);
+            showToast(t('toasts.sidebarContentsUpdated.title'), t('toasts.sidebarContentsUpdated.subtitle'));
+            break;
+        case 'SCREEN_OFF':
+            for (const child of document.body.children) {
+                if (child.tagName.toLowerCase() === 'script' || child.tagName.toLowerCase() === 'svg') continue;
+                child.style.setProperty('display', 'none', 'important');
+            }
+            window.screenTurnedOffAt = Date.now();
+            break;
+        case 'TV_APPLY_PRESET':
+            applyPreset(parameters);
+            showToast('TV Quick Controls', `Applied ${parameters} preset`);
+            break;
+        case 'TV_UNDO_PRESET':
+            if (undoLastPreset()) {
+                showToast('TV Quick Controls', 'Undid last preset');
+            } else {
+                showToast('TV Quick Controls', 'Nothing to undo');
+            }
+            break;
+        case 'TV_SET_QUALITY':
+            setQuickQuality(parameters);
+            showToast('TV Quick Controls', `Quality set to ${parameters}`);
+            break;
+    }
+}
+
+// YouTube moved the "Not interested" / "Don't recommend channel" feedback tokens
+// out of the long press menu into an engagement panel (see getFeedbackPanel in
+// adblock.js). Fetch the panel first, then send the feedback with the token it
+// returns (token 0 = "Not interested", token 1 = "Don't recommend channel").
+// If YouTube asks for a dismissal reason, present the reasons in a modal and send
+// the selected one (see FEEDBACK_REASON).
+async function markFeedback(parameters, tokenIndex, showReasons) {
+    try {
+        const tokens = await getFeedbackPanelTokens(parameters.panelId, parameters.params);
+        const token = tokens[tokenIndex];
+        if (!token) return;
+
+        const response = await sendFeedbackToken(token);
+        if (!showReasons) return;
+
+        const dismissal = response?.feedbackResponses?.[0]?.followUpDialog?.dismissalFollowUpRenderer;
+        const reasons = dismissal?.reasons;
+        if (!Array.isArray(reasons) || !reasons.length) return;
+
+        const buttons = reasons.map((reason) => buttonItem(
+            { title: extractText(reason.title) },
+            null,
+            [
+                {
+                    signalAction: {
+                        signal: 'POPUP_BACK'
+                    }
+                },
+                {
+                    customAction: {
+                        action: 'FEEDBACK_REASON',
+                        parameters: { token: reason.token }
+                    }
+                }
+            ]
+        ));
+        showModal(extractText(dismissal.dismissalReasonsPrompt), overlayPanelItemListRenderer(buttons), 'tt-feedback-reasons');
+    } catch (err) {
+        console.error('TizenTube: failed to mark feedback:', err);
+    }
+}
+
+function extractText(text) {
+    if (!text) return '';
+    if (text.simpleText) return text.simpleText;
+    if (text.content) return text.content;
+    if (Array.isArray(text.runs)) return text.runs.map((run) => run?.text ?? '').join('');
+    return String(text);
+}

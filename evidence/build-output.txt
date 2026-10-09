@@ -1,0 +1,4 @@
+
+> @tizentube/mods@1.0.0 build
+> rollup -c rollup.config.js
+

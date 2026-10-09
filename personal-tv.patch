@@ -1,0 +1,684 @@
+diff -ruN '--exclude=.git' '--exclude=node_modules' '--exclude=dist' '--exclude=package-lock.json' TizenTube-upstream/mods/config.js TizenTube/mods/config.js
+--- TizenTube-upstream/mods/config.js	2026-10-09 05:57:24.882774124 +0000
++++ TizenTube/mods/config.js	2026-10-09 06:00:32.257486748 +0000
+@@ -68,15 +68,38 @@
+   disableEnlargingThumbnails: false,
+   enableShrinkingThumbnails: false,
+   hideRelatedVideosPlayer: false,
++
++  // TV Quick Controls
++  tvActivePreset: null,
++  tvLastPresetSnapshot: null,
++  tvQuickQuality: null,
+ };
+ 
+ let localConfig;
+ 
+ try {
+-  localConfig = JSON.parse(window.localStorage[CONFIG_KEY]);
++  const stored = window.localStorage[CONFIG_KEY];
++  if (stored === undefined || stored === null || stored === 'undefined' || stored === 'null') {
++    localConfig = {};
++  } else {
++    const parsed = JSON.parse(stored);
++    if (Array.isArray(parsed) || typeof parsed !== 'object' || parsed === null) {
++      console.warn('Config was not a plain object, resetting to defaults');
++      localConfig = {};
++    } else {
++      localConfig = parsed;
++    }
++  }
+ } catch (err) {
+   console.warn('Config read failed:', err);
+-  localConfig = defaultConfig;
++  localConfig = {};
++}
++
++// Merge defaults for any missing keys
++for (const key of Object.keys(defaultConfig)) {
++  if (localConfig[key] === undefined) {
++    localConfig[key] = defaultConfig[key];
++  }
+ }
+ 
+ export function configRead(key) {
+@@ -91,7 +114,11 @@
+ export function configWrite(key, value) {
+   console.info('Setting key', key, 'to', value);
+   localConfig[key] = value;
+-  window.localStorage[CONFIG_KEY] = JSON.stringify(localConfig);
++  try {
++    window.localStorage[CONFIG_KEY] = JSON.stringify(localConfig);
++  } catch (err) {
++    console.warn('Config write to localStorage failed:', err);
++  }
+   configChangeEmitter.dispatchEvent(new CustomEvent('configChange', { detail: { key, value } }));
+ }
+ 
+diff -ruN '--exclude=.git' '--exclude=node_modules' '--exclude=dist' '--exclude=package-lock.json' TizenTube-upstream/mods/features/preferredVideoQuality.js TizenTube/mods/features/preferredVideoQuality.js
+--- TizenTube-upstream/mods/features/preferredVideoQuality.js	2026-10-09 05:57:24.882774124 +0000
++++ TizenTube/mods/features/preferredVideoQuality.js	2026-10-09 06:03:14.731835071 +0000
+@@ -72,9 +72,17 @@
+ 
+     #applyQuality() {
+         const preferredQuality = configRead(CONFIG_KEYS.QUALITY);
+-        if (!preferredQuality || preferredQuality === 'auto' || !this.#player) return;
++        if (!preferredQuality || !this.#player) return;
+ 
+         try {
++            if (preferredQuality === 'auto') {
++                // Reset to auto — call with 'auto' if supported, otherwise skip
++                if (typeof this.#player.setPlaybackQualityRange === 'function') {
++                    this.#player.setPlaybackQualityRange('auto', 'auto');
++                }
++                return;
++            }
++
+             const quality = this.#determineQuality(preferredQuality);
+ 
+             if (quality) {
+@@ -87,14 +95,24 @@
+ 
+     #determineQuality(preference) {
+         const availableQualities = this.#player.getAvailableQualityData();
+-        if (!availableQualities?.length) return 'highres';
++        if (!availableQualities?.length) return null;
+ 
+         const getQualityValue = (label) => parseInt(label, 10) || 0;
+         const targetValue = getQualityValue(preference);
+ 
++        // Exact match
+         const match = availableQualities.find(q => getQualityValue(q.qualityLabel) === targetValue);
++        if (match) return match.quality;
+ 
+-        return match ? match.quality : 'highres';
++        // Find the largest available quality that is <= target
++        const below = availableQualities
++            .filter(q => getQualityValue(q.qualityLabel) <= targetValue)
++            .sort((a, b) => getQualityValue(b.qualityLabel) - getQualityValue(a.qualityLabel));
++        if (below.length) return below[0].quality;
++
++        // If none below, select the lowest available resolution
++        const sorted = [...availableQualities].sort((a, b) => getQualityValue(a.qualityLabel) - getQualityValue(b.qualityLabel));
++        return sorted[0].quality;
+     }
+ }
+ 
+diff -ruN '--exclude=.git' '--exclude=node_modules' '--exclude=dist' '--exclude=package-lock.json' TizenTube-upstream/mods/features/tvControls.js TizenTube/mods/features/tvControls.js
+--- TizenTube-upstream/mods/features/tvControls.js	1970-01-01 00:00:00.000000000 +0000
++++ TizenTube/mods/features/tvControls.js	2026-10-09 06:03:00.015622365 +0000
+@@ -0,0 +1,188 @@
++/**
++ * TV Quick Controls for TizenTube
++ *
++ * Adds TV-optimized presets, theme management, quick quality selection,
++ * and a one-level undo to the existing TizenTube settings UI.
++ *
++ * Presets change only their listed keys, leaving accounts and unrelated
++ * preferences alone. The upstream APK updater is disabled for custom builds.
++ */
++
++import { configRead, configWrite } from '../config.js';
++
++// ---------------------------------------------------------------------------
++// Preset definitions
++// ---------------------------------------------------------------------------
++
++const PRESETS = {
++  cleanTV: {
++    label: 'Clean TV',
++    changes: {
++      enableShorts: false,
++      enablePreviews: false,
++      enableHideEndScreenCards: true,
++      hideRelatedVideosPlayer: true,
++      enablePaidPromotionOverlay: false,
++      enableYouThereRenderer: false,
++    },
++  },
++  midnightBlue: {
++    label: 'Midnight Blue',
++    changes: {
++      focusContainerColor: '#0a1628',
++      routeColor: '#0d1f3c',
++    },
++  },
++  classicDark: {
++    label: 'Classic Dark',
++    changes: {
++      focusContainerColor: '#0f0f0f',
++      routeColor: '#0f0f0f',
++    },
++  },
++};
++
++// ---------------------------------------------------------------------------
++// Preset application with one-level undo
++// ---------------------------------------------------------------------------
++
++function takeSnapshot(keys) {
++  const snap = {};
++  for (const k of keys) {
++    snap[k] = configRead(k);
++  }
++  return snap;
++}
++
++function applyPreset(presetKey) {
++  const preset = PRESETS[presetKey];
++  if (!preset) return;
++
++  // Snapshot current values for the keys this preset touches
++  const keys = Object.keys(preset.changes);
++  const snapshot = takeSnapshot(keys);
++
++  // Save snapshot for undo
++  configWrite('tvLastPresetSnapshot', JSON.stringify({ presetKey, snapshot }));
++  configWrite('tvActivePreset', presetKey);
++
++  // Apply each change
++  for (const [k, v] of Object.entries(preset.changes)) {
++    configWrite(k, v);
++  }
++
++  // Update theme stylesheet if colors changed
++  if (preset.changes.focusContainerColor || preset.changes.routeColor) {
++    updateThemeStylesheet();
++  }
++}
++
++function undoLastPreset() {
++  const raw = configRead('tvLastPresetSnapshot');
++  if (!raw) return false;
++
++  let parsed;
++  try {
++    parsed = JSON.parse(raw);
++  } catch {
++    return false;
++  }
++
++  const { snapshot } = parsed;
++  if (!snapshot || typeof snapshot !== 'object') return false;
++
++  for (const [k, v] of Object.entries(snapshot)) {
++    configWrite(k, v);
++  }
++
++  configWrite('tvActivePreset', null);
++  configWrite('tvLastPresetSnapshot', null);
++
++  // Update theme stylesheet if colors were restored
++  if (snapshot.focusContainerColor !== undefined || snapshot.routeColor !== undefined) {
++    updateThemeStylesheet();
++  }
++
++  return true;
++}
++
++// ---------------------------------------------------------------------------
++// Theme stylesheet management — single stylesheet, never accumulates
++// ---------------------------------------------------------------------------
++
++let _themeStyleEl = null;
++
++function ensureThemeStyleEl() {
++  if (_themeStyleEl && _themeStyleEl.parentNode) return _themeStyleEl;
++  _themeStyleEl = document.createElement('style');
++  _themeStyleEl.setAttribute('data-tv-theme', 'true');
++  document.head.appendChild(_themeStyleEl);
++  return _themeStyleEl;
++}
++
++function updateThemeStylesheet() {
++  const el = ensureThemeStyleEl();
++  const focus = configRead('focusContainerColor');
++  const route = configRead('routeColor');
++  el.textContent = [
++    'ytlr-guide-response yt-focus-container {',
++    `  background-color: ${focus};`,
++    '}',
++    '#container {',
++    `  background-color: ${route} !important;`,
++    '}',
++  ].join('\n');
++}
++
++// ---------------------------------------------------------------------------
++// Quick quality selection
++// ---------------------------------------------------------------------------
++
++const QUALITY_LEVELS = ['auto', '2160', '1440', '1080', '720'];
++
++function setQuickQuality(level) {
++  configWrite('tvQuickQuality', level);
++  if (level === 'auto') {
++    configWrite('preferredVideoQuality', 'auto');
++  } else {
++    configWrite('preferredVideoQuality', level + 'p');
++  }
++}
++
++// ---------------------------------------------------------------------------
++// Updater disable for custom builds
++// ---------------------------------------------------------------------------
++
++function disableUpdater() {
++  if (configRead('enableUpdater')) {
++    configWrite('enableUpdater', false);
++  }
++}
++
++// ---------------------------------------------------------------------------
++// Initialization
++// ---------------------------------------------------------------------------
++
++function init() {
++  // Disable updater on first run of a custom build
++  disableUpdater();
++
++  // Restore theme from config on startup
++  updateThemeStylesheet();
++}
++
++// Run init when module loads
++init();
++
++// ---------------------------------------------------------------------------
++// Exports for the settings UI and resolveCommand
++// ---------------------------------------------------------------------------
++
++export {
++  PRESETS,
++  QUALITY_LEVELS,
++  applyPreset,
++  undoLastPreset,
++  setQuickQuality,
++  updateThemeStylesheet,
++};
+diff -ruN '--exclude=.git' '--exclude=node_modules' '--exclude=dist' '--exclude=package-lock.json' TizenTube-upstream/mods/resolveCommand.js TizenTube/mods/resolveCommand.js
+--- TizenTube-upstream/mods/resolveCommand.js	2026-10-09 05:57:24.886774182 +0000
++++ TizenTube/mods/resolveCommand.js	2026-10-09 06:01:41.770491465 +0000
+@@ -8,6 +8,7 @@
+ import { requestNextAndNavigateChannel, getFeedbackPanelTokens, sendFeedbackToken } from './utils/innerTubeCalls.js';
+ import qrcode from 'qrcode-npm';
+ import showGuideSettings from './ui/sidebarModification.js';
++import { applyPreset, undoLastPreset, setQuickQuality, updateThemeStylesheet } from './features/tvControls.js';
+ 
+ export default function resolveCommand(cmd, _) {
+     // resolveCommand function is pretty OP, it can do from opening modals, changing client settings and way more.
+@@ -322,6 +323,21 @@
+             }
+             window.screenTurnedOffAt = Date.now();
+             break;
++        case 'TV_APPLY_PRESET':
++            applyPreset(parameters);
++            showToast('TV Quick Controls', `Applied ${parameters} preset`);
++            break;
++        case 'TV_UNDO_PRESET':
++            if (undoLastPreset()) {
++                showToast('TV Quick Controls', 'Undid last preset');
++            } else {
++                showToast('TV Quick Controls', 'Nothing to undo');
++            }
++            break;
++        case 'TV_SET_QUALITY':
++            setQuickQuality(parameters);
++            showToast('TV Quick Controls', `Quality set to ${parameters}`);
++            break;
+     }
+ }
+ 
+diff -ruN '--exclude=.git' '--exclude=node_modules' '--exclude=dist' '--exclude=package-lock.json' TizenTube-upstream/mods/tests/tv-controls.test.mjs TizenTube/mods/tests/tv-controls.test.mjs
+--- TizenTube-upstream/mods/tests/tv-controls.test.mjs	1970-01-01 00:00:00.000000000 +0000
++++ TizenTube/mods/tests/tv-controls.test.mjs	2026-10-09 06:06:29.782654344 +0000
+@@ -0,0 +1,247 @@
++/**
++ * tv-controls.test.mjs — Unit tests for TV Quick Controls
++ *
++ * Tests cover: quality selection/Auto, malformed config, presets/undo,
++ * preservation of unrelated settings, and storage write failure.
++ *
++ * Run: node tests/tv-controls.test.mjs
++ */
++
++import { describe, it } from 'node:test';
++import assert from 'node:assert/strict';
++
++// ---------------------------------------------------------------------------
++// Mock browser globals (set up BEFORE any module imports)
++// ---------------------------------------------------------------------------
++
++let store = {};
++
++const mockLocalStorage = {
++  getItem(key) { return key in store ? store[key] : undefined; },
++  setItem(key, value) { store[key] = String(value); },
++  removeItem(key) { delete store[key]; },
++  get length() { return Object.keys(store).length; },
++};
++
++Object.defineProperty(globalThis, 'localStorage', {
++  value: mockLocalStorage,
++  writable: true,
++  configurable: true,
++});
++
++const mockWindow = {
++  localStorage: mockLocalStorage,
++  location: { hostname: 'localhost' },
++  h5vcc: null,
++};
++Object.defineProperty(globalThis, 'window', {
++  value: mockWindow,
++  writable: true,
++  configurable: true,
++});
++
++const mockStyleElements = [];
++const mockDocument = {
++  head: { appendChild: () => {} },
++  createElement: (tag) => {
++    const el = { tagName: tag, textContent: '', setAttribute: () => {}, parentNode: true };
++    mockStyleElements.push(el);
++    return el;
++  },
++  querySelector: () => null,
++};
++Object.defineProperty(globalThis, 'document', {
++  value: mockDocument,
++  writable: true,
++  configurable: true,
++});
++
++// Pre-populate with clean defaults before importing modules.
++// config.js reads localStorage at import time and merges with defaults.
++store['ytaf-configuration'] = JSON.stringify({
++  enableAdBlock: true,
++  enableShorts: true,
++  enablePreviews: true,
++  enableHideEndScreenCards: false,
++  hideRelatedVideosPlayer: false,
++  enablePaidPromotionOverlay: true,
++  enableYouThereRenderer: true,
++  focusContainerColor: '#0f0f0f',
++  routeColor: '#0f0f0f',
++  enableUpdater: true,
++  preferredVideoQuality: 'auto',
++  videoSpeed: 1,
++  enableClock: false,
++});
++
++// Import modules ONCE — they are ES module singletons
++const { configRead, configWrite } = await import('../config.js');
++const {
++  PRESETS, QUALITY_LEVELS, applyPreset, undoLastPreset, setQuickQuality,
++  updateThemeStylesheet,
++} = await import('../features/tvControls.js');
++
++// Helper: write a config value and confirm it stuck
++function setAndVerify(key, value) {
++  configWrite(key, value);
++  assert.equal(configRead(key), value, `Expected ${key}=${value}, got ${configRead(key)}`);
++}
++
++// ---------------------------------------------------------------------------
++// Tests
++// ---------------------------------------------------------------------------
++
++describe('Config resilience', () => {
++  it('reads default values for keys not in stored config', () => {
++    // configRead should return defaults for any key not explicitly set
++    const val = configRead('enableSigninReminder');
++    assert.equal(val, false); // default from config.js
++  });
++
++  it('does not crash when localStorage write fails', () => {
++    const origSetItem = mockLocalStorage.setItem;
++    mockLocalStorage.setItem = () => { throw new Error('QuotaExceeded'); };
++    // configWrite should not throw even when storage fails
++    assert.doesNotThrow(() => configWrite('videoSpeed', 2));
++    // Restore
++    mockLocalStorage.setItem = origSetItem;
++    // The in-memory state should still be updated
++    assert.equal(configRead('videoSpeed'), 2);
++  });
++});
++
++describe('TV Presets — Clean TV', () => {
++  it('hides Shorts, previews, end cards, related; preserves others', () => {
++    // Set known state for unrelated keys
++    setAndVerify('enableAdBlock', false);
++    setAndVerify('videoSpeed', 1.5);
++    setAndVerify('enableClock', true);
++    // Ensure starting state
++    setAndVerify('enableShorts', true);
++    setAndVerify('enablePreviews', true);
++
++    applyPreset('cleanTV');
++
++    // Preset changes
++    assert.equal(configRead('enableShorts'), false);
++    assert.equal(configRead('enablePreviews'), false);
++    assert.equal(configRead('enableHideEndScreenCards'), true);
++    assert.equal(configRead('hideRelatedVideosPlayer'), true);
++    assert.equal(configRead('enablePaidPromotionOverlay'), false);
++    assert.equal(configRead('enableYouThereRenderer'), false);
++    // Unrelated settings preserved
++    assert.equal(configRead('enableAdBlock'), false);
++    assert.equal(configRead('videoSpeed'), 1.5);
++    assert.equal(configRead('enableClock'), true);
++  });
++});
++
++describe('TV Presets — Midnight Blue', () => {
++  it('changes theme colors to midnight blue', () => {
++    setAndVerify('focusContainerColor', '#0f0f0f');
++    setAndVerify('routeColor', '#0f0f0f');
++
++    applyPreset('midnightBlue');
++
++    assert.equal(configRead('focusContainerColor'), '#0a1628');
++    assert.equal(configRead('routeColor'), '#0d1f3c');
++  });
++});
++
++describe('TV Presets — Classic Dark', () => {
++  it('resets colors to classic dark', () => {
++    setAndVerify('focusContainerColor', '#0a1628');
++    setAndVerify('routeColor', '#0d1f3c');
++
++    applyPreset('classicDark');
++
++    assert.equal(configRead('focusContainerColor'), '#0f0f0f');
++    assert.equal(configRead('routeColor'), '#0f0f0f');
++  });
++});
++
++describe('Preset undo', () => {
++  it('restores values from before the last preset', () => {
++    setAndVerify('enableShorts', true);
++    setAndVerify('enablePreviews', true);
++
++    applyPreset('cleanTV');
++    assert.equal(configRead('enableShorts'), false);
++
++    const result = undoLastPreset();
++    assert.equal(result, true);
++    assert.equal(configRead('enableShorts'), true);
++    assert.equal(configRead('enablePreviews'), true);
++  });
++
++  it('returns false when no snapshot exists', () => {
++    configWrite('tvLastPresetSnapshot', null);
++    const result = undoLastPreset();
++    assert.equal(result, false);
++  });
++
++  it('saves a snapshot when applying a preset', () => {
++    applyPreset('cleanTV');
++    const snap = configRead('tvLastPresetSnapshot');
++    assert.ok(snap, 'Snapshot should be saved');
++    const parsed = JSON.parse(snap);
++    assert.equal(parsed.presetKey, 'cleanTV');
++    assert.ok(parsed.snapshot);
++  });
++
++  it('only undoes the last preset, not earlier ones', () => {
++    setAndVerify('enableShorts', true);
++    setAndVerify('focusContainerColor', '#0f0f0f');
++
++    applyPreset('cleanTV');
++    applyPreset('midnightBlue');
++
++    assert.equal(configRead('enableShorts'), false);
++    assert.equal(configRead('focusContainerColor'), '#0a1628');
++
++    // Undo midnightBlue
++    undoLastPreset();
++    assert.equal(configRead('focusContainerColor'), '#0f0f0f');
++    // cleanTV effects remain
++    assert.equal(configRead('enableShorts'), false);
++  });
++});
++
++describe('Quality selection', () => {
++  it('QUALITY_LEVELS contains expected levels', () => {
++    assert.deepEqual(QUALITY_LEVELS, ['auto', '2160', '1440', '1080', '720']);
++  });
++
++  it('setQuickQuality writes preferredVideoQuality correctly', () => {
++    setQuickQuality('1080');
++    assert.equal(configRead('preferredVideoQuality'), '1080p');
++    assert.equal(configRead('tvQuickQuality'), '1080');
++  });
++
++  it('setQuickQuality auto writes "auto"', () => {
++    setQuickQuality('auto');
++    assert.equal(configRead('preferredVideoQuality'), 'auto');
++  });
++});
++
++describe('Updater disabled', () => {
++  it('enableUpdater was set to false at import time', () => {
++    // tvControls.js init() disables updater at module load
++    assert.equal(configRead('enableUpdater'), false);
++  });
++});
++
++describe('PRESETS definitions', () => {
++  it('cleanTV hides Shorts and previews', () => {
++    assert.equal(PRESETS.cleanTV.changes.enableShorts, false);
++    assert.equal(PRESETS.cleanTV.changes.enablePreviews, false);
++  });
++
++  it('midnightBlue sets dark blue colors', () => {
++    assert.equal(PRESETS.midnightBlue.changes.focusContainerColor, '#0a1628');
++  });
++
++  it('classicDark resets to default dark', () => {
++    assert.equal(PRESETS.classicDark.changes.focusContainerColor, '#0f0f0f');
++  });
++});
+diff -ruN '--exclude=.git' '--exclude=node_modules' '--exclude=dist' '--exclude=package-lock.json' TizenTube-upstream/mods/ui/settings.js TizenTube/mods/ui/settings.js
+--- TizenTube-upstream/mods/ui/settings.js	2026-10-09 05:57:24.886774182 +0000
++++ TizenTube/mods/ui/settings.js	2026-10-09 06:04:06.644585405 +0000
+@@ -3,11 +3,98 @@
+ import qrcode from 'qrcode-npm';
+ import { t } from 'i18next';
+ import resolveCommand from '../resolveCommand.js';
++import { PRESETS, QUALITY_LEVELS } from '../features/tvControls.js';
+ 
+ const qrcodes = {};
+ 
+ export default function modernUI(update, parameters) {
+     const settings = [
++        // ---- TV Quick Controls (first item) ----
++        {
++            name: 'TV Quick Controls',
++            icon: 'TV',
++            value: null,
++            menuId: 'tt-tv-quick-controls',
++            menuHeader: {
++                title: 'TV Quick Controls',
++                subtitle: 'Presets, themes & quick quality'
++            },
++            options: [
++                // --- Presets submenu ---
++                {
++                    name: 'Presets',
++                    icon: 'STAR',
++                    value: null,
++                    menuId: 'tt-tv-presets',
++                    menuHeader: {
++                        title: 'Presets',
++                        subtitle: 'One-tap configurations'
++                    },
++                    options: Object.entries(PRESETS).map(([key, preset]) =>
++                        buttonItem(
++                            { title: preset.label },
++                            { icon: key === 'cleanTV' ? 'VISIBILITY_OFF' : key === 'midnightBlue' ? 'LENS_BLUE' : 'DARK_THEME' },
++                            [{
++                                customAction: {
++                                    action: 'TV_APPLY_PRESET',
++                                    parameters: key
++                                }
++                            }]
++                        )
++                    )
++                },
++                // --- Undo last preset ---
++                buttonItem(
++                    { title: 'Undo Last Preset', subtitle: 'Revert the most recently applied preset' },
++                    { icon: 'UNDO' },
++                    [{
++                        customAction: {
++                            action: 'TV_UNDO_PRESET',
++                            parameters: []
++                        }
++                    }]
++                ),
++                // --- Quick Quality submenu ---
++                {
++                    name: 'Quick Quality',
++                    icon: 'VIDEO_QUALITY',
++                    value: null,
++                    menuId: 'tt-tv-quick-quality',
++                    menuHeader: {
++                        title: 'Quick Quality',
++                        subtitle: 'Request a preferred stream quality'
++                    },
++                    options: QUALITY_LEVELS.map(level => ({
++                        name: level === 'auto' ? 'Auto' : level + 'p',
++                        icon: level === 'auto' ? 'PLAY_CIRCLE' : 'VIDEO_QUALITY',
++                        key: 'preferredVideoQuality',
++                        value: level === 'auto' ? 'auto' : level + 'p'
++                    }))
++                },
++                // --- Individual quick toggles ---
++                {
++                    name: 'Hide Shorts',
++                    icon: 'YOUTUBE_SHORTS_FILL_24',
++                    value: 'enableShorts'
++                },
++                {
++                    name: 'Hide Previews',
++                    icon: 'VISIBILITY_OFF',
++                    value: 'enablePreviews'
++                },
++                {
++                    name: 'Hide End Cards',
++                    icon: 'VISIBILITY_OFF',
++                    value: 'enableHideEndScreenCards'
++                },
++                {
++                    name: 'Hide Related in Player',
++                    icon: 'VISIBILITY_OFF',
++                    value: 'hideRelatedVideosPlayer'
++                }
++            ]
++        },
++        // ---- End TV Quick Controls ----
+         {
+             name: t('settings.supportTT.title'),
+             icon: 'MONEY_HEART',

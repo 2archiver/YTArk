@@ -1,0 +1,308 @@
+{
+    "__contributors": [
+        "Mikxus"
+    ],
+    "settings": {
+        "options": {
+            "socialMedia": {
+                "title": "Sosiaalisen median linkit",
+                "qrCodeScanMessage": "Voit vierailla sivulla {{name}} skannaamalla alla olevan QR-koodin.",
+                "announcements": "Announcements",
+                "group": "Group",
+                "website": "Website",
+                "githubSponsors": "GitHub Sponsors"
+            },
+            "adBlock": "Mainosten esto",
+            "sponsorblock": {
+                "title": "SponsorBlock-asetukset",
+                "options": {
+                    "enableSB": "Ota SponsorBlock käyttöön",
+                    "manualSkip": "SponsorBlock-osioiden manuaalinen ohitus",
+                    "segments": "Osiot",
+                    "categories": {
+                        "sponsor": "Ohita sponsoriosiot",
+                        "intro": "Ohita aloitusosiot",
+                        "outro": "Ohita lopetusosiot",
+                        "interaction": "Ohita vuorovaikutusmuistutusosiot",
+                        "selfpromo": "Ohita itsemainososiot",
+                        "preview": "Ohita ennakko-/kertausosiot",
+                        "filler": "Ohita tangentti-/vitsiosiot",
+                        "music_offtopic": "Ohita musiikin ulkopuoliset osiot",
+                        "highlights": "Ota kohokohdat käyttöön"
+                    },
+                    "showSBToasts": "Näytä SponsorBlock-ilmoitukset"
+                }
+            },
+            "dearrow": {
+                "title": "DeArrow-asetukset",
+                "options": {
+                    "enableDA": "Ota DeArrow käyttöön",
+                    "enableDAThumbnails": "Ota DeArrow-pikkukuvat käyttöön"
+                }
+            },
+            "misc": {
+                "title": "Muut asetukset",
+                "options": {
+                    "endScreenCards": "Piilota loppuruudun kortit",
+                    "youThereRenderer": "Ota 'Katseletko yhä?' -näkymä käyttöön",
+                    "paidPromoOverlay": "Ota 'Sisältää maksettua mainontaa' -ilmoitus käyttöön",
+                    "whosWatching": {
+                        "title": "Kuka katsoo -valikko",
+                        "options": {
+                            "enableWW": "Ota Kuka katsoo -valikko käyttöön",
+                            "permaEnableWW": "Ota Kuka katsoo -valikko pysyvästi käyttöön",
+                            "enableWWOnExit": "Ota Kuka katsoo -valikko käyttöön sovelluksesta poistuttaessa"
+                        }
+                    },
+                    "fixUI": "Korjaa käyttöliittymä",
+                    "hqThumbnails": "Ota korkealaatuiset pikkukuvat käyttöön",
+                    "longPress": "Ota pitkän painalluksen toiminnot käyttöön",
+                    "shorts": "Ota Shorts käyttöön",
+                    "videoPreviews": "Ota videon esikatselut käyttöön",
+                    "ttWelcomeMsg": "Näytä TT-tervetuloviesti",
+                    "guestSignInReminder": "Näytä vieraskirjautumisen muistutus",
+                    "reloadHomeOnStartup": "Lataa etusivu uudelleen käynnistyksessä"
+                }
+            },
+            "subtitles": {
+                "title": "Tekstitysasetukset",
+                "options": {
+                    "showLocalSubtitle": "Näytä paikallinen tekstitys",
+                    "showHiddenSubtitles": "Näytä piilotetut tekstitykset"
+                }
+            },
+            "videoPlayer": {
+                "title": "Videosoittimen asetukset",
+                "subtitle": "Mukauta videosoittimen ominaisuuksia",
+                "options": {
+                    "patching": {
+                        "title": "Muokkaa videosoittimen käyttöliittymää",
+                        "options": {
+                            "enableVPUIPatching": "Ota videosoittimen käyttöliittymän muokkaus käyttöön",
+                            "previousNextBtns": "Ota Edellinen- ja Seuraava-painikkeet käyttöön",
+                            "showSuperThxBtn": "Näytä Super Thanks -painike",
+                            "showSpeedCtrlBtn": "Näytä nopeudensäätöpainike",
+                            "showAIAskBtn": "Show Ask Button",
+                            "addMPBtn": "Show Mini Player Button",
+                            "swapMPWithPIP": "Swap Mini Player Button with PiP Button"
+                        }
+                    },
+                    "preferredVideoQuality": {
+                        "title": "Ensisijainen videonlaatu",
+                        "subtitle": "Valitse ensisijainen tai seuraavaksi paras videonlaatu, jota käytetään toiston alkaessa"
+                    },
+                    "speedSettings": {
+                        "title": "Nopeusasetusten portaat",
+                        "subtitle": "Aseta videon toistonopeuden säätöaskeleet"
+                    },
+                    "preferredVideoCodec": {
+                        "title": "Ensisijainen videokoodekki",
+                        "subtitle": "Valitse toistolle ensisijainen videokoodekki"
+                    },
+                    "afr": "Automaattinen kuvataajuus",
+                    "afrPauseDuration": {
+                        "title": "Automaattisen kuvataajuuden tauon kesto",
+                        "subtitle": "Aseta kesto (sekunteina), jonka ajaksi videon toisto keskeytetään kuvataajuutta säädettäessä"
+                    },
+                    "codecAny": "Any",
+                    "qualityAuto": "Auto",
+                    "hideRelatedVideosPlayer": "Hide Related Videos"
+                }
+            },
+            "uiSettings": {
+                "title": "Käyttöliittymäasetukset",
+                "subtitle": "Mukauta käyttöliittymää mieleiseksesi",
+                "options": {
+                    "hideWatchedVideos": {
+                        "title": "Piilota katsotut videot",
+                        "options": {
+                            "enableHideWatchedVideos": "Ota katsottujen videoiden piilotus käyttöön",
+                            "watchedVideosThreshold": {
+                                "title": "Katsottujen videoiden raja-arvo",
+                                "subtitle": "Aseta prosenttiraja, jonka jälkeen katsotut videot piilotetaan"
+                            },
+                            "setPagesToHideWatchedVideos": "Valitse sivut, joilla katsotut videot piilotetaan"
+                        }
+                    },
+                    "screenDimming": {
+                        "title": "Näytön himmennys",
+                        "options": {
+                            "enableScreenDimming": "Ota näytön himmennys käyttöön",
+                            "dimmingTimeout": {
+                                "title": "Himmennyksen aikakatkaisu",
+                                "subtitle": "Aseta toimettomuuden aikakatkaisu (sekunteina), jonka jälkeen näyttö himmennetään"
+                            },
+                            "dimmingOpacity": {
+                                "title": "Himmennyksen peittävyys",
+                                "subtitle": "Aseta näytön himmennyksen peittävyystaso"
+                            }
+                        }
+                    },
+                    "disableSidebarContents": {
+                        "title": "Poista sivupalkin sisältöjä käytöstä",
+                        "subtitle": "Valitse sivupalkin sisällöt, jotka poistetaan käytöstä"
+                    },
+                    "launchToOnStartup": {
+                        "title": "Aloitussivu käynnistyksessä",
+                        "subtitle": "Valitse oletussivu, johon TizenTube avautuu käynnistyksessä"
+                    },
+                    "categories": {
+                        "search": "Search",
+                        "home": "Home",
+                        "sports": "Sports",
+                        "news": "News",
+                        "music": "Music",
+                        "podcasts": "Podcasts",
+                        "moviesAndTv": "Movies & TV",
+                        "live": "Live",
+                        "gaming": "Gaming",
+                        "subscriptions": "Subscriptions",
+                        "library": "Library",
+                        "more": "More",
+                        "shorts": "Shorts",
+                        "searchResults": "Search Results"
+                    },
+                    "sortSubscriptionsByAlphabet": "Sort Subscriptions Alphabetically",
+                    "disableChannelsOnSidebar": "Disable Channels on Sidebar",
+                    "clock": {
+                        "title": "Clock",
+                        "subtitle": "Display a clock on the screen",
+                        "options": {
+                            "enableClock": "Enable Clock",
+                            "isClock12HourFormat": "Use 12-Hour Format for Clock",
+                            "clockShowSeconds": "Show Seconds on Clock",
+                            "clockHideWhenVideoPlaying": "Hide Clock While Video is Playing"
+                        }
+                    },
+                    "disableEnlargingThumbnails": "Disable Enlarged Thumbnails",
+                    "enableShrinkingThumbnails": "Enable Shrinked Thumbnails",
+                    "sortSidebarContents": {
+                        "title": "Sort Sidebar Contents",
+                        "subtitle": "Reorder sidebar contents to your preference",
+                        "moveUp": {
+                            "title": "Move Up",
+                            "subtitle": "Move this item up in the sidebar"
+                        },
+                        "moveDown": {
+                            "title": "Move Down",
+                            "subtitle": "Move this item down in the sidebar"
+                        },
+                        "addToSidebar": "Add Channel to Sidebar",
+                        "removeFromSidebar": "Remove Channel from Sidebar"
+                    }
+                }
+            },
+            "time": {
+                "second": "{{count}} second",
+                "seconds": "{{count}} seconds",
+                "minute": "{{count}} minute",
+                "minutes": "{{count}} minutes"
+            },
+            "updater": {
+                "title": "TizenTube Cobalt Updater",
+                "menuSubtitle": "Manage TizenTube Cobalt updates",
+                "versionSubtitle": "Current version: {{version}}",
+                "options": {
+                    "checkForUpdates": "Check for updates",
+                    "checkForUpdatesOnStartup": "Check for updates on startup"
+                },
+                "updateAvailable": {
+                    "title": "Update Available",
+                    "subtitle": "A new version of TizenTube Cobalt is available: {{latestVersion}}, current: {{currentVersion}}"
+                },
+                "releaseDate": "Release Date: {{date}}",
+                "updateNow": {
+                    "title": "Update Now",
+                    "subtitle": "Click to download the latest version."
+                },
+                "remindLater": {
+                    "title": "Remind Me Later",
+                    "subtitle": "Check for updates later."
+                },
+                "upToDate": {
+                    "title": "TizenTube is up to date",
+                    "subtitle": "You are using the latest version ({{version}}) of TizenTube Cobalt."
+                },
+                "checkFailed": {
+                    "title": "TizenTube update check failed",
+                    "subtitle": "Could not check for updates."
+                },
+                "downloading": {
+                    "title": "TizenTube Update",
+                    "subtitle": "Downloading update, please wait..."
+                }
+            }
+        },
+        "ttSettings": {
+            "title": "TizenTube-asetukset",
+            "madeByText": "Tekijä Reis Can (reisxd) ❤️",
+            "summary": "Avaa TizenTube-asetukset"
+        },
+        "supportTT": {
+            "title": "Tue TizenTubea",
+            "subtitle": "❤️ Tue TizenTubea ja sen kehitystä",
+            "content": {
+                "1": "Jos pidät TizenTuben käytöstä ja haluat tukea sen kehitystä, harkitse seuraavaa:",
+                "2": "1. Anna GitHub-repositorioon tähti, jotta sen näkyvyys kasvaa.",
+                "3": "2. Jaa TizenTubea muille.",
+                "4": "Jos haluat tukea taloudellisesti, harkitse lahjoittamista:",
+                "5": "- Buy Me A Coffee: https://www.buymeacoffee.com/reisxd (mieluiten)",
+                "6": "- GitHub Sponsors: https://github.com/sponsors/reisxd"
+            }
+        }
+    },
+    "welcomeMsg": {
+        "title": "Tervetuloa TizenTubeen",
+        "subtitle": "Siirry asetuksiin ja avaa TizenTube-asetukset."
+    },
+    "sponsorblock": {
+        "segments": {
+            "sponsor": "sponsoriosio",
+            "intro": "intro",
+            "outro": "outro",
+            "interaction": "vuorovaikutusmuistutus",
+            "selfpromo": "itsemainonta",
+            "preview": "kertaus tai ennakko",
+            "filler": "tangentit",
+            "music_offtopic": "ei-musiikkiosio",
+            "poi_highlight": "kohokohta"
+        },
+        "toasts": {
+            "skipping": "Ohitetaan {{segment}}",
+            "notSkipping": "Ei ohiteta: {{segment}} (ohitettu {{count}} kertaa)",
+            "skip": "Ohita {{segment}}",
+            "skipToHighlight": "Ohita kohokohtaan"
+        }
+    },
+    "player": {
+        "playbackSpeed": {
+            "title": "Playback Speed",
+            "button": "Speed Controls",
+            "fixStuttering": "Fix stuttering (1.0001x)"
+        },
+        "miniPlayer": "Mini Player",
+        "pictureInPicture": "Picture in Picture",
+        "previous": "Previous",
+        "next": "Next",
+        "withTizenTube": "with TizenTube",
+        "share": {
+            "title": "Share",
+            "button": "Share",
+            "qrCodeScanMessage": "Scan the QR code below to share this video."
+        },
+        "screenOff": "Turn off screen"
+    },
+    "toasts": {
+        "videoAddedToQueue": "Video added to queue.",
+        "videoQueueCleared": "Video queue cleared.",
+        "sidebarContentsUpdated": {
+            "title": "Sidebar Contents Updated",
+            "subtitle": "The sidebar contents have been updated."
+        },
+        "feedbackSent": "Feedback sent."
+    },
+    "videoMenu": {
+        "notInterested": "Not interested",
+        "dontRecommendChannel": "Don't recommend channel"
+    }
+}

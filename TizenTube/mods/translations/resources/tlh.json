@@ -1,0 +1,308 @@
+{
+    "__contributors": [
+        "lukapiplica"
+    ],
+    "settings": {
+        "options": {
+            "socialMedia": {
+                "title": "tayqeq ghom",
+                "qrCodeScanMessage": "{{name}} mI' yIbej QR meryaq yImej.",
+                "announcements": "Announcements",
+                "group": "Group",
+                "website": "Website",
+                "githubSponsors": "GitHub Sponsors"
+            },
+            "adBlock": "reH lI' vI'ogh",
+            "sponsorblock": {
+                "title": "Sponsor ghompu' mev choHtaHghach",
+                "options": {
+                    "enableSB": "Sponsor ghompu' yIchu'",
+                    "manualSkip": "ghompu' yIchoS",
+                    "segments": "ghompu'",
+                    "categories": {
+                        "sponsor": "Sponsor ghompu' yIchoS",
+                        "intro": "tagh ghompu' yIchoS",
+                        "outro": "blaH ghompu' yIchoS",
+                        "interaction": "yImev Interaction De'",
+                        "selfpromo": "Self-Promotion yIchoS",
+                        "preview": "Recap yIchoS",
+                        "filler": "Jokes ghompu' yIchoS",
+                        "music_offtopic": "non-music yIchoS",
+                        "highlights": "ghotI' yIchu'"
+                    },
+                    "showSBToasts": "SponsorBlock De' yIcha'"
+                }
+            },
+            "dearrow": {
+                "title": "DeArrow choHtaHghach",
+                "options": {
+                    "enableDA": "DeArrow yIchu'",
+                    "enableDAThumbnails": "DeArrow mI' yIchu'"
+                }
+            },
+            "misc": {
+                "title": "latlh choHtaHghach",
+                "options": {
+                    "endScreenCards": "mej meryaq yISo'",
+                    "youThereRenderer": "'DaHjaj bIbejtaH?' yIchu'",
+                    "paidPromoOverlay": "Hvep De' yIcha'",
+                    "whosWatching": {
+                        "title": "'Iv bejtaH?'",
+                        "options": {
+                            "enableWW": "'Iv bejtaH?' yIchu'",
+                            "permaEnableWW": "reH 'Iv bejtaH?' yIchu'",
+                            "enableWWOnExit": "mej 'Iv bejtaH?' yIchu'"
+                        }
+                    },
+                    "fixUI": "UI yIchoH",
+                    "hqThumbnails": "HQ mI' yIchu'",
+                    "longPress": "nI' meryaq yIchu'",
+                    "shorts": "Shorts video yIchu'",
+                    "videoPreviews": "Video Previews yIchu'",
+                    "ttWelcomeMsg": "TT yI'el De' yIcha'",
+                    "guestSignInReminder": "guest Sign In yImej",
+                    "reloadHomeOnStartup": "Home yIchoH"
+                }
+            },
+            "subtitles": {
+                "title": "Ha'quj choHtaHghach",
+                "options": {
+                    "showLocalSubtitle": "Ha'quj yIcha'",
+                    "showHiddenSubtitles": "So' Ha'quj yIcha'"
+                }
+            },
+            "videoPlayer": {
+                "title": "video pat choHtaHghach",
+                "subtitle": "video pat yIchoH",
+                "options": {
+                    "patching": {
+                        "title": "video pat UI yIchoH",
+                        "options": {
+                            "enableVPUIPatching": "video pat UI yIchu'",
+                            "previousNextBtns": "meryaq yIchu'",
+                            "showSuperThxBtn": "Super Thanks meryaq yIcha'",
+                            "showSpeedCtrlBtn": "Do' choHmeH meryaq yIcha'",
+                            "addMPBtn": "Mini Player meryaq yIcha'",
+                            "swapMPWithPIP": "Mini Player meryaq choH PiP meryaq",
+                            "showAIAskBtn": "Show Ask Button"
+                        }
+                    },
+                    "preferredVideoQuality": {
+                        "title": "video QaQ",
+                        "subtitle": "video QaQ yInuqlI'"
+                    },
+                    "speedSettings": {
+                        "title": "Do' choHtaHghach",
+                        "subtitle": "Do' yInuqlI'"
+                    },
+                    "preferredVideoCodec": {
+                        "title": "video Codec",
+                        "subtitle": "video Codec yInuqlI'"
+                    },
+                    "afr": "Auto Frame Rate",
+                    "afrPauseDuration": {
+                        "title": "AFR mev Duration",
+                        "subtitle": "mev (seconds) yInuqlI'"
+                    },
+                    "codecAny": "Any",
+                    "qualityAuto": "Auto",
+                    "hideRelatedVideosPlayer": "Hide Related Videos"
+                }
+            },
+            "uiSettings": {
+                "title": "UI choHtaHghach",
+                "subtitle": "UI yIchoH",
+                "options": {
+                    "hideWatchedVideos": {
+                        "title": "bej Video yISo'",
+                        "options": {
+                            "enableHideWatchedVideos": "bej Video yISo' yIchu'",
+                            "watchedVideosThreshold": {
+                                "title": "Threshold",
+                                "subtitle": "% yInuqlI'"
+                            },
+                            "setPagesToHideWatchedVideos": "Pages yInuqlI'"
+                        }
+                    },
+                    "screenDimming": {
+                        "title": "Screen Dimming",
+                        "options": {
+                            "enableScreenDimming": "Screen Dimming yIchu'",
+                            "dimmingTimeout": {
+                                "title": "Timeout",
+                                "subtitle": "Timeout (seconds) yInuqlI'"
+                            },
+                            "dimmingOpacity": {
+                                "title": "Opacity",
+                                "subtitle": "Opacity yInuqlI'"
+                            }
+                        }
+                    },
+                    "disableSidebarContents": {
+                        "title": "Sidebar yImev",
+                        "subtitle": "Sidebar yInuqlI'"
+                    },
+                    "launchToOnStartup": {
+                        "title": "tagh Page",
+                        "subtitle": "tagh Page yInuqlI'"
+                    },
+                    "sortSubscriptionsByAlphabet": "pIqaD nI'ghachmo' lIghghachmey chu",
+                    "disableChannelsOnSidebar": "Sidebar ghommey yImev",
+                    "clock": {
+                        "title": "pI' rIn",
+                        "subtitle": "pI' rIn yIcha'",
+                        "options": {
+                            "enableClock": "pI' rIn yIchu'",
+                            "isClock12HourFormat": "12-Hour pI' rIn yIlo'",
+                            "clockShowSeconds": "Seconds pI' rIn yIcha'",
+                            "clockHideWhenVideoPlaying": "Hide Clock While Video is Playing"
+                        }
+                    },
+                    "categories": {
+                        "search": "Search",
+                        "home": "Home",
+                        "sports": "Sports",
+                        "news": "News",
+                        "music": "Music",
+                        "podcasts": "Podcasts",
+                        "moviesAndTv": "Movies & TV",
+                        "live": "Live",
+                        "gaming": "Gaming",
+                        "subscriptions": "Subscriptions",
+                        "library": "Library",
+                        "more": "More",
+                        "shorts": "Shorts",
+                        "searchResults": "Search Results"
+                    },
+                    "disableEnlargingThumbnails": "Disable Enlarged Thumbnails",
+                    "enableShrinkingThumbnails": "Enable Shrinked Thumbnails",
+                    "sortSidebarContents": {
+                        "title": "Sort Sidebar Contents",
+                        "subtitle": "Reorder sidebar contents to your preference",
+                        "moveUp": {
+                            "title": "Move Up",
+                            "subtitle": "Move this item up in the sidebar"
+                        },
+                        "moveDown": {
+                            "title": "Move Down",
+                            "subtitle": "Move this item down in the sidebar"
+                        },
+                        "addToSidebar": "Add Channel to Sidebar",
+                        "removeFromSidebar": "Remove Channel from Sidebar"
+                    }
+                }
+            },
+            "updater": {
+                "title": "TizenTube Cobalt chu'ghach",
+                "menuSubtitle": "chu'ghach yInuqlI'",
+                "versionSubtitle": "Version: {{version}}",
+                "options": {
+                    "checkForUpdates": "chu'ghach yISam",
+                    "checkForUpdatesOnStartup": "tagh chu'ghach yISam"
+                },
+                "updateAvailable": {
+                    "title": "Update Available",
+                    "subtitle": "A new version of TizenTube Cobalt is available: {{latestVersion}}, current: {{currentVersion}}"
+                },
+                "releaseDate": "Release Date: {{date}}",
+                "updateNow": {
+                    "title": "Update Now",
+                    "subtitle": "Click to download the latest version."
+                },
+                "remindLater": {
+                    "title": "Remind Me Later",
+                    "subtitle": "Check for updates later."
+                },
+                "upToDate": {
+                    "title": "TizenTube is up to date",
+                    "subtitle": "You are using the latest version ({{version}}) of TizenTube Cobalt."
+                },
+                "checkFailed": {
+                    "title": "TizenTube update check failed",
+                    "subtitle": "Could not check for updates."
+                },
+                "downloading": {
+                    "title": "TizenTube Update",
+                    "subtitle": "Downloading update, please wait..."
+                }
+            },
+            "time": {
+                "second": "{{count}} second",
+                "seconds": "{{count}} seconds",
+                "minute": "{{count}} minute",
+                "minutes": "{{count}} minutes"
+            }
+        },
+        "ttSettings": {
+            "title": "TizenTube choHtaHghach",
+            "madeByText": "Reis Can (reisxd) bang ❤️",
+            "summary": "TizenTube choHtaHghach yIpoS"
+        },
+        "supportTT": {
+            "title": "TizenTube yIQah",
+            "subtitle": "❤️ TizenTube yIQah",
+            "content": {
+                "1": "TizenTube yIQah:",
+                "2": "1. GitHub Star yIchu'.",
+                "3": "2. TizenTube yIlatlh.",
+                "4": "Hvep yIQah:",
+                "5": "- Buy Me A Coffee: https://www.buymeacoffee.com/reisxd",
+                "6": "- GitHub Sponsors: https://github.com/sponsors/reisxd"
+            }
+        }
+    },
+    "welcomeMsg": {
+        "title": "TizenTube-Daq yI'el!",
+        "subtitle": "choHtaHghach yInuqlI'!"
+    },
+    "sponsorblock": {
+        "segments": {
+            "sponsor": "sponsor ghompu'",
+            "intro": "tagh",
+            "outro": "blaH",
+            "interaction": "interaction De'",
+            "selfpromo": "self-promotion",
+            "preview": "preview",
+            "filler": "tangents",
+            "music_offtopic": "non-music",
+            "poi_highlight": "ghotI'"
+        },
+        "toasts": {
+            "skipping": "{{segment}} yIchoS",
+            "notSkipping": "{{segment}} yImev ({{count}})",
+            "skip": "{{segment}} yIchoS",
+            "skipToHighlight": "ghotI' yIchoS"
+        }
+    },
+    "player": {
+        "playbackSpeed": {
+            "title": "Playback Speed",
+            "button": "Speed Controls",
+            "fixStuttering": "Fix stuttering (1.0001x)"
+        },
+        "miniPlayer": "Mini Player",
+        "pictureInPicture": "Picture in Picture",
+        "previous": "Previous",
+        "next": "Next",
+        "withTizenTube": "with TizenTube",
+        "share": {
+            "title": "Share",
+            "button": "Share",
+            "qrCodeScanMessage": "Scan the QR code below to share this video."
+        },
+        "screenOff": "Turn off screen"
+    },
+    "toasts": {
+        "videoAddedToQueue": "Video added to queue.",
+        "videoQueueCleared": "Video queue cleared.",
+        "sidebarContentsUpdated": {
+            "title": "Sidebar Contents Updated",
+            "subtitle": "The sidebar contents have been updated."
+        },
+        "feedbackSent": "Feedback sent."
+    },
+    "videoMenu": {
+        "notInterested": "Not interested",
+        "dontRecommendChannel": "Don't recommend channel"
+    }
+}
