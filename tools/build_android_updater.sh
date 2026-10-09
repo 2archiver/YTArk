@@ -43,23 +43,8 @@ sed "s/@YTARK_CERT_SHA256@/${CERT_SHA256}/g" \
 
 mapfile -t SOURCES < <(find "$SOURCE" -type f -name '*.java' -print | sort)
 SOURCES+=("$WORK/generated/io/github/twoarchiver/ytark/updater/UpdaterBuildConfig.java")
-set +e
 javac -Xlint:-options -source 8 -target 8 -bootclasspath "$PLATFORM" \
-  -d "$WORK/classes" "${SOURCES[@]}" > "$WORK/android-compile.log" 2>&1
-compile_status=$?
-set -e
-if (( compile_status != 0 )); then
-  cat "$WORK/android-compile.log" >&2
-  diagnostic="$(python3 - "$WORK/android-compile.log" <<'PY'
-import sys
-with open(sys.argv[1], encoding="utf-8") as source:
-    print(" | ".join(line.strip() for line in source if line.strip()), end="")
-PY
-  )"
-  diagnostic="${diagnostic//%/%25}"
-  printf '::error title=Android updater compiler diagnostics::%s\n' "$diagnostic"
-  exit "$compile_status"
-fi
+  -d "$WORK/classes" "${SOURCES[@]}"
 jar --create --file "$WORK/ytark-updater.jar" -C "$WORK/classes" .
 "$D8" --release --min-api 24 --lib "$PLATFORM" \
   --output "$WORK/dex" "$WORK/ytark-updater.jar"
