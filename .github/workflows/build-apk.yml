@@ -125,17 +125,14 @@ jobs:
           name: ytark-user-script
           path: TizenTube/dist
 
-      - name: Load release version and install Android build tools
+      - name: Load release version
+        run: python3 tools/validate_release.py emit-env --file "$GITHUB_ENV"
+
+      - name: Install Android build tools and validate release inputs
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          python3 tools/validate_release.py emit-env --file "$GITHUB_ENV"
-          # GitHub applies GITHUB_ENV only to later steps; source the validated
-          # release values here too because this step fetches the pinned base.
-          set -a
-          . "$GITHUB_ENV"
-          set +a
           export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
           (set +o pipefail; yes | sdkmanager --licenses >/dev/null)
           sdkmanager "platforms;android-${API_LEVEL}" "build-tools;${BUILD_TOOLS}" "platform-tools"
@@ -338,5 +335,105 @@ jobs:
             echo "- ARMv7 and ARM64 packaging/manifest/signature checks ran in CI."
             echo "- No physical Google TV / Android device was attached to this workflow."
             echo "- Installation, launch, D-pad interaction, sign-in/guest flow, playback, 2160p streams, captions, and in-place PackageInstaller updates remain unverified."
-            echo "- The GitHub release stays in draft until a matching-ABI device acceptance report is supplied and reviewed."
+            echo "- The promotion job publishes this draft once the packaging, checksum and metadata gates pass; it does not add device acceptance evidence."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  promote-stable-release:
+    name: Promote validated candidate to stable release
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: publish-draft-release
+    if: github.repository == '2archiver/YTArk'
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Load release version
+        run: python3 tools/validate_release.py emit-env --file "$GITHUB_ENV"
+
+      - name: Re-validate the draft asset contract before promotion
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$VERSION_TAG" \
+            > "$RUNNER_TEMP/pre-promotion-release.json"
+          python3 tools/validate_release.py verify-release \
+            --release-json "$RUNNER_TEMP/pre-promotion-release.json" \
+            --state draft
+
+      - name: Publish the validated candidate as stable, non-prerelease and latest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh release edit "$VERSION_TAG" --draft=false --prerelease=false --latest
+          echo "Published $VERSION_TAG as a stable non-prerelease release."
+
+      - name: Install Android build-tools to re-verify the published APK bytes
+        run: |
+          set -euo pipefail
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+          (set +o pipefail; yes | sdkmanager --licenses >/dev/null)
+          sdkmanager "build-tools;${BUILD_TOOLS}" >/dev/null
+          echo "$ANDROID_HOME/build-tools/$BUILD_TOOLS" >> "$GITHUB_PATH"
+
+      - name: Download the validated candidate artifacts
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: ytark-dual-abi-candidates
+          path: candidate
+
+      - name: Verify published metadata, latest resolution, bytes, checksums and signer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$VERSION_TAG" \
+            > "$RUNNER_TEMP/published-release.json"
+          gh api "repos/$GITHUB_REPOSITORY/releases/latest" \
+            > "$RUNNER_TEMP/latest-release.json"
+          python3 tools/validate_release.py verify-release \
+            --release-json "$RUNNER_TEMP/published-release.json" \
+            --state published \
+            --latest-json "$RUNNER_TEMP/latest-release.json"
+
+          mkdir -p published
+          for asset in "$APK_ARMV7" "$APK_ARM64" userScript.js SHA256SUMS.txt \
+                       base-apk-sha256.txt NOTICE.md; do
+            curl -fsSL --retry 3 \
+              "https://github.com/$GITHUB_REPOSITORY/releases/download/$VERSION_TAG/$asset" \
+              -o "published/$asset"
+          done
+
+          # The promoted bytes must be exactly the bytes the candidate job validated.
+          for architecture in armv7 arm64; do
+            if [ "$architecture" = armv7 ]; then apk="$APK_ARMV7"; else apk="$APK_ARM64"; fi
+            cmp "candidate/release-assets/$apk" "published/$apk"
+            python3 tools/validate_release.py check-apk \
+              --apk "published/$apk" --architecture "$architecture" \
+              --cert-file signing/YTArk-cert-sha256.txt \
+              --aapt "$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt" \
+              --apksigner "$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner"
+          done
+          for asset in userScript.js SHA256SUMS.txt base-apk-sha256.txt; do
+            cmp "candidate/release-assets/$asset" "published/$asset"
+          done
+          python3 tools/validate_release.py check-checksums \
+            --checksums published/SHA256SUMS.txt \
+            --armv7 "published/$APK_ARMV7" \
+            --arm64 "published/$APK_ARM64" \
+            --user-script published/userScript.js
+          grep -Fq "TizenTubeCobalt $BASE_TAG" published/NOTICE.md
+          grep -Fq "GPL-3.0-only" published/NOTICE.md
+          {
+            echo "## YTArk stable release published"
+            echo "- \`$VERSION_TAG\` is published, non-draft, non-prerelease and resolves as GitHub latest."
+            echo "- Both APK assets re-downloaded from their official URLs and verified byte-identical to the validated candidates."
+            echo "- Compiled manifest, native ABI, alignment, SHA-256 and signing-certificate checks re-ran against the published APKs."
+            echo "- Physical TV installation, playback and sign-in persistence were not exercised by this workflow."
           } >> "$GITHUB_STEP_SUMMARY"
