@@ -59,7 +59,6 @@
                     "longPress": "啟用長按操作",
                     "shorts": "啟用 Shorts(短影音)",
                     "videoPreviews": "啟用影片預覽",
-                    "ttWelcomeMsg": "顯示 TT(TizenTube)歡迎訊息",
                     "guestSignInReminder": "顯示訪客登入提醒",
                     "reloadHomeOnStartup": "啟動時重新載入首頁"
                 }
@@ -144,7 +143,7 @@
                     },
                     "launchToOnStartup": {
                         "title": "啟動時預設頁面",
-                        "subtitle": "選擇 TizenTube 啟動時預設開啟的頁面"
+                        "subtitle": "選擇 YTArk 啟動時預設開啟的頁面"
                     },
                     "sortSubscriptionsByAlphabet": "訂閱依字母排序",
                     "categories": {
@@ -193,8 +192,8 @@
                 }
             },
             "updater": {
-                "title": "TizenTube Cobalt 更新工具",
-                "menuSubtitle": "管理 TizenTube Cobalt 更新",
+                "title": "YTArk Updates",
+                "menuSubtitle": "Manage YTArk updates",
                 "versionSubtitle": "目前版本:{{version}}",
                 "options": {
                     "checkForUpdates": "檢查更新",
@@ -202,7 +201,7 @@
                 },
                 "updateAvailable": {
                     "title": "Update Available",
-                    "subtitle": "A new version of TizenTube Cobalt is available: {{latestVersion}}, current: {{currentVersion}}"
+                    "subtitle": "A new version of YTArk is available: {{latestVersion}}, current: {{currentVersion}}"
                 },
                 "releaseDate": "Release Date: {{date}}",
                 "updateNow": {
@@ -214,15 +213,15 @@
                     "subtitle": "Check for updates later."
                 },
                 "upToDate": {
-                    "title": "TizenTube is up to date",
-                    "subtitle": "You are using the latest version ({{version}}) of TizenTube Cobalt."
+                    "title": "YTArk is up to date",
+                    "subtitle": "You are using the latest version ({{version}}) of YTArk."
                 },
                 "checkFailed": {
-                    "title": "TizenTube update check failed",
+                    "title": "YTArk update check failed",
                     "subtitle": "Could not check for updates."
                 },
                 "downloading": {
-                    "title": "TizenTube Update",
+                    "title": "YTArk update",
                     "subtitle": "Downloading update, please wait..."
                 }
             },
@@ -234,26 +233,10 @@
             }
         },
         "ttSettings": {
-            "title": "TizenTube 設定",
-            "madeByText": "由 Reis Can (reisxd) 製作❤️",
-            "summary": "開啟 TizenTube 設定"
-        },
-        "supportTT": {
-            "title": "支持TizenTube",
-            "subtitle": "❤️ 支持 TizenTube 與其開發",
-            "content": {
-                "1": "如果你喜歡使用 TizenTube，並想支持它的開發，可以參考以下方式:",
-                "2": "1. 在 GitHub 專案點星標（Star），幫助提升曝光度。",
-                "3": "2. 分享 TizenTube 給其他人。",
-                "4": "如果你想提供金錢上的支持，可以考慮斗內(捐款):",
-                "5": "- Buy Me A Coffee: https://www.buymeacoffee.com/reisxd (建議優先)",
-                "6": "- GitHub Sponsors: https://github.com/sponsors/reisxd"
-            }
+            "title": "YTArk Settings",
+            "madeByText": "Playback, appearance and update controls",
+            "summary": "Open YTArk Settings"
         }
-    },
-    "welcomeMsg": {
-        "title": "歡迎使用 TizenTube",
-        "subtitle": "請前往設定，點選 TizenTube 設定以進行相關設定"
     },
     "sponsorblock": {
         "segments": {
@@ -284,7 +267,7 @@
         "pictureInPicture": "Picture in Picture",
         "previous": "Previous",
         "next": "Next",
-        "withTizenTube": "with TizenTube",
+        "withTizenTube": "with YTArk",
         "share": {
             "title": "Share",
             "button": "Share",

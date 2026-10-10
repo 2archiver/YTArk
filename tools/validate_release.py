@@ -16,8 +16,19 @@ ROOT = Path(__file__).resolve().parents[1]
 VERSION_FILE = ROOT / "release" / "version.properties"
 APP_ID = "io.github.twoarchiver.ytark"
 APP_NAME = "YTArk"
-VERSION_PATTERN = re.compile(r"^(?P<major>\d+\.\d+\.\d+)-ytark\.(?P<serial>\d+)$")
-APK_DESCRIPTOR = b"io/github/twoarchiver/ytark/updater/UpdateBootstrapProvider"
+RELEASE_NAME = "YTArk 2.1"
+CLEAN_VERSION_PATTERN = re.compile(r"^(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)$")
+HISTORICAL_VERSION_PATTERN = re.compile(
+    r"^(?P<semver>\d+\.\d+\.\d+)-(?P<channel>ytark|personal)\.(?P<serial>[1-9]\d*)$"
+)
+TAG_VERSION_PATTERN = re.compile(
+    r"^v(?P<version>\d+\.\d+\.\d+(?:-(?:ytark|personal)\.[1-9]\d*)?)$"
+)
+APK_DESCRIPTORS = (
+    b"io/github/twoarchiver/ytark/updater/UpdateBootstrapProvider",
+    b"io/github/twoarchiver/ytark/updater/PendingUpdateProvider",
+    b"io/github/twoarchiver/ytark/updater/UpdateActivity",
+)
 ANDROID_14_API = 34
 ARCHITECTURES = {
     "armv7": {"abi": "armeabi-v7a", "key": "APK_ARMV7", "upstream": "cobalt-arm.apk"},
@@ -36,7 +47,43 @@ OPTIONAL_TV_FEATURES = {
 def apk_filename(version: str, architecture: str) -> str:
     if architecture not in ARCHITECTURES:
         raise ValueError(f"Unsupported architecture: {architecture}")
+    if not CLEAN_VERSION_PATTERN.fullmatch(version):
+        raise ValueError(f"APK asset versions must use clean SemVer: {version}")
     return f"YTArk-v{version}-{architecture}.apk"
+
+
+def version_code_for_release(version: str) -> int:
+    """Map clean SemVer to a monotonic Android code; read legacy published tags too."""
+    historical = HISTORICAL_VERSION_PATTERN.fullmatch(version)
+    if historical:
+        return 20_000 + int(historical.group("serial"))
+
+    match = CLEAN_VERSION_PATTERN.fullmatch(version)
+    if not match:
+        raise ValueError(f"Invalid stable YTArk version: {version}")
+    major, minor, patch = (int(match.group(name)) for name in ("major", "minor", "patch"))
+    # Reserve two decimal digits each for minor/patch and one hundred code points
+    # per patch release. This keeps numeric SemVer ordering aligned with Android.
+    if major <= 0 or minor >= 100 or patch >= 100:
+        raise ValueError("SemVer components exceed the YTArk Android versionCode mapping")
+    code = major * 1_000_000 + minor * 10_000 + patch * 100
+    if code <= 0 or code > 2_100_000_000:
+        raise ValueError("The derived Android versionCode exceeds the platform limit")
+    return code
+
+
+def _numeric_version_key(version: str) -> tuple[int, int, int, int, int]:
+    historical = HISTORICAL_VERSION_PATTERN.fullmatch(version)
+    clean = historical.group("semver") if historical else version
+    match = CLEAN_VERSION_PATTERN.fullmatch(clean)
+    if not match:
+        raise ValueError(f"The published YTArk tag has an invalid numeric version: {version}")
+    major, minor, patch = (int(match.group(name)) for name in ("major", "minor", "patch"))
+    # Historical serial releases sort below clean SemVer releases with the same
+    # numeric components. The old 'personal' channel is recognized only while
+    # auditing already-published releases; new configuration requires clean SemVer.
+    return (major, minor, patch, 0 if historical else 1,
+            int(historical.group("serial")) if historical else 0)
 
 
 def load_config() -> dict[str, str]:
@@ -51,27 +98,36 @@ def load_config() -> dict[str, str]:
         properties[key.strip()] = value.strip()
 
     version = properties.get("versionName", "")
-    match = VERSION_PATTERN.fullmatch(version)
+    match = CLEAN_VERSION_PATTERN.fullmatch(version)
     if not match:
-        raise ValueError("versionName must use the required <semver>-ytark.<serial> format")
-    serial = int(match.group("serial"))
-    if serial <= 0:
-        raise ValueError("The YTArk release serial must be positive")
-    version_code = 20000 + serial
-    if version_code > 2_100_000_000:
-        raise ValueError("The derived Android versionCode exceeds the platform limit")
+        raise ValueError("versionName must be clean stable SemVer in MAJOR.MINOR.PATCH form")
+    version_code = version_code_for_release(version)
+    configured_code = properties.get("versionCode", "")
+    if not configured_code.isdigit() or int(configured_code) != version_code:
+        raise ValueError("versionCode must match the monotonic numeric SemVer mapping")
 
+    display_version = properties.get("displayVersion", "")
+    expected_display = f"{match.group('major')}.{match.group('minor')}" \
+        if match.group("patch") == "0" else version
+    if display_version != expected_display:
+        raise ValueError(f"displayVersion must be {expected_display} for versionName {version}")
+
+    tag = properties.get("versionTag", "")
+    if tag != f"v{version}":
+        raise ValueError("versionTag must be exactly v plus the clean versionName")
     base_tag = properties.get("baseTag", "")
     if not re.fullmatch(r"v\d+\.\d+\.\d+", base_tag):
         raise ValueError("baseTag must be a pinned upstream tag such as v2.0.2")
-    script_tag = f"s{serial}"
-    if len(script_tag) > 8:
-        raise ValueError("The userscript tag exceeds the byte-length budget in the base APK")
+    script_tag = properties.get("scriptTag", "")
+    if not re.fullmatch(r"s[0-9]{1,7}", script_tag) or len(script_tag) > 8:
+        raise ValueError("scriptTag must fit the immutable userscript URL byte-length budget")
 
     return {
         "VERSION_NAME": version,
+        "DISPLAY_VERSION": display_version,
         "VERSION_CODE": str(version_code),
-        "VERSION_TAG": f"v{version}",
+        "VERSION_TAG": tag,
+        "RELEASE_NAME": f"YTArk {display_version}",
         "APK_ARMV7": apk_filename(version, "armv7"),
         "APK_ARM64": apk_filename(version, "arm64"),
         "SCRIPT_TAG": script_tag,
@@ -88,7 +144,7 @@ def emit_env(path: str) -> None:
             if "\n" in value or "\r" in value:
                 raise ValueError(f"Unsafe line break in {key}")
             output.write(f"{key}={value}\n")
-    print("Release environment loaded:", config["VERSION_NAME"], config["VERSION_CODE"])
+    print("Release environment loaded:", config["DISPLAY_VERSION"], config["VERSION_CODE"])
 
 
 def parse_release_version_code(body: str) -> int | None:
@@ -96,26 +152,98 @@ def parse_release_version_code(body: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
-def check_version(latest_path: str) -> None:
+def _flatten_release_records(payload: object):
+    if isinstance(payload, dict):
+        yield payload
+    elif isinstance(payload, list):
+        for entry in payload:
+            yield from _flatten_release_records(entry)
+    else:
+        raise ValueError("The GitHub releases list has an unexpected JSON shape")
+
+
+def _published_release_version(release: dict[str, object]) -> tuple[str, str, int] | None:
+    if release.get("draft") is True or release.get("prerelease") is True:
+        return None
+    if release.get("draft") is not False or release.get("prerelease") is not False:
+        raise ValueError("A historical release is missing its stable-publication flags")
+    tag = release.get("tag_name", "")
+    tag_match = TAG_VERSION_PATTERN.fullmatch(tag if isinstance(tag, str) else "")
+    if not tag_match:
+        raise ValueError(f"A published release has an unrecognized YTArk version tag: {tag}")
+    version = tag_match.group("version")
+    code = parse_release_version_code(release.get("body", ""))
+    if code is None:
+        raise ValueError(f"Published release {tag} is missing versionCode metadata")
+    expected = version_code_for_release(version)
+    if code != expected:
+        raise ValueError(f"Published release {tag} has versionCode {code}, expected {expected}")
+    return tag, version, code
+
+
+def check_version(latest_path: str, releases_path: str | None = None) -> None:
     config = load_config()
     current = int(config["VERSION_CODE"])
+    current_version = config["VERSION_NAME"]
     latest = json.loads(Path(latest_path).read_text(encoding="utf-8"))
-    if latest.get("message") == "Not Found":
+    if not isinstance(latest, dict):
+        raise ValueError("The latest GitHub release response must be a JSON object")
+    no_latest = latest.get("message") == "Not Found"
+    if not no_latest and (latest.get("draft") is not False or latest.get("prerelease") is not False):
+        raise ValueError("The version comparison input is not a published stable release")
+
+    if releases_path:
+        records_payload = json.loads(Path(releases_path).read_text(encoding="utf-8"))
+        releases = list(_flatten_release_records(records_payload))
+    else:
+        releases = [] if no_latest else [latest]
+
+    previous_releases: list[tuple[str, str, int]] = []
+    current_tag_already_published = False
+    seen_tags: set[str] = set()
+    for record in releases:
+        parsed = _published_release_version(record)
+        if parsed is None:
+            continue
+        tag, version, code = parsed
+        if tag in seen_tags:
+            raise ValueError(f"The GitHub releases list contains duplicate published tag {tag}")
+        seen_tags.add(tag)
+        if tag == config["VERSION_TAG"]:
+            if version != current_version or code != current:
+                raise ValueError("The already-published YTArk tag disagrees with this build's version contract")
+            current_tag_already_published = True
+            continue
+        if _numeric_version_key(current_version) <= _numeric_version_key(version):
+            raise ValueError(f"The new numeric version must be newer: {current_version} after {version}")
+        if current <= code:
+            raise ValueError(f"versionCode must exceed every published release: new {current}, published {code} ({tag})")
+        previous_releases.append((tag, version, code))
+
+    latest_tag = latest.get("tag_name", "") if not no_latest else ""
+    if latest_tag and releases_path and latest_tag not in seen_tags:
+        raise ValueError("The GitHub latest stable release is missing from the complete releases list")
+    if latest_tag == config["VERSION_TAG"]:
+        current_tag_already_published = True
+
+    if current_tag_already_published:
+        print(f"The configured release {config['VERSION_TAG']} is already published; its version contract was verified.")
+        return
+    if not previous_releases:
+        if no_latest:
+            print("No previous published release; versionCode seed is accepted.")
+            return
+        parsed_latest = _published_release_version(latest)
+        if parsed_latest is not None:
+            previous_releases.append(parsed_latest)
+
+    if not previous_releases:
         print("No previous published release; versionCode seed is accepted.")
         return
-    if latest.get("draft") or latest.get("prerelease"):
-        raise ValueError("The version comparison input is not a published stable release")
-    previous = parse_release_version_code(latest.get("body", ""))
-    if previous is None:
-        raise ValueError("The previous stable release is missing its versionCode metadata")
-    if latest.get("tag_name") == config["VERSION_TAG"] and current == previous:
-        print(f"Rebuilding current release {config['VERSION_TAG']} (versionCode {current}).")
-        return
-    if current <= previous:
-        raise ValueError(f"versionCode must increase: new {current}, published {previous}")
-    if latest.get("tag_name") == config["VERSION_TAG"]:
-        raise ValueError("This version tag has already been published")
-    print(f"versionCode increment verified: {previous} -> {current}")
+    previous_tag, previous_version, previous_code = max(
+        previous_releases, key=lambda entry: _numeric_version_key(entry[1]))
+    print(f"Numeric version and versionCode exceed published releases: {previous_version} "
+          f"({previous_code}, {previous_tag}) -> {current_version} ({current}).")
 
 
 def parse_sha256_digest(value: object) -> str | None:
@@ -237,6 +365,8 @@ def validate_compiled_manifest(apk: Path, aapt: str) -> None:
     _validate_resource_reference(application, "icon", "ytark_launcher", resources, "application")
     _validate_resource_reference(application, "banner", "ytark_banner", resources, "application")
     _validate_resource_reference(launcher, "icon", "ytark_launcher", resources, "launcher activity")
+    if "ytark_launcher_monochrome" not in resources:
+        raise ValueError("Compiled adaptive icon has no YTArk monochrome launcher layer")
 
     feature_blocks = _element_blocks(tree, "uses-feature")
     touchscreen = []
@@ -319,6 +449,7 @@ def validate_apk(path: str, architecture: str, expected_cert_file: str,
         for artwork in (
             "res/drawable/ytark_launcher_fg.xml",
             "res/drawable/ytark_launcher_bg.xml",
+            "res/drawable/ytark_launcher_monochrome.xml",
             "res/drawable/ytark_banner.xml",
             "res/mipmap-anydpi-v26/ytark_launcher.xml",
             "res/mipmap-mdpi/ytark_launcher.png",
@@ -332,18 +463,27 @@ def validate_apk(path: str, architecture: str, expected_cert_file: str,
         dex_files = [name for name in names if re.fullmatch(r"classes\d*\.dex", name)]
         if not dex_files:
             raise ValueError("APK has no DEX files")
-        if not any(APK_DESCRIPTOR in archive.read(name) for name in dex_files):
-            raise ValueError("Native updater bootstrap provider is missing from the APK DEX files")
+        missing_updater_classes = [
+            descriptor.decode("ascii")
+            for descriptor in APK_DESCRIPTORS
+            if not any(descriptor in archive.read(name) for name in dex_files)
+        ]
+        if missing_updater_classes:
+            raise ValueError("Native updater classes are missing from APK DEX files: "
+                             + ", ".join(missing_updater_classes))
 
     validate_compiled_manifest(apk, aapt)
     manifest = run([aapt, "dump", "xmltree", str(apk), "AndroidManifest.xml"])
     for required in (
         "io.github.twoarchiver.ytark.updater.UpdateActivity",
         "io.github.twoarchiver.ytark.updater.UpdateBootstrapProvider",
+        "io.github.twoarchiver.ytark.updater.PendingUpdateProvider",
         "io.github.twoarchiver.ytark.updater.UpdateActionReceiver",
         "android.permission.REQUEST_INSTALL_PACKAGES",
         "android.permission.POST_NOTIFICATIONS",
-        "ytark",
+        "ytarkupdater.files",
+        "android:grantUriPermissions",
+        "/update.apk",
     ):
         if required not in manifest:
             raise ValueError(f"Android manifest is missing required updater entry: {required}")
@@ -416,22 +556,24 @@ def check_base_checksums(checksum_file: str, base_dir: str) -> None:
 def verify_release(release_path: str, state: str, latest_path: str | None) -> None:
     config = load_config()
     release = json.loads(Path(release_path).read_text(encoding="utf-8"))
-    if release.get("name") != APP_NAME:
-        raise ValueError(f"Release title must be exactly {APP_NAME}")
+    if release.get("name") != config["RELEASE_NAME"]:
+        raise ValueError(f"Release title must be exactly {config['RELEASE_NAME']}")
     if release.get("tag_name") != config["VERSION_TAG"]:
         raise ValueError("Release tag does not match release/version.properties")
-    if state == "draft" and not release.get("draft"):
+    if state == "draft" and release.get("draft") is not True:
         raise ValueError("Release should still be a draft while validation is running")
-    if state == "published" and (release.get("draft") or release.get("prerelease")):
+    if release.get("prerelease") is not False:
+        raise ValueError("YTArk release must not be marked as a prerelease")
+    if state == "published" and release.get("draft") is not False:
         raise ValueError("Release must be published as a stable non-draft release")
 
     body = release.get("body", "") or ""
     if re.search(r"personal\s+tube\s+tv", body, re.I):
         raise ValueError("Release notes contain deprecated product branding")
     for required in (
-        APP_ID, config["VERSION_NAME"], config["VERSION_CODE"], "TizenTubeCobalt",
-        config["APK_ARMV7"], config["APK_ARM64"], "4K does not select an APK architecture",
-        "arm64-v8a", "armeabi-v7a",
+        APP_ID, config["DISPLAY_VERSION"], config["VERSION_NAME"], config["VERSION_CODE"],
+        "TizenTubeCobalt", config["APK_ARMV7"], config["APK_ARM64"],
+        "4K does not select an APK architecture", "arm64-v8a", "armeabi-v7a",
     ):
         if required not in body:
             raise ValueError(f"Release notes are missing required metadata/guidance: {required}")
@@ -502,6 +644,7 @@ def main() -> None:
 
     version_parser = commands.add_parser("check-version")
     version_parser.add_argument("--latest-json", required=True)
+    version_parser.add_argument("--releases-json")
 
     apk_parser = commands.add_parser("check-apk")
     apk_parser.add_argument("--apk", required=True)
@@ -530,7 +673,7 @@ def main() -> None:
         if args.command == "emit-env":
             emit_env(args.file)
         elif args.command == "check-version":
-            check_version(args.latest_json)
+            check_version(args.latest_json, args.releases_json)
         elif args.command == "check-apk":
             validate_apk(args.apk, args.architecture, args.cert_file, args.aapt, args.apksigner)
         elif args.command == "check-checksums":

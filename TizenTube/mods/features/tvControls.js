@@ -2,7 +2,7 @@
  * YTArk Quick Controls
  *
  * Adds TV-optimized presets, theme management, quick quality selection,
- * and a one-level undo to the TizenTube settings UI.
+ * and a one-level undo to the YTArk settings UI.
  *
  * Presets change only their listed keys, leaving accounts and unrelated
  * preferences alone. Native Android update controls are provided by YTArk.

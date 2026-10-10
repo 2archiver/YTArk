@@ -1,4 +1,4 @@
-// Picture in Picture Mode for TizenTube
+// Picture in Picture support for YTArk
 
 import resolveCommand from "../resolveCommand.js";
 

@@ -59,7 +59,6 @@
                     "longPress": "تمكين إجراءات الضغط المطوّل",
                     "shorts": "تمكين Shorts",
                     "videoPreviews": "تمكين معاينات الفيديو",
-                    "ttWelcomeMsg": "عرض رسالة الترحيب",
                     "guestSignInReminder": "عرض تذكير تسجيل الدخول للضيف",
                     "reloadHomeOnStartup": "إعادة تحميل الصفحة الرئيسية عند بدء التشغيل"
                 }
@@ -193,8 +192,8 @@
                 }
             },
             "updater": {
-                "title": "أداة تحديث TizenTube Cobalt",
-                "menuSubtitle": "إدارة تحديثات TizenTube Cobalt",
+                "title": "YTArk Updates",
+                "menuSubtitle": "Manage YTArk updates",
                 "versionSubtitle": "الإصدار الحالي: {{version}}",
                 "options": {
                     "checkForUpdates": "التحقق من التحديثات",
@@ -202,7 +201,7 @@
                 },
                 "updateAvailable": {
                     "title": "Update Available",
-                    "subtitle": "A new version of TizenTube Cobalt is available: {{latestVersion}}, current: {{currentVersion}}"
+                    "subtitle": "A new version of YTArk is available: {{latestVersion}}, current: {{currentVersion}}"
                 },
                 "releaseDate": "Release Date: {{date}}",
                 "updateNow": {
@@ -214,15 +213,15 @@
                     "subtitle": "Check for updates later."
                 },
                 "upToDate": {
-                    "title": "TizenTube is up to date",
-                    "subtitle": "You are using the latest version ({{version}}) of TizenTube Cobalt."
+                    "title": "YTArk is up to date",
+                    "subtitle": "You are using the latest version ({{version}}) of YTArk."
                 },
                 "checkFailed": {
-                    "title": "TizenTube update check failed",
+                    "title": "YTArk update check failed",
                     "subtitle": "Could not check for updates."
                 },
                 "downloading": {
-                    "title": "TizenTube Update",
+                    "title": "YTArk update",
                     "subtitle": "Downloading update, please wait..."
                 }
             },
@@ -234,26 +233,10 @@
             }
         },
         "ttSettings": {
-            "title": "TizenTube إعدادات",
-            "madeByText": "تم تطويره بواسطة Reis Can (reisxd) مع ❤️",
-            "summary": "فتح إعدادات TizenTube"
-        },
-        "supportTT": {
-            "title": "دعم TizenTube",
-            "subtitle": "❤️ أظهر دعمك لـ TizenTube وتطويره",
-            "content": {
-                "1": "إذا كنت تستمتع باستخدام TizenTube وترغب في دعم تطويره، يمكنك القيام بما يلي:",
-                "2": "1. وضع نجمة على مستودع GitHub لزيادة ظهوره.",
-                "3": "2. مشاركة TizenTube مع الآخرين.",
-                "4": "إذا كنت ترغب في المساهمة ماليًا:",
-                "5": "- Buy Me A Coffee: https://www.buymeacoffee.com/reisxd (يُفضّل)",
-                "6": "- GitHub Sponsors: https://github.com/sponsors/reisxd"
-            }
+            "title": "YTArk Settings",
+            "madeByText": "Playback, appearance and update controls",
+            "summary": "Open YTArk Settings"
         }
-    },
-    "welcomeMsg": {
-        "title": "مرحبًا بك في TizenTube",
-        "subtitle": "انتقل إلى الإعدادات واضغط على إعدادات TizenTube."
     },
     "sponsorblock": {
         "segments": {
@@ -284,7 +267,7 @@
         "pictureInPicture": "Picture in Picture",
         "previous": "Previous",
         "next": "Next",
-        "withTizenTube": "with TizenTube",
+        "withTizenTube": "with YTArk",
         "share": {
             "title": "Share",
             "button": "Share",

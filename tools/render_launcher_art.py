@@ -370,12 +370,34 @@ def launcher_bg_vector() -> str:
     )
 
 
+def launcher_monochrome_vector() -> str:
+    """Single-color orbital play mark for Android 13+ themed launcher icons."""
+    unit = ADAPTIVE_VIEWPORT * ADAPTIVE_SCALE
+    offset = (ADAPTIVE_VIEWPORT - unit) / 2.0
+    lines = [
+        VECTOR_HEADER.format(width=108, height=108, vw=108, vh=108).rstrip(),
+        f'    <group android:translateX="{offset:.4f}" android:translateY="{offset:.4f}">',
+        f'        <path android:fillColor="#FFFFFFFF" android:pathData="{triangle_path(PLAY, unit)}" />',
+        f'        <path android:fillColor="#00000000" android:strokeColor="#FFFFFFFF" '
+        f'android:strokeWidth="{RING_STROKE_WIDTH * unit:.4f}" android:strokeLineCap="round" '
+        f'android:pathData="{ring_arc_path(RING_BACK[0], RING_BACK[1], unit)}" />',
+        f'        <path android:fillColor="#00000000" android:strokeColor="#FFFFFFFF" '
+        f'android:strokeWidth="{RING_STROKE_WIDTH * unit:.4f}" android:strokeLineCap="round" '
+        f'android:pathData="{ring_arc_path(RING_FRONT[0], RING_FRONT[1], unit)}" />',
+        '    </group>',
+        '</vector>',
+        '',
+    ]
+    return "\n".join(lines)
+
+
 def adaptive_icon_xml() -> str:
     return (
         '<?xml version="1.0" encoding="utf-8"?>\n'
         '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n'
         '    <background android:drawable="@drawable/ytark_launcher_bg" />\n'
         '    <foreground android:drawable="@drawable/ytark_launcher_fg" />\n'
+        '    <monochrome android:drawable="@drawable/ytark_launcher_monochrome" />\n'
         "</adaptive-icon>\n"
     )
 
@@ -453,6 +475,7 @@ def artifacts() -> dict[Path, bytes]:
         ROOT / "branding" / f"ytark-launcher-{PREVIEW_SIZE}.png": render_png(PREVIEW_SIZE),
         ROOT / "android-updater" / "ytark_launcher_fg.xml": launcher_fg_vector().encode("utf-8"),
         ROOT / "android-updater" / "ytark_launcher_bg.xml": launcher_bg_vector().encode("utf-8"),
+        ROOT / "android-updater" / "ytark_launcher_monochrome.xml": launcher_monochrome_vector().encode("utf-8"),
         ROOT / "android-updater" / "ytark_banner.xml": banner_vector().encode("utf-8"),
         ROOT / "android-updater" / "mipmap-anydpi-v26" / "ytark_launcher.xml":
             adaptive_icon_xml().encode("utf-8"),

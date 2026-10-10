@@ -19,16 +19,91 @@ import validate_release
 
 
 class DualAbiReleaseContractTests(unittest.TestCase):
-    def test_expected_version_and_asset_names(self):
+    def test_expected_clean_semver_version_and_asset_names(self):
         config = validate_release.load_config()
-        self.assertEqual(config["VERSION_NAME"], "2.0.4-ytark.17")
-        self.assertEqual(config["VERSION_CODE"], "20017")
-        self.assertEqual(config["APK_ARMV7"], "YTArk-v2.0.4-ytark.17-armv7.apk")
-        self.assertEqual(config["APK_ARM64"], "YTArk-v2.0.4-ytark.17-arm64.apk")
+        self.assertEqual(config["VERSION_NAME"], "2.1.0")
+        self.assertEqual(config["DISPLAY_VERSION"], "2.1")
+        self.assertEqual(config["VERSION_CODE"], "2010000")
+        self.assertEqual(config["VERSION_TAG"], "v2.1.0")
+        self.assertEqual(config["RELEASE_NAME"], "YTArk 2.1")
+        self.assertEqual(config["APK_ARMV7"], "YTArk-v2.1.0-armv7.apk")
+        self.assertEqual(config["APK_ARM64"], "YTArk-v2.1.0-arm64.apk")
         self.assertEqual(validate_release.apk_filename(config["VERSION_NAME"], "armv7"), config["APK_ARMV7"])
         self.assertEqual(validate_release.apk_filename(config["VERSION_NAME"], "arm64"), config["APK_ARM64"])
+        self.assertEqual(validate_release.version_code_for_release("2.0.4"), 2000400)
+        self.assertEqual(validate_release.version_code_for_release("2.0.4-ytark.17"), 20017)
+        self.assertEqual(validate_release.version_code_for_release("2.0.2-personal.14"), 20014)
+        self.assertLess(
+            validate_release._numeric_version_key("2.0.4-ytark.17"),
+            validate_release._numeric_version_key("2.1.0"),
+        )
+        self.assertLess(
+            validate_release._numeric_version_key("2.0.4-ytark.17"),
+            validate_release._numeric_version_key("2.0.4"),
+        )
         with self.assertRaises(ValueError):
             validate_release.apk_filename(config["VERSION_NAME"], "4k")
+        with self.assertRaises(ValueError):
+            validate_release.version_code_for_release("2.1.0-rc.1")
+
+    def test_release_version_code_exceeds_historical_published_serial(self):
+        config = validate_release.load_config()
+        latest = {
+            "tag_name": "v2.0.4-ytark.17",
+            "draft": False,
+            "prerelease": False,
+            "body": "Version 2.0.4-ytark.17 (versionCode 20017)",
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "latest.json"
+            path.write_text(json.dumps(latest), encoding="utf-8")
+            validate_release.check_version(str(path))
+        self.assertGreater(int(config["VERSION_CODE"]), 20017)
+
+    def test_release_version_code_exceeds_every_published_stable_release(self):
+        latest = {
+            "tag_name": "v2.0.4-ytark.17",
+            "draft": False,
+            "prerelease": False,
+            "body": "Version 2.0.4-ytark.17 (versionCode 20017)",
+        }
+        releases = [
+            latest,
+            {
+                "tag_name": "v2.0.4-ytark.16", "draft": False, "prerelease": False,
+                "body": "Version 2.0.4-ytark.16 (versionCode 20016)",
+            },
+            {
+                "tag_name": "v2.0.3-ytark.15", "draft": False, "prerelease": False,
+                "body": "Version 2.0.3-ytark.15 (versionCode 20015)",
+            },
+            {
+                "tag_name": "v2.0.2-personal.14", "draft": False, "prerelease": False,
+                "body": "Version 2.0.2-personal.14 (versionCode 20014)",
+            },
+            {"tag_name": "v99.0.0", "draft": True, "prerelease": False, "body": ""},
+            {"tag_name": "v99.0.0-rc.1", "draft": False, "prerelease": True, "body": ""},
+        ]
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            latest_path = root / "latest.json"
+            releases_path = root / "releases.json"
+            latest_path.write_text(json.dumps(latest), encoding="utf-8")
+            releases_path.write_text(json.dumps([releases[:3], releases[3:]]), encoding="utf-8")
+            validate_release.check_version(str(latest_path), str(releases_path))
+
+            too_high = dict(releases[1])
+            too_high["tag_name"] = "v2.1.0-ytark.2000000"
+            too_high["body"] = "Version 2.1.0-ytark.2000000 (versionCode 2020000)"
+            releases_path.write_text(json.dumps(releases + [too_high]), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "versionCode must exceed every published release"):
+                validate_release.check_version(str(latest_path), str(releases_path))
+
+            inconsistent = dict(releases[1])
+            inconsistent["body"] = "Version 2.0.4-ytark.16 (versionCode 20017)"
+            releases_path.write_text(json.dumps(releases[:1] + [inconsistent]), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "versionCode 20017, expected 20016"):
+                validate_release.check_version(str(latest_path), str(releases_path))
 
     def test_pinned_upstream_asset_names_urls_and_digests(self):
         release = {
@@ -228,6 +303,7 @@ class DualAbiReleaseContractTests(unittest.TestCase):
 """
         resources = """resource 0x7f080001 io.github.twoarchiver.ytark:mipmap/ytark_launcher
 resource 0x7f080002 io.github.twoarchiver.ytark:drawable/ytark_banner
+resource 0x7f080003 io.github.twoarchiver.ytark:drawable/ytark_launcher_monochrome
 """
         with patch.object(validate_release, "run", side_effect=[tree, resources]):
             validate_release.validate_compiled_manifest(Path("candidate.apk"), "aapt")
@@ -244,9 +320,9 @@ resource 0x7f080002 io.github.twoarchiver.ytark:drawable/ytark_banner
 
     def test_release_contract_requires_both_assets_and_truthful_architecture_guidance(self):
         config = validate_release.load_config()
-        body = f"""# YTArk {config['VERSION_NAME']}
+        body = f"""# YTArk {config['DISPLAY_VERSION']}
 Android package `{validate_release.APP_ID}`
-Version {config['VERSION_NAME']} (versionCode {config['VERSION_CODE']})
+Version {config['DISPLAY_VERSION']} ({config['VERSION_NAME']}; versionCode {config['VERSION_CODE']})
 TizenTubeCobalt v2.0.2
 {config['APK_ARMV7']} armeabi-v7a
 {config['APK_ARM64']} arm64-v8a
@@ -262,7 +338,7 @@ TizenTubeCobalt v2.0.2
                 "browser_download_url": f"https://github.com/2archiver/YTArk/releases/download/{config['VERSION_TAG']}/{name}",
             })
         release = {
-            "name": "YTArk",
+            "name": config["RELEASE_NAME"],
             "tag_name": config["VERSION_TAG"],
             "draft": True,
             "prerelease": False,
@@ -273,6 +349,13 @@ TizenTubeCobalt v2.0.2
             path = Path(temp) / "release.json"
             path.write_text(json.dumps(release), encoding="utf-8")
             validate_release.verify_release(str(path), "draft", None)
+            published = dict(release, draft=False)
+            path.write_text(json.dumps(published), encoding="utf-8")
+            validate_release.verify_release(str(path), "published", None)
+            prerelease = dict(published, prerelease=True)
+            path.write_text(json.dumps(prerelease), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                validate_release.verify_release(str(path), "published", None)
             broken = dict(release)
             broken["assets"] = [asset for asset in assets if asset["name"] != config["APK_ARMV7"]]
             path.write_text(json.dumps(broken), encoding="utf-8")

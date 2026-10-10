@@ -59,7 +59,6 @@
                     "longPress": "Aktionen bei langem Drücken aktivieren",
                     "shorts": "Shorts aktivieren",
                     "videoPreviews": "Videovorschauen aktivieren",
-                    "ttWelcomeMsg": "TT-Begrüßungsnachricht anzeigen",
                     "guestSignInReminder": "Gast-Anmeldeerinnerung anzeigen",
                     "reloadHomeOnStartup": "Startseite beim Start neu laden"
                 }
@@ -150,7 +149,7 @@
                     },
                     "launchToOnStartup": {
                         "title": "Startseite beim Start",
-                        "subtitle": "Wähle die Standardseite, die TizenTube beim Start öffnet"
+                        "subtitle": "Wähle die Standardseite, die YTArk beim Start öffnet"
                     },
                     "categories": {
                         "search": "Suchen",
@@ -199,8 +198,8 @@
                 }
             },
             "updater": {
-                "title": "TizenTube Cobalt Updater",
-                "menuSubtitle": "TizenTube Cobalt Updates verwalten",
+                "title": "YTArk Updates",
+                "menuSubtitle": "Manage YTArk updates",
                 "versionSubtitle": "Aktuelle Version: {{version}}",
                 "options": {
                     "checkForUpdates": "Nach Updates suchen",
@@ -208,7 +207,7 @@
                 },
                 "updateAvailable": {
                     "title": "Update verfügbar",
-                    "subtitle": "Eine neue Version von TizenTube Cobalt ist verfügbar: {{latestVersion}}, installiert: {{currentVersion}}"
+                    "subtitle": "Eine neue Version von YTArk ist verfügbar: {{latestVersion}}, installiert: {{currentVersion}}"
                 },
                 "releaseDate": "Veröffentlichungsdatum: {{date}}",
                 "updateNow": {
@@ -220,40 +219,24 @@
                     "subtitle": "Später nach Updates suchen."
                 },
                 "upToDate": {
-                    "title": "TizenTube ist auf dem neuesten Stand",
-                    "subtitle": "Sie verwenden die neueste Version ({{version}}) von TizenTube Cobalt."
+                    "title": "YTArk is up to date",
+                    "subtitle": "Sie verwenden die neueste Version ({{version}}) von YTArk."
                 },
                 "checkFailed": {
-                    "title": "Überprüfung auf TizenTube-Updates fehlgeschlagen",
+                    "title": "YTArk update check failed",
                     "subtitle": "Es konnten keine Updates gefunden werden."
                 },
                 "downloading": {
-                    "title": "TizenTube-Update",
+                    "title": "YTArk update",
                     "subtitle": "Update wird heruntergeladen, bitte warten..."
                 }
             }
         },
         "ttSettings": {
-            "title": "TizenTube-Einstellungen",
-            "madeByText": "Erstellt von Reis Can (reisxd) mit ❤️",
-            "summary": "TizenTube-Einstellungen öffnen"
-        },
-        "supportTT": {
-            "title": "TizenTube unterstützen",
-            "subtitle": "❤️ Unterstütze TizenTube und seine Entwicklung",
-            "content": {
-                "1": "Wenn dir TizenTube gefällt und du seine Entwicklung unterstützen möchtest, ziehe Folgendes in Betracht:",
-                "2": "1. Markiere das GitHub-Repository mit einem Stern, um seine Sichtbarkeit zu erhöhen.",
-                "3": "2. Teile TizenTube mit anderen.",
-                "4": "Wenn du finanziell beitragen möchtest, kannst du spenden:",
-                "5": "- Buy Me A Coffee: https://www.buymeacoffee.com/reisxd (bevorzugt)",
-                "6": "- GitHub Sponsoren: https://github.com/sponsors/reisxd"
-            }
+            "title": "YTArk Settings",
+            "madeByText": "Playback, appearance and update controls",
+            "summary": "Open YTArk Settings"
         }
-    },
-    "welcomeMsg": {
-        "title": "Willkommen bei TizenTube",
-        "subtitle": "Gehe zu den Einstellungen und klicke auf TizenTube-Einstellungen."
     },
     "sponsorblock": {
         "segments": {
@@ -284,7 +267,7 @@
         "pictureInPicture": "Bild-in-Bild",
         "previous": "Zurück",
         "next": "Weiter",
-        "withTizenTube": "mit TizenTube",
+        "withTizenTube": "mit YTArk",
         "share": {
             "title": "Share",
             "button": "Share",

@@ -22,6 +22,8 @@ CERT_SHA256="$(grep -v '^[[:space:]]*#' "$CERT_FILE" | tr -d '[:space:]:' | tr '
 SOURCE="$ROOT/android-updater/src/main/java"
 TEST_SOURCE="$ROOT/android-updater/src/test/java/io/github/twoarchiver/ytark/updater/UpdateVersionTest.java"
 CONTRACT_TEST_SOURCE="$ROOT/android-updater/src/test/java/io/github/twoarchiver/ytark/updater/UpdateReleaseContractTest.java"
+SCHEDULE_TEST_SOURCE="$ROOT/android-updater/src/test/java/io/github/twoarchiver/ytark/updater/UpdateSchedulePolicyTest.java"
+BRANDING_TEST_SOURCE="$ROOT/android-updater/src/test/java/io/github/twoarchiver/ytark/updater/YtarkBrandingTest.java"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/ytark-updater.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
@@ -33,9 +35,13 @@ javac --release 8 -d "$WORK/test-classes" \
   "$SOURCE/io/github/twoarchiver/ytark/updater/NativeAbiContract.java" \
   "$SOURCE/io/github/twoarchiver/ytark/updater/UpdateResumeContract.java" \
   "$SOURCE/io/github/twoarchiver/ytark/updater/UpdateReleaseContract.java" \
-  "$TEST_SOURCE" "$CONTRACT_TEST_SOURCE"
+  "$SOURCE/io/github/twoarchiver/ytark/updater/UpdateSchedulePolicy.java" \
+  "$SOURCE/io/github/twoarchiver/ytark/updater/YtarkBranding.java" \
+  "$TEST_SOURCE" "$CONTRACT_TEST_SOURCE" "$SCHEDULE_TEST_SOURCE" "$BRANDING_TEST_SOURCE"
 java -cp "$WORK/test-classes" io.github.twoarchiver.ytark.updater.UpdateVersionTest
 java -cp "$WORK/test-classes" io.github.twoarchiver.ytark.updater.UpdateReleaseContractTest
+java -cp "$WORK/test-classes" io.github.twoarchiver.ytark.updater.UpdateSchedulePolicyTest
+java -cp "$WORK/test-classes" io.github.twoarchiver.ytark.updater.YtarkBrandingTest
 
 mkdir -p "$WORK/generated/io/github/twoarchiver/ytark/updater" \
   "$WORK/classes" "$WORK/dex"

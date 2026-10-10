@@ -59,7 +59,6 @@
                     "longPress": "Aktifkan Aksi Tekan Lama",
                     "shorts": "Aktifkan Shorts",
                     "videoPreviews": "Aktifkan Pratinjau Video",
-                    "ttWelcomeMsg": "Tampilkan Pesan Selamat Datang TT",
                     "guestSignInReminder": "Tampilkan Pengingat Masuk Tamu",
                     "reloadHomeOnStartup": "Muat Ulang Beranda saat Startup"
                 }
@@ -144,7 +143,7 @@
                     },
                     "launchToOnStartup": {
                         "title": "Halaman yang Dibuka saat Startup",
-                        "subtitle": "Pilih halaman default yang dibuka TizenTube saat startup"
+                        "subtitle": "Pilih halaman default yang dibuka YTArk saat startup"
                     },
                     "sortSubscriptionsByAlphabet": "Sort Subscriptions Alphabetically",
                     "categories": {
@@ -193,8 +192,8 @@
                 }
             },
             "updater": {
-                "title": "Pembaruan TizenTube Cobalt",
-                "menuSubtitle": "Kelola pembaruan TizenTube Cobalt",
+                "title": "YTArk Updates",
+                "menuSubtitle": "Manage YTArk updates",
                 "versionSubtitle": "Versi saat ini: {{version}}",
                 "options": {
                     "checkForUpdates": "Periksa pembaruan",
@@ -202,7 +201,7 @@
                 },
                 "updateAvailable": {
                     "title": "Update Available",
-                    "subtitle": "A new version of TizenTube Cobalt is available: {{latestVersion}}, current: {{currentVersion}}"
+                    "subtitle": "A new version of YTArk is available: {{latestVersion}}, current: {{currentVersion}}"
                 },
                 "releaseDate": "Release Date: {{date}}",
                 "updateNow": {
@@ -214,15 +213,15 @@
                     "subtitle": "Check for updates later."
                 },
                 "upToDate": {
-                    "title": "TizenTube is up to date",
-                    "subtitle": "You are using the latest version ({{version}}) of TizenTube Cobalt."
+                    "title": "YTArk is up to date",
+                    "subtitle": "You are using the latest version ({{version}}) of YTArk."
                 },
                 "checkFailed": {
-                    "title": "TizenTube update check failed",
+                    "title": "YTArk update check failed",
                     "subtitle": "Could not check for updates."
                 },
                 "downloading": {
-                    "title": "TizenTube Update",
+                    "title": "YTArk update",
                     "subtitle": "Downloading update, please wait..."
                 }
             },
@@ -234,26 +233,10 @@
             }
         },
         "ttSettings": {
-            "title": "Pengaturan TizenTube",
-            "madeByText": "Dibuat oleh Reis Can (reisxd) dengan ❤️",
-            "summary": "Buka Pengaturan TizenTube"
-        },
-        "supportTT": {
-            "title": "Dukung TizenTube",
-            "subtitle": "❤️ Tunjukkan dukungan untuk TizenTube dan pengembangannya",
-            "content": {
-                "1": "Jika Anda senang menggunakan TizenTube dan ingin mendukung pengembangannya, pertimbangkan hal berikut:",
-                "2": "1. Beri bintang pada repositori GitHub untuk membantu meningkatkan visibilitas.",
-                "3": "2. Bagikan TizenTube kepada orang lain.",
-                "4": "Jika Anda ingin berkontribusi secara finansial, pertimbangkan untuk berdonasi:",
-                "5": "- Buy Me A Coffee: https://www.buymeacoffee.com/reisxd (disarankan)",
-                "6": "- GitHub Sponsors: https://github.com/sponsors/reisxd"
-            }
+            "title": "YTArk Settings",
+            "madeByText": "Playback, appearance and update controls",
+            "summary": "Open YTArk Settings"
         }
-    },
-    "welcomeMsg": {
-        "title": "Selamat Datang di TizenTube",
-        "subtitle": "Buka pengaturan lalu klik Pengaturan TizenTube untuk mengatur fitur."
     },
     "sponsorblock": {
         "segments": {
@@ -284,7 +267,7 @@
         "pictureInPicture": "Picture in Picture",
         "previous": "Previous",
         "next": "Next",
-        "withTizenTube": "with TizenTube",
+        "withTizenTube": "with YTArk",
         "share": {
             "title": "Share",
             "button": "Share",

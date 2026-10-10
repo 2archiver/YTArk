@@ -59,7 +59,6 @@
                     "longPress": "Omogući radnje na dugi pritisak",
                     "shorts": "Omogući Shorts videe",
                     "videoPreviews": "Omogući pregled videa",
-                    "ttWelcomeMsg": "Prikaži TT poruku dobrodošlice",
                     "guestSignInReminder": "Prikaži podsjetnik za prijavu gosta",
                     "reloadHomeOnStartup": "Osvježi početnu stranicu pri pokretanju"
                 }
@@ -144,7 +143,7 @@
                     },
                     "launchToOnStartup": {
                         "title": "Početna stranica pri pokretanju",
-                        "subtitle": "Odaberite zadanu stranicu koja se otvara pri pokretanju TizenTube-a"
+                        "subtitle": "Odaberite zadanu stranicu koja se otvara pri pokretanju YTArk-a"
                     },
                     "sortSubscriptionsByAlphabet": "Sortiraj pretplate abecedno",
                     "disableChannelsOnSidebar": "Onemogući kanale na bočnoj traci",
@@ -193,8 +192,8 @@
                 }
             },
             "updater": {
-                "title": "TizenTube Cobalt ažuriranje",
-                "menuSubtitle": "Upravljajte TizenTube Cobalt ažuriranjima",
+                "title": "YTArk Updates",
+                "menuSubtitle": "Manage YTArk updates",
                 "versionSubtitle": "Trenutna verzija: {{version}}",
                 "options": {
                     "checkForUpdates": "Provjeri ažuriranja",
@@ -202,7 +201,7 @@
                 },
                 "updateAvailable": {
                     "title": "Update Available",
-                    "subtitle": "A new version of TizenTube Cobalt is available: {{latestVersion}}, current: {{currentVersion}}"
+                    "subtitle": "A new version of YTArk is available: {{latestVersion}}, current: {{currentVersion}}"
                 },
                 "releaseDate": "Release Date: {{date}}",
                 "updateNow": {
@@ -214,15 +213,15 @@
                     "subtitle": "Check for updates later."
                 },
                 "upToDate": {
-                    "title": "TizenTube is up to date",
-                    "subtitle": "You are using the latest version ({{version}}) of TizenTube Cobalt."
+                    "title": "YTArk is up to date",
+                    "subtitle": "You are using the latest version ({{version}}) of YTArk."
                 },
                 "checkFailed": {
-                    "title": "TizenTube update check failed",
+                    "title": "YTArk update check failed",
                     "subtitle": "Could not check for updates."
                 },
                 "downloading": {
-                    "title": "TizenTube Update",
+                    "title": "YTArk update",
                     "subtitle": "Downloading update, please wait..."
                 }
             },
@@ -234,26 +233,10 @@
             }
         },
         "ttSettings": {
-            "title": "TizenTube postavke",
-            "madeByText": "Autor: Reis Can (reisxd) sa ❤️",
-            "summary": "Otvori TizenTube postavke"
-        },
-        "supportTT": {
-            "title": "Podrži TizenTube",
-            "subtitle": "❤️ Podržite razvoj TizenTube projekta",
-            "content": {
-                "1": "Ako uživate u korištenju TizenTube-a i želite podržati njegov razvoj, razmislite o sljedećem:",
-                "2": "1. Označite repozitorij zvjezdicom (Star) na GitHubu radi bolje vidljivosti.",
-                "3": "2. Podijelite TizenTube sa drugima.",
-                "4": "Ako želite pomoći finansijski, razmislite o donaciji:",
-                "5": "- Buy Me A Coffee: https://www.buymeacoffee.com/reisxd (preporučeno)",
-                "6": "- GitHub Sponsors: https://github.com/sponsors/reisxd"
-            }
+            "title": "YTArk Settings",
+            "madeByText": "Playback, appearance and update controls",
+            "summary": "Open YTArk Settings"
         }
-    },
-    "welcomeMsg": {
-        "title": "Dobrodošli u TizenTube",
-        "subtitle": "Idite u postavke i kliknite na 'TizenTube postavke' za konfiguraciju."
     },
     "sponsorblock": {
         "segments": {
@@ -284,7 +267,7 @@
         "pictureInPicture": "Picture in Picture",
         "previous": "Previous",
         "next": "Next",
-        "withTizenTube": "with TizenTube",
+        "withTizenTube": "with YTArk",
         "share": {
             "title": "Share",
             "button": "Share",

@@ -134,12 +134,37 @@ describe('cosmetic YouTube-style logo', () => {
     assert.equal(host.style.getPropertyValue('gap'), '6px');
   });
 
-  it('does not replace focusable logo artwork', () => {
+  it('does not replace focusable logo artwork or a focusable logo host', () => {
     const { host, artwork } = makeLogoHost();
     artwork.setAttribute('tabindex', '0');
     assert.equal(setPremiumLogo(host, true, fakeDocument), false);
     assert.equal(host.children.length, 1);
     assert.equal(artwork.style.getPropertyValue('display'), 'inline-block');
+
+    artwork.attributes.delete('tabindex');
+    host.setAttribute('tabindex', '0');
+    assert.equal(setPremiumLogo(host, true, fakeDocument), false);
+    assert.equal(host.children.length, 1);
+    assert.equal(artwork.style.getPropertyValue('display'), 'inline-block');
+
+    host.attributes.delete('tabindex');
+    host.setAttribute('role', 'button');
+    assert.equal(setPremiumLogo(host, true, fakeDocument), false);
+    host.attributes.delete('role');
+    host.closest = () => host;
+    assert.equal(setPremiumLogo(host, true, fakeDocument), false);
+    host.closest = () => null;
+    artwork.setAttribute('focusable', 'true');
+    assert.equal(setPremiumLogo(host, true, fakeDocument), false);
+    artwork.attributes.delete('focusable');
+    artwork.setAttribute('aria-label', 'YouTube');
+    assert.equal(setPremiumLogo(host, true, fakeDocument), false);
+
+    const { host: imageHost, artwork: imageArtwork } = makeLogoHost();
+    imageArtwork.tagName = 'IMG';
+    imageArtwork.setAttribute('alt', 'YouTube logo');
+    assert.equal(setPremiumLogo(imageHost, true, fakeDocument), false);
+    assert.equal(imageHost.children.length, 1);
   });
 });
 

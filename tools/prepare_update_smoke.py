@@ -99,8 +99,10 @@ def main() -> None:
             return
 
         tag = latest.get("tag_name", "")
-        if not re.fullmatch(r"v\d+\.\d+\.\d+-ytark\.[1-9]\d*", tag):
+        tag_match = validate_release.TAG_VERSION_PATTERN.fullmatch(tag)
+        if not tag_match:
             raise ValueError("The previous YTArk release tag is invalid")
+        tag_version = tag_match.group("version")
         assets = latest.get("assets", [])
         expected_suffix = "-" + ARCHITECTURES[architecture]["suffix"] + ".apk"
         candidates = [asset for asset in assets
@@ -119,14 +121,15 @@ def main() -> None:
         asset = candidates[0]
         asset_name = asset.get("name", "")
         version_match = re.fullmatch(
-            rf"YTArk-v(\d+\.\d+\.\d+-ytark\.[1-9]\d*){re.escape(expected_suffix)}", asset_name
+            rf"YTArk-v(\d+\.\d+\.\d+(?:-ytark\.[1-9]\d*)?){re.escape(expected_suffix)}", asset_name
         )
-        if not version_match or "v" + version_match.group(1) != tag:
+        if not version_match or version_match.group(1) != tag_version:
             raise ValueError("The prior APK filename does not match its release tag/version")
         version = version_match.group(1)
-        previous_code = validate_release.parse_release_version_code(body)
-        if previous_code is None or previous_code != 20000 + int(version.rsplit(".", 1)[1]):
-            raise ValueError("The previous release notes versionCode does not match the version serial")
+        release_code = validate_release.parse_release_version_code(body)
+        expected_previous_code = validate_release.version_code_for_release(version)
+        if release_code is None or release_code != expected_previous_code:
+            raise ValueError("The previous release notes versionCode does not match its numeric version")
 
         url = official_asset_url(tag, asset_name, asset.get("browser_download_url", ""))
         directory = Path(args.artifact_dir)
@@ -162,6 +165,8 @@ def main() -> None:
         reported_abis = re.findall(r"'([^']+)'", native_line.group(1)) if native_line else []
         if not package or package.group(1) != validate_release.APP_ID:
             raise ValueError("The previous APK package ID is not YTArk's production package ID")
+        if int(package.group(2)) != expected_previous_code or package.group(3) != version:
+            raise ValueError("The previous APK's numeric version metadata does not match its release tag")
         if reported_abis != [expected_abi]:
             raise ValueError(f"The previous APK does not report the selected {expected_abi} ABI")
         native_abi_from_apk(previous_apk, architecture)

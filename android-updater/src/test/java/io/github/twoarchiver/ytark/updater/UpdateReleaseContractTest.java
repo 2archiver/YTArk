@@ -5,23 +5,46 @@ import java.util.Properties;
 
 /** Executable updater/release compatibility tests; no Android runtime or third-party framework. */
 public final class UpdateReleaseContractTest {
-    private static final String VERSION = "2.0.4-ytark.16";
+    private static final String VERSION = "2.1.0";
     private static final String TAG = "v" + VERSION;
-    private static final String ARM64_APK = "YTArk-v2.0.4-ytark.16-arm64.apk";
-    private static final String ARMV7_APK = "YTArk-v2.0.4-ytark.16-armv7.apk";
+    private static final String ARM64_APK = "YTArk-v2.1.0-arm64.apk";
+    private static final String ARMV7_APK = "YTArk-v2.1.0-armv7.apk";
     private static final String SHA256 =
             "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     private static final String SHA256_B =
             "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
 
     public static void main(String[] args) throws Exception {
+        cleanSemverMapsToMonotonicAndroidVersionCodesAndDisplayNames();
         bothArchitecturesMapToTheirExactVersionedAssetNames();
         abiSelectionPrefersArm64ThenFallsBackToArmv7();
         onlyExactOfficialReleaseAssetUrlsAreAccepted();
+        onlyPublishedStableReleaseFlagsAreAccepted();
         checksumFallbackVerifiesBothIndependentEntries();
         malformedOrMissingMetadataIsRejected();
         resumeRequiresExactMetadataAndContentRange();
-        System.out.println("UpdateReleaseContract tests passed (6 groups).");
+        System.out.println("UpdateReleaseContract tests passed (8 groups).");
+    }
+
+    private static void cleanSemverMapsToMonotonicAndroidVersionCodesAndDisplayNames()
+            throws Exception {
+        equals(2010000L, UpdateReleaseContract.expectedVersionCodeForVersion("2.1.0"),
+                "2.1.0 versionCode");
+        equals(2000400L, UpdateReleaseContract.expectedVersionCodeForVersion("2.0.4"),
+                "2.0.4 clean-SemVer versionCode");
+        equals("2.1", UpdateReleaseContract.displayVersionForVersion("2.1.0"),
+                "short display version");
+        equals("2.1.3", UpdateReleaseContract.displayVersionForVersion("2.1.3"),
+                "nonzero patch display version");
+        equals("YTArk 2.1", UpdateReleaseContract.releaseTitleForVersion("2.1.0"),
+                "stable release title");
+        equals("v2.1.0", UpdateReleaseContract.tagForVersion("2.1.0"), "stable release tag");
+        rejects(() -> UpdateReleaseContract.expectedVersionCodeForVersion("2.1.0-rc.1"),
+                "prerelease SemVer");
+        rejects(() -> UpdateReleaseContract.expectedVersionCodeForVersion("2.1.0-ytark.18"),
+                "legacy serial tag is not a new stable version");
+        rejects(() -> UpdateReleaseContract.expectedVersionCodeForVersion("2.1.100"),
+                "out-of-range patch component");
     }
 
     private static void bothArchitecturesMapToTheirExactVersionedAssetNames() throws Exception {
@@ -29,10 +52,8 @@ public final class UpdateReleaseContractTest {
                 "versioned ARM64 asset name");
         equals(ARMV7_APK, UpdateReleaseContract.assetNameForVersion(VERSION, "armv7"),
                 "versioned ARMv7 asset name");
-        equals(20016L, UpdateReleaseContract.expectedVersionCodeForVersion(VERSION),
-                "serial-derived versionCode");
-        equals(20016L, UpdateReleaseContract.parseVersionCode(
-                "# YTArk " + VERSION + "\nVersion " + VERSION + " (versionCode 20016)"),
+        equals(2010000L, UpdateReleaseContract.parseVersionCode(
+                "# YTArk 2.1\nVersion 2.1 (2.1.0; versionCode 2010000)"),
                 "release notes versionCode");
         rejects(() -> UpdateReleaseContract.assetNameForVersion(VERSION, "armeabi-v7a"),
                 "ABI name passed instead of validated filename suffix");
@@ -48,7 +69,8 @@ public final class UpdateReleaseContractTest {
         equals("arm64-v8a", NativeAbiContract.nativeAbiForSuffix("arm64"), "ARM64 ABI mapping");
         equals("armeabi-v7a", NativeAbiContract.nativeAbiForSuffix("armv7"), "ARMv7 ABI mapping");
         equals("armv7", NativeAbiContract.assetSuffixForInstalledAbi("armeabi-v7a",
-                new String[] { "arm64-v8a", "armeabi-v7a" }), "keep installed ARMv7 ABI on a 64-bit-capable device");
+                new String[] { "arm64-v8a", "armeabi-v7a" }),
+                "keep installed ARMv7 ABI on a 64-bit-capable device");
         equals("arm64", NativeAbiContract.assetSuffixForInstalledAbi("arm64-v8a",
                 new String[] { "arm64-v8a", "armeabi-v7a" }), "keep installed ARM64 ABI");
         rejects(() -> NativeAbiContract.assetSuffixForInstalledAbi("armeabi-v7a",
@@ -85,7 +107,19 @@ public final class UpdateReleaseContractTest {
                 "https://github.com/2archiver/YTArk/releases/download/" + TAG + "/other.apk",
                 TAG, ARM64_APK), "wrong filename");
         rejects(() -> UpdateReleaseContract.requireOfficialAssetUrl(
-                arm64Url, "v2.0.4-ytark.17", ARM64_APK), "tag/version mismatch");
+                arm64Url, "v2.1.0-rc.1", ARM64_APK), "prerelease tag");
+    }
+
+    private static void onlyPublishedStableReleaseFlagsAreAccepted() throws Exception {
+        UpdateReleaseContract.requirePublishedStable(true, false, true, false);
+        rejects(() -> UpdateReleaseContract.requirePublishedStable(true, true, true, false),
+                "draft release");
+        rejects(() -> UpdateReleaseContract.requirePublishedStable(true, false, true, true),
+                "prerelease release");
+        rejects(() -> UpdateReleaseContract.requirePublishedStable(false, false, true, false),
+                "missing draft flag");
+        rejects(() -> UpdateReleaseContract.requirePublishedStable(true, false, false, false),
+                "missing prerelease flag");
     }
 
     private static void checksumFallbackVerifiesBothIndependentEntries() throws Exception {
@@ -94,7 +128,8 @@ public final class UpdateReleaseContractTest {
         equals(SHA256, UpdateReleaseContract.checksumForAsset(sums, ARM64_APK), "ARM64 checksum");
         equals(SHA256_B, UpdateReleaseContract.checksumForAsset(sums, ARMV7_APK), "ARMv7 checksum");
         equals(SHA256_B, UpdateReleaseContract.checksumForAsset(
-                SHA256_B.toUpperCase() + " *" + ARMV7_APK, ARMV7_APK), "binary checksum filename format");
+                SHA256_B.toUpperCase() + " *" + ARMV7_APK, ARMV7_APK),
+                "binary checksum filename format");
     }
 
     private static void malformedOrMissingMetadataIsRejected() throws Exception {
@@ -113,8 +148,6 @@ public final class UpdateReleaseContractTest {
         rejects(() -> UpdateReleaseContract.checksumForAsset(
                 SHA256 + "  " + ARM64_APK + "\n" + SHA256_B + "  " + ARM64_APK, ARM64_APK),
                 "duplicate APK checksum entry");
-        rejects(() -> UpdateReleaseContract.expectedVersionCodeForVersion("2.0.4-ytark.0"),
-                "invalid release serial");
     }
 
     private static void resumeRequiresExactMetadataAndContentRange() {

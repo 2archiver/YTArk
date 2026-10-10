@@ -1,14 +1,14 @@
 # YTArk release signing, key status, and migration plan
 
-## Recorded release identity (recorded before this release's changes)
+## Recorded package and signing identity
 
 | Item | Value |
 |---|---|
 | Android package (applicationId) | `io.github.twoarchiver.ytark` |
 | Release signing certificate SHA-256 | `b9cb7e4b4d5179870e672e850f5d3661f02c248f943dbaf10cd78cd0c047eaae` |
 | Certificate subject | PhairPlay Community Build (Hearth community key) |
-| Known-good published versionCode | `20016` (`2.0.4-ytark.16`) |
-| This release's versionCode | `20017` (`2.0.4-ytark.17`) |
+| Latest published versionCode | `20017` (`2.0.4-ytark.17`) |
+| Target YTArk 2.1 versionCode | `2010000` (`2.1.0`, display version `2.1`) |
 | Key material location (upstream) | `2archiver/Hearth` commit `79ffcfa4d718662985e706f2425418da01e15de0`, `app/signing/phairplay.p12` (blob `1bbeb049cb87e85569fdeee9713291bd8402c579`) |
 
 Login depends on the package name, the shared-Cobalt account storage under the

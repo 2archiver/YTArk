@@ -59,7 +59,6 @@
                     "longPress": "Омогући радње на дуги притисак",
                     "shorts": "Омогући Схортс видео снимке",
                     "videoPreviews": "Омогући преглед видео снимака",
-                    "ttWelcomeMsg": "Прикажи ТТ поруку добродошлице",
                     "guestSignInReminder": "Прикажи подсетник за пријаву госта",
                     "reloadHomeOnStartup": "Освежи почетну страницу при покретању"
                 }
@@ -193,8 +192,8 @@
                 }
             },
             "updater": {
-                "title": "ТизенТубе Цобалт ажурирање",
-                "menuSubtitle": "Управљајте ТизенТубе Цобалт ажурирањима",
+                "title": "YTArk Updates",
+                "menuSubtitle": "Manage YTArk updates",
                 "versionSubtitle": "Тренутна верзија: {{version}}",
                 "options": {
                     "checkForUpdates": "Провери ажурирања",
@@ -202,7 +201,7 @@
                 },
                 "updateAvailable": {
                     "title": "Update Available",
-                    "subtitle": "A new version of TizenTube Cobalt is available: {{latestVersion}}, current: {{currentVersion}}"
+                    "subtitle": "A new version of YTArk is available: {{latestVersion}}, current: {{currentVersion}}"
                 },
                 "releaseDate": "Release Date: {{date}}",
                 "updateNow": {
@@ -214,15 +213,15 @@
                     "subtitle": "Check for updates later."
                 },
                 "upToDate": {
-                    "title": "TizenTube is up to date",
-                    "subtitle": "You are using the latest version ({{version}}) of TizenTube Cobalt."
+                    "title": "YTArk is up to date",
+                    "subtitle": "You are using the latest version ({{version}}) of YTArk."
                 },
                 "checkFailed": {
-                    "title": "TizenTube update check failed",
+                    "title": "YTArk update check failed",
                     "subtitle": "Could not check for updates."
                 },
                 "downloading": {
-                    "title": "TizenTube Update",
+                    "title": "YTArk update",
                     "subtitle": "Downloading update, please wait..."
                 }
             },
@@ -234,26 +233,10 @@
             }
         },
         "ttSettings": {
-            "title": "ТизенТубе подешавања",
-            "madeByText": "Аутор: Реис Цан (reisxd) уз ❤️",
-            "summary": "Отвори ТизенТубе подешавања"
-        },
-        "supportTT": {
-            "title": "Подржи ТизенТубе",
-            "subtitle": "❤️ Подржите развој ТизенТубе пројекта",
-            "content": {
-                "1": "Ако уживате у коришћењу ТизенТубе-а и желите да подржите његов развој, размотрите следеће:",
-                "2": "1. Означите репозиторијум звездицом (Стар) на ГитХуб-у ради боље видљивости.",
-                "3": "2. Поделите ТизенТубе са другима.",
-                "4": "Ако желите да помогнете финансијски, размотрите донацију:",
-                "5": "- Buy Me A Coffee: https://www.buymeacoffee.com/reisxd (препоручено)",
-                "6": "- GitHub Sponsors: https://github.com/sponsors/reisxd"
-            }
+            "title": "YTArk Settings",
+            "madeByText": "Playback, appearance and update controls",
+            "summary": "Open YTArk Settings"
         }
-    },
-    "welcomeMsg": {
-        "title": "Добродошли у ТизенТубе",
-        "subtitle": "Идите у подешавања и кликните на 'ТизенТубе подешавања' за конфигурацију."
     },
     "sponsorblock": {
         "segments": {
@@ -284,7 +267,7 @@
         "pictureInPicture": "Picture in Picture",
         "previous": "Previous",
         "next": "Next",
-        "withTizenTube": "with TizenTube",
+        "withTizenTube": "with YTArk",
         "share": {
             "title": "Share",
             "button": "Share",

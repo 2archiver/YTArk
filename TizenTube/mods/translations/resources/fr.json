@@ -62,7 +62,6 @@
                     "longPress": "Activer les actions par appui long",
                     "shorts": "Activer les Shorts",
                     "videoPreviews": "Activer les aperçus vidéo",
-                    "ttWelcomeMsg": "Afficher le message de bienvenue TT",
                     "guestSignInReminder": "Afficher le rappel de connexion invité",
                     "reloadHomeOnStartup": "Recharger l'accueil au démarrage"
                 }
@@ -153,7 +152,7 @@
                     },
                     "launchToOnStartup": {
                         "title": "Page de lancement au démarrage",
-                        "subtitle": "Choisissez la page par défaut sur laquelle TizenTube s'ouvre au démarrage"
+                        "subtitle": "Choisissez la page par défaut sur laquelle YTArk s'ouvre au démarrage"
                     },
                     "categories": {
                         "search": "Recherche",
@@ -202,8 +201,8 @@
                 }
             },
             "updater": {
-                "title": "TizenTube Cobalt Updater",
-                "menuSubtitle": "Manage TizenTube Cobalt updates",
+                "title": "YTArk Updates",
+                "menuSubtitle": "Manage YTArk updates",
                 "versionSubtitle": "Current version: {{version}}",
                 "options": {
                     "checkForUpdates": "Check for updates",
@@ -211,7 +210,7 @@
                 },
                 "updateAvailable": {
                     "title": "Update Available",
-                    "subtitle": "A new version of TizenTube Cobalt is available: {{latestVersion}}, current: {{currentVersion}}"
+                    "subtitle": "A new version of YTArk is available: {{latestVersion}}, current: {{currentVersion}}"
                 },
                 "releaseDate": "Release Date: {{date}}",
                 "updateNow": {
@@ -223,40 +222,24 @@
                     "subtitle": "Check for updates later."
                 },
                 "upToDate": {
-                    "title": "TizenTube is up to date",
-                    "subtitle": "You are using the latest version ({{version}}) of TizenTube Cobalt."
+                    "title": "YTArk is up to date",
+                    "subtitle": "You are using the latest version ({{version}}) of YTArk."
                 },
                 "checkFailed": {
-                    "title": "TizenTube update check failed",
+                    "title": "YTArk update check failed",
                     "subtitle": "Could not check for updates."
                 },
                 "downloading": {
-                    "title": "TizenTube Update",
+                    "title": "YTArk update",
                     "subtitle": "Downloading update, please wait..."
                 }
             }
         },
         "ttSettings": {
-            "title": "TizenTube Settings",
-            "madeByText": "Made by Reis Can (reisxd) with ❤️",
-            "summary": "Open TizenTube Settings"
-        },
-        "supportTT": {
-            "title": "Support TizenTube",
-            "subtitle": "❤️ Show support for TizenTube and its development",
-            "content": {
-                "1": "If you enjoy using TizenTube and would like to support its development, consider the following:",
-                "2": "1. Star the GitHub repository to help increase its visibility.",
-                "3": "2. Share TizenTube with others.",
-                "4": "If you would like to contribute financially, consider donating:",
-                "5": "- Buy Me A Coffee: https://www.buymeacoffee.com/reisxd (preferably)",
-                "6": "- GitHub Sponsors: https://github.com/sponsors/reisxd"
-            }
+            "title": "YTArk Settings",
+            "madeByText": "Playback, appearance and update controls",
+            "summary": "Open YTArk Settings"
         }
-    },
-    "welcomeMsg": {
-        "title": "Welcome to TizenTube",
-        "subtitle": "Go to settings and click on TizenTube Settings for settings."
     },
     "sponsorblock": {
         "segments": {
@@ -287,7 +270,7 @@
         "pictureInPicture": "Picture in Picture",
         "previous": "Previous",
         "next": "Next",
-        "withTizenTube": "with TizenTube",
+        "withTizenTube": "with YTArk",
         "share": {
             "title": "Share",
             "button": "Share",

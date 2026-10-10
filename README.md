@@ -12,10 +12,10 @@ native updater that always hands installation to Android for user confirmation.
 |---|---|
 | Android package | `io.github.twoarchiver.ytark` |
 | Launcher label | `YTArk` |
-| Expected release | `2.0.4-ytark.17` |
-| Expected versionCode | `20017` |
-| 32-bit userspace candidate | `YTArk-v2.0.4-ytark.17-armv7.apk` — `armeabi-v7a` |
-| 64-bit userspace candidate | `YTArk-v2.0.4-ytark.17-arm64.apk` — `arm64-v8a` |
+| Target display version | `2.1` (Android versionName `2.1.0`) |
+| Target versionCode | `2010000` (above every published YTArk APK) |
+| 32-bit userspace candidate | `YTArk-v2.1.0-armv7.apk` — `armeabi-v7a` |
+| 64-bit userspace candidate | `YTArk-v2.1.0-arm64.apk` — `arm64-v8a` |
 | Pinned Android base | TizenTubeCobalt `v2.0.2` |
 
 These filenames identify the intended candidates, not proof that an APK has
@@ -102,8 +102,8 @@ an update unless you understand that uninstalling can erase app data.
 | Quality selection | Auto default, manual ceiling; no resolution promises |
 | Cosmetic "YouTube Premium" wordmark | Off-able local visual only — **never** a subscription or entitlement |
 | Native updater | Verified SHA-256 + signer + ABI, manual Android installer |
-| ARMv7 (`armeabi-v7a`) APK | Confirmed-good target |
-| ARM64 (`arm64-v8a`) APK | Shipped; use only when the TV's userspace reports `arm64-v8a` |
+| ARMv7 (`armeabi-v7a`) APK | Versioned candidate; physical device acceptance pending |
+| ARM64 (`arm64-v8a`) APK | Versioned candidate; physical device acceptance pending |
 | Background playback, PiP, casting, downloads, system-wide ad blocking | **Not claimed** |
 
 ## What YTArk changes

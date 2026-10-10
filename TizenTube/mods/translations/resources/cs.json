@@ -59,7 +59,6 @@
                     "longPress": "Povolit Akce Dlouhého Stisknutí",
                     "shorts": "Povolit Shorts",
                     "videoPreviews": "Povolit Náhledy Videí",
-                    "ttWelcomeMsg": "Zobrazovat Uvítací Zprávu TT",
                     "guestSignInReminder": "Zobrazovat Připomenutí Přihlášení Hosta",
                     "reloadHomeOnStartup": "Znovu Načíst Domovskou Stránku při Spuštění"
                 }
@@ -144,7 +143,7 @@
                     },
                     "launchToOnStartup": {
                         "title": "Spustit Na při Startu",
-                        "subtitle": "Zvolte výchozí stránku, na kterou TizenTube přejde při spuštění"
+                        "subtitle": "Zvolte výchozí stránku, na kterou YTArk přejde při spuštění"
                     },
                     "sortSubscriptionsByAlphabet": "Seřadit Odběry Abecedně",
                     "disableChannelsOnSidebar": "Zakázat Kanály v Postranním Panelu",
@@ -193,8 +192,8 @@
                 }
             },
             "updater": {
-                "title": "Aktualizátor TizenTube Cobalt",
-                "menuSubtitle": "Správa aktualizací TizenTube Cobalt",
+                "title": "YTArk Updates",
+                "menuSubtitle": "Manage YTArk updates",
                 "versionSubtitle": "Aktuální verze: {{version}}",
                 "options": {
                     "checkForUpdates": "Zkontrolovat aktualizace",
@@ -202,7 +201,7 @@
                 },
                 "updateAvailable": {
                     "title": "Update Available",
-                    "subtitle": "A new version of TizenTube Cobalt is available: {{latestVersion}}, current: {{currentVersion}}"
+                    "subtitle": "A new version of YTArk is available: {{latestVersion}}, current: {{currentVersion}}"
                 },
                 "releaseDate": "Release Date: {{date}}",
                 "updateNow": {
@@ -214,15 +213,15 @@
                     "subtitle": "Check for updates later."
                 },
                 "upToDate": {
-                    "title": "TizenTube is up to date",
-                    "subtitle": "You are using the latest version ({{version}}) of TizenTube Cobalt."
+                    "title": "YTArk is up to date",
+                    "subtitle": "You are using the latest version ({{version}}) of YTArk."
                 },
                 "checkFailed": {
-                    "title": "TizenTube update check failed",
+                    "title": "YTArk update check failed",
                     "subtitle": "Could not check for updates."
                 },
                 "downloading": {
-                    "title": "TizenTube Update",
+                    "title": "YTArk update",
                     "subtitle": "Downloading update, please wait..."
                 }
             },
@@ -234,26 +233,10 @@
             }
         },
         "ttSettings": {
-            "title": "Nastavení TizenTube",
-            "madeByText": "Vytvořil Reis Can (reisxd) s ❤️",
-            "summary": "Otevřít TizenTube Nastavení"
-        },
-        "supportTT": {
-            "title": "Podpořte TizenTube",
-            "subtitle": "❤️ Vyjádřete podporu TizenTube a přispějte k jeho vývoji",
-            "content": {
-                "1": "Pokud se vám líbí TizenTube a chcete podpořit vývoj, zvažte následující:",
-                "2": "1. Dejte hvězdičku repozitáři na Githubu, aby se mu zvýšila viditelnost.",
-                "3": "2. Sdílejte TizenTube s ostatními.",
-                "4": "Pokud chcete přispět finančně, zvažte dar; přes:",
-                "5": "- Buy Me A Coffee: https://www.buymeacoffee.com/reisxd (preferováno)",
-                "6": "- Sponzoři GitHub: https://github.com/sponsors/reisxd"
-            }
+            "title": "YTArk Settings",
+            "madeByText": "Playback, appearance and update controls",
+            "summary": "Open YTArk Settings"
         }
-    },
-    "welcomeMsg": {
-        "title": "Vítejte v TizenTube",
-        "subtitle": "Pro nastavení přejděte na sekci nastavení a klikněte na Nastavení TizenTube."
     },
     "sponsorblock": {
         "segments": {
@@ -284,7 +267,7 @@
         "pictureInPicture": "Picture in Picture",
         "previous": "Previous",
         "next": "Next",
-        "withTizenTube": "with TizenTube",
+        "withTizenTube": "with YTArk",
         "share": {
             "title": "Share",
             "button": "Share",

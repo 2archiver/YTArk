@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Create a draft YTArk release. Publication is a separate, manually reviewed step.
+# Create the validation-gated YTArk candidate release; stable promotion is separate.
 set -euo pipefail
 
 : "${GH_TOKEN:?GH_TOKEN is required}"
 : "${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
 : "${GITHUB_SHA:?GITHUB_SHA is required}"
 : "${VERSION_NAME:?VERSION_NAME is required}"
+: "${DISPLAY_VERSION:?DISPLAY_VERSION is required}"
 : "${VERSION_CODE:?VERSION_CODE is required}"
 : "${VERSION_TAG:?VERSION_TAG is required}"
 : "${SCRIPT_TAG:?SCRIPT_TAG is required}"
@@ -16,7 +17,8 @@ set -euo pipefail
 : "${APK_ARM64:?APK_ARM64 is required}"
 : "${SIGNING_CERT_SHA256:?SIGNING_CERT_SHA256 is required}"
 
-[ "$APP_NAME" = "YTArk" ] || { echo "release title must be YTArk" >&2; exit 1; }
+[ "$APP_NAME" = "YTArk" ] || { echo "application label must be YTArk" >&2; exit 1; }
+RELEASE_TITLE="YTArk ${DISPLAY_VERSION}"
 for apk in "$APK_ARMV7" "$APK_ARM64"; do
   [ -f "release-assets/$apk" ] || {
     echo "the validated architecture-specific APK release asset is missing: $apk" >&2; exit 1;
@@ -39,7 +41,7 @@ cat > NOTICE.md <<EOF
 EOF
 
 cat > release-notes.md <<EOF
-# YTArk ${VERSION_NAME}
+# YTArk ${DISPLAY_VERSION}
 
 An independent Android TV / Google TV build based on TizenTubeCobalt ${BASE_TAG}.
 The package retains YouTube's TV frontend and Cobalt player; these APKs have
@@ -51,7 +53,7 @@ separately recorded on a named device.
 |---|---|
 | Release | \`${VERSION_TAG}\` |
 | Android package | \`${APP_ID}\` |
-| Version | ${VERSION_NAME} (versionCode ${VERSION_CODE}) |
+| Version | ${DISPLAY_VERSION} (${VERSION_NAME}; versionCode ${VERSION_CODE}) |
 | Release signing certificate | SHA-256 \`${SIGNING_CERT_SHA256}\` |
 | ARMv7 APK | \`${APK_ARMV7}\` (armeabi-v7a) |
 | ARM64 APK | \`${APK_ARM64}\` (arm64-v8a) |
@@ -96,7 +98,7 @@ YTArk adds no analytics, telemetry, or crash reporting and never reads or logs
 Google account identifiers, cookies, or OAuth tokens — sign-in stays in the
 stock YouTube TV stack between your TV and Google. SponsorBlock lookups send
 only hashed video-ID prefixes; update checks reach api.github.com over HTTPS.
-Full disclosure: \\`docs/PRIVACY.md\\` in the source repository.
+Full disclosure: \`docs/PRIVACY.md\` in the source repository.
 
 ## Integrity and source
 
@@ -156,7 +158,7 @@ create_draft_release() {
     --repo "$GITHUB_REPOSITORY" \
     "${target_args[@]}" \
     --draft \
-    --title "$APP_NAME" \
+    --title "$RELEASE_TITLE" \
     --notes-file release-notes.md \
     "release-assets/$APK_ARMV7" \
     "release-assets/$APK_ARM64" \

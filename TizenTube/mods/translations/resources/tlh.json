@@ -59,7 +59,6 @@
                     "longPress": "nI' meryaq yIchu'",
                     "shorts": "Shorts video yIchu'",
                     "videoPreviews": "Video Previews yIchu'",
-                    "ttWelcomeMsg": "TT yI'el De' yIcha'",
                     "guestSignInReminder": "guest Sign In yImej",
                     "reloadHomeOnStartup": "Home yIchoH"
                 }
@@ -193,8 +192,8 @@
                 }
             },
             "updater": {
-                "title": "TizenTube Cobalt chu'ghach",
-                "menuSubtitle": "chu'ghach yInuqlI'",
+                "title": "YTArk Updates",
+                "menuSubtitle": "Manage YTArk updates",
                 "versionSubtitle": "Version: {{version}}",
                 "options": {
                     "checkForUpdates": "chu'ghach yISam",
@@ -202,7 +201,7 @@
                 },
                 "updateAvailable": {
                     "title": "Update Available",
-                    "subtitle": "A new version of TizenTube Cobalt is available: {{latestVersion}}, current: {{currentVersion}}"
+                    "subtitle": "A new version of YTArk is available: {{latestVersion}}, current: {{currentVersion}}"
                 },
                 "releaseDate": "Release Date: {{date}}",
                 "updateNow": {
@@ -214,15 +213,15 @@
                     "subtitle": "Check for updates later."
                 },
                 "upToDate": {
-                    "title": "TizenTube is up to date",
-                    "subtitle": "You are using the latest version ({{version}}) of TizenTube Cobalt."
+                    "title": "YTArk is up to date",
+                    "subtitle": "You are using the latest version ({{version}}) of YTArk."
                 },
                 "checkFailed": {
-                    "title": "TizenTube update check failed",
+                    "title": "YTArk update check failed",
                     "subtitle": "Could not check for updates."
                 },
                 "downloading": {
-                    "title": "TizenTube Update",
+                    "title": "YTArk update",
                     "subtitle": "Downloading update, please wait..."
                 }
             },
@@ -234,26 +233,10 @@
             }
         },
         "ttSettings": {
-            "title": "TizenTube choHtaHghach",
-            "madeByText": "Reis Can (reisxd) bang ❤️",
-            "summary": "TizenTube choHtaHghach yIpoS"
-        },
-        "supportTT": {
-            "title": "TizenTube yIQah",
-            "subtitle": "❤️ TizenTube yIQah",
-            "content": {
-                "1": "TizenTube yIQah:",
-                "2": "1. GitHub Star yIchu'.",
-                "3": "2. TizenTube yIlatlh.",
-                "4": "Hvep yIQah:",
-                "5": "- Buy Me A Coffee: https://www.buymeacoffee.com/reisxd",
-                "6": "- GitHub Sponsors: https://github.com/sponsors/reisxd"
-            }
+            "title": "YTArk Settings",
+            "madeByText": "Playback, appearance and update controls",
+            "summary": "Open YTArk Settings"
         }
-    },
-    "welcomeMsg": {
-        "title": "TizenTube-Daq yI'el!",
-        "subtitle": "choHtaHghach yInuqlI'!"
     },
     "sponsorblock": {
         "segments": {
@@ -284,7 +267,7 @@
         "pictureInPicture": "Picture in Picture",
         "previous": "Previous",
         "next": "Next",
-        "withTizenTube": "with TizenTube",
+        "withTizenTube": "with YTArk",
         "share": {
             "title": "Share",
             "button": "Share",
