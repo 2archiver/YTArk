@@ -59,7 +59,6 @@
                     "longPress": "Uzun basma əməliyyatlarını aktivləşdir",
                     "shorts": "Qısa videoları aktivləşdir",
                     "videoPreviews": "Video önbaxışlarını aktivləşdir",
-                    "ttWelcomeMsg": "TizenTube salamlama mesajını göstər",
                     "guestSignInReminder": "Qonağa giriş xatırlatmasını göstər",
                     "reloadHomeOnStartup": "Başlanğıcda əsas səhifəni yenidən yüklə"
                 }
@@ -164,7 +163,7 @@
                     },
                     "launchToOnStartup": {
                         "title": "Başlanğıc səhifəsi",
-                        "subtitle": "TizenTube başlayanda açılacaq standart səhifəni seç"
+                        "subtitle": "YTArk başlayanda açılacaq standart səhifəni seç"
                     },
                     "categories": {
                         "search": "Axtarış",
@@ -199,8 +198,8 @@
                 }
             },
             "updater": {
-                "title": "TizenTube Cobalt yeniləyicisi",
-                "menuSubtitle": "TizenTube Cobalt yeniləmələrini idarə et",
+                "title": "YTArk Updates",
+                "menuSubtitle": "Manage YTArk updates",
                 "versionSubtitle": "Cari versiya: {{version}}",
                 "options": {
                     "checkForUpdates": "Yeniləmələri yoxla",
@@ -208,7 +207,7 @@
                 },
                 "updateAvailable": {
                     "title": "Yeniləmə mövcuddur",
-                    "subtitle": "TizenTube Cobalt üçün yeni versiya: {{latestVersion}}, cari: {{currentVersion}}"
+                    "subtitle": "YTArk üçün yeni versiya: {{latestVersion}}, cari: {{currentVersion}}"
                 },
                 "releaseDate": "Buraxılış tarixi: {{date}}",
                 "updateNow": {
@@ -220,40 +219,24 @@
                     "subtitle": "Yeniləmələri sonra yoxla."
                 },
                 "upToDate": {
-                    "title": "TizenTube aktualdır",
-                    "subtitle": "TizenTube Cobalt tətbiqinin son versiyasından ({{version}}) istifadə edirsən."
+                    "title": "YTArk is up to date",
+                    "subtitle": "YTArk tətbiqinin son versiyasından ({{version}}) istifadə edirsən."
                 },
                 "checkFailed": {
-                    "title": "TizenTube yeniləmələri yoxlanılmadı",
+                    "title": "YTArk update check failed",
                     "subtitle": "Yeniləmələri yoxlamaq mümkün olmadı."
                 },
                 "downloading": {
-                    "title": "TizenTube yeniləməsi",
+                    "title": "YTArk update",
                     "subtitle": "Yeniləmə yüklənir, gözlə..."
                 }
             }
         },
         "ttSettings": {
-            "title": "TizenTube parametrləri",
-            "madeByText": "Reis Can (reisxd) tərəfindən ❤️ ilə hazırlanıb",
-            "summary": "TizenTube parametrlərini aç"
-        },
-        "supportTT": {
-            "title": "TizenTube tətbiqinə dəstək ol",
-            "subtitle": "❤️ TizenTube tətbiqinə və inkişafına dəstək ol",
-            "content": {
-                "1": "TizenTube xoşuna gəlirsə və inkişafına dəstək olmaq istəyirsənsə, bunları edə bilərsən:",
-                "2": "1. Daha çox tanınması üçün GitHub repozitoriyasına ulduz ver.",
-                "3": "2. TizenTube tətbiqini başqaları ilə paylaş.",
-                "4": "Maddi dəstək üçün ianə edə bilərsən:",
-                "5": "- Buy Me A Coffee: https://www.buymeacoffee.com/reisxd (üstün tutulur)",
-                "6": "- GitHub Sponsors: https://github.com/sponsors/reisxd"
-            }
+            "title": "YTArk Settings",
+            "madeByText": "Playback, appearance and update controls",
+            "summary": "Open YTArk Settings"
         }
-    },
-    "welcomeMsg": {
-        "title": "TizenTube tətbiqinə xoş gəlmisən",
-        "subtitle": "Parametrlərə keç və “TizenTube parametrləri” bölməsini seç."
     },
     "sponsorblock": {
         "segments": {
@@ -284,7 +267,7 @@
         "pictureInPicture": "Şəkil içində şəkil",
         "previous": "Əvvəlkinə keç",
         "next": "Növbətiyə keç",
-        "withTizenTube": "TizenTube ilə",
+        "withTizenTube": "YTArk ilə",
         "share": {
             "title": "Paylaşma",
             "button": "Paylaş",

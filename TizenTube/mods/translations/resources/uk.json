@@ -59,7 +59,6 @@
                     "longPress": "Тривале натискання",
                     "shorts": "Shorts",
                     "videoPreviews": "Попередній перегляд відео",
-                    "ttWelcomeMsg": "Вітальне повідомлення",
                     "guestSignInReminder": "Показувати нагадування про гостьовий вхід",
                     "reloadHomeOnStartup": "Оновлювати головну сторінку під час запуску"
                 }
@@ -150,7 +149,7 @@
                     },
                     "launchToOnStartup": {
                         "title": "Відкривати при запуску",
-                        "subtitle": "Виберіть сторінку, яка відкриватиметься під час запуску TizenTube"
+                        "subtitle": "Виберіть сторінку, яка відкриватиметься під час запуску YTArk"
                     },
                     "categories": {
                         "search": "Пошук",
@@ -199,8 +198,8 @@
                 }
             },
             "updater": {
-                "title": "Оновлення TizenTube Cobalt",
-                "menuSubtitle": "Керування оновленнями TizenTube Cobalt",
+                "title": "YTArk Updates",
+                "menuSubtitle": "Manage YTArk updates",
                 "versionSubtitle": "Поточна версія: {{version}}",
                 "options": {
                     "checkForUpdates": "Перевірити оновлення",
@@ -208,7 +207,7 @@
                 },
                 "updateAvailable": {
                     "title": "Доступне оновлення",
-                    "subtitle": "Доступна нова версія TizenTube Cobalt: {{latestVersion}}, поточна версія: {{currentVersion}}"
+                    "subtitle": "Доступна нова версія YTArk: {{latestVersion}}, поточна версія: {{currentVersion}}"
                 },
                 "releaseDate": "Дата випуску: {{date}}",
                 "updateNow": {
@@ -220,40 +219,24 @@
                     "subtitle": "Перевірити наявність оновлень пізніше."
                 },
                 "upToDate": {
-                    "title": "TizenTube оновлено",
-                    "subtitle": "Ви використовуєте найновішу версію TizenTube Cobalt ({{version}})."
+                    "title": "YTArk is up to date",
+                    "subtitle": "Ви використовуєте найновішу версію YTArk ({{version}})."
                 },
                 "checkFailed": {
-                    "title": "Не вдалося перевірити оновлення TizenTube",
+                    "title": "YTArk update check failed",
                     "subtitle": "Не вдалося перевірити наявність оновлень."
                 },
                 "downloading": {
-                    "title": "Оновлення TizenTube",
+                    "title": "YTArk update",
                     "subtitle": "Оновлення завантажується. Зачекайте..."
                 }
             }
         },
         "ttSettings": {
-            "title": "Налаштування TizenTube",
-            "madeByText": "Створено Reis Can (reisxd) з ❤️",
-            "summary": "Відкрити налаштування TizenTube"
-        },
-        "supportTT": {
-            "title": "Підтримати TizenTube",
-            "subtitle": "❤️ Підтримайте TizenTube та його розвиток",
-            "content": {
-                "1": "Якщо вам подобається користуватися TizenTube і ви хочете підтримати його розвиток, зверніть увагу на такі варіанти:",
-                "2": "1. Поставте зірку репозиторію на GitHub, щоб підвищити його видимість.",
-                "3": "2. Поділіться TizenTube з іншими.",
-                "4": "Якщо ви хочете фінансово підтримати проєкт, можете зробити донат:",
-                "5": "- Buy Me A Coffee: https://www.buymeacoffee.com/reisxd (бажано)",
-                "6": "- GitHub Sponsors: https://github.com/sponsors/reisxd"
-            }
+            "title": "YTArk Settings",
+            "madeByText": "Playback, appearance and update controls",
+            "summary": "Open YTArk Settings"
         }
-    },
-    "welcomeMsg": {
-        "title": "Ласкаво просимо до TizenTube",
-        "subtitle": "Перейдіть у налаштування та натисніть «Налаштування TizenTube»."
     },
     "sponsorblock": {
         "segments": {
@@ -284,7 +267,7 @@
         "pictureInPicture": "Картинка в картинці (PiP)",
         "previous": "Попереднє",
         "next": "Наступне",
-        "withTizenTube": "з TizenTube",
+        "withTizenTube": "з YTArk",
         "share": {
             "title": "Поділитися",
             "button": "Поділитися",

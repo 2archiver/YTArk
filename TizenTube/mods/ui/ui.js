@@ -148,7 +148,7 @@ function execute_once_dom_loaded() {
 
   try {
     uiContainer.innerHTML = `
-<h1>TizenTube Theme Configuration</h1>
+<h1>YTArk Settings</h1>
 <label for="__barColor">Navigation Bar Color: <input type="text" id="__barColor"/></label>
 <label for="__routeColor">Main Content Color: <input type="text" id="__routeColor"/></label>
 <div><small>Sponsor segments skipping - https://sponsor.ajay.app</small></div>
@@ -248,12 +248,6 @@ function execute_once_dom_loaded() {
 
   document.addEventListener('keydown', eventHandler, true);
   document.addEventListener('keyup', (evt) => handledRemoteKeys.delete(evt.keyCode), true);
-  if (configRead('showWelcomeToast')) {
-    setTimeout(() => {
-      showToast(t('welcomeMsg.title'), t('welcomeMsg.subtitle'));
-    }, 2000);
-  }
-
   if (configRead('reloadHomeOnStartup')) {
     if (configRead('launchToOnStartup')) {
       resolveCommand(JSON.parse(configRead('launchToOnStartup')));

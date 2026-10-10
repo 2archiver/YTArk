@@ -59,7 +59,6 @@
                     "longPress": "Hosszan lenyomva tartott funkciók",
                     "shorts": "Short-ok bekapcsolása",
                     "videoPreviews": "Videó előnézet kapcsolása",
-                    "ttWelcomeMsg": "TizenTube indítóüzenet megjelenítése",
                     "guestSignInReminder": "Vendég fiók bejelentkezés emlékeztető megjelenítése",
                     "reloadHomeOnStartup": "Kezdőképernyő újratöltése indításkor"
                 }
@@ -144,7 +143,7 @@
                     },
                     "launchToOnStartup": {
                         "title": "Kiválasztott kezdőoldal indításkor",
-                        "subtitle": "Válaszd ki azt az oldalt, amit a TizenTube nyit meg indításkor"
+                        "subtitle": "Válaszd ki azt az oldalt, amit a YTArk nyit meg indításkor"
                     },
                     "categories": {
                         "search": "Search",
@@ -199,8 +198,8 @@
                 "minutes": "{{count}} minutes"
             },
             "updater": {
-                "title": "TizenTube Cobalt Updater",
-                "menuSubtitle": "Manage TizenTube Cobalt updates",
+                "title": "YTArk Updates",
+                "menuSubtitle": "Manage YTArk updates",
                 "versionSubtitle": "Current version: {{version}}",
                 "options": {
                     "checkForUpdates": "Check for updates",
@@ -208,7 +207,7 @@
                 },
                 "updateAvailable": {
                     "title": "Update Available",
-                    "subtitle": "A new version of TizenTube Cobalt is available: {{latestVersion}}, current: {{currentVersion}}"
+                    "subtitle": "A new version of YTArk is available: {{latestVersion}}, current: {{currentVersion}}"
                 },
                 "releaseDate": "Release Date: {{date}}",
                 "updateNow": {
@@ -220,40 +219,24 @@
                     "subtitle": "Check for updates later."
                 },
                 "upToDate": {
-                    "title": "TizenTube is up to date",
-                    "subtitle": "You are using the latest version ({{version}}) of TizenTube Cobalt."
+                    "title": "YTArk is up to date",
+                    "subtitle": "You are using the latest version ({{version}}) of YTArk."
                 },
                 "checkFailed": {
-                    "title": "TizenTube update check failed",
+                    "title": "YTArk update check failed",
                     "subtitle": "Could not check for updates."
                 },
                 "downloading": {
-                    "title": "TizenTube Update",
+                    "title": "YTArk update",
                     "subtitle": "Downloading update, please wait..."
                 }
             }
         },
         "ttSettings": {
-            "title": "TizenTube beállítások",
-            "madeByText": "Készítette: Reis Can (reisxd) csupa ❤️-vel",
-            "summary": "Nyisd meg a TizenTube beállításokat"
-        },
-        "supportTT": {
-            "title": "Támogasd a TizenTube-ot",
-            "subtitle": "❤️ Fejezd ki a köszöneted a TizenTube és azok fejlesztései felé",
-            "content": {
-                "1": "Ha tetszik a TizenTube és támogatnád a fejlesztését:",
-                "2": "1. Csillagozd be a GitHub-on, hogy többekhez eljusson",
-                "3": "2. Oszd meg a TizenTube-ot másokkal",
-                "4": "Ha anyagilag is szeretnéd támogatni, a következő linkeken megteheted:",
-                "5": "- Hívj meg egy kávéra: https://www.buymeacoffee.com/reisxd (inkább ezen)",
-                "6": "- GitHub szponzorok: https://github.com/sponsors/reisxd"
-            }
+            "title": "YTArk Settings",
+            "madeByText": "Playback, appearance and update controls",
+            "summary": "Open YTArk Settings"
         }
-    },
-    "welcomeMsg": {
-        "title": "Üdvözöl a TizenTube!",
-        "subtitle": "A testreszabáshoz navigálj a TizenTube beállításokra"
     },
     "sponsorblock": {
         "segments": {
@@ -284,7 +267,7 @@
         "pictureInPicture": "Picture in Picture",
         "previous": "Previous",
         "next": "Next",
-        "withTizenTube": "with TizenTube",
+        "withTizenTube": "with YTArk",
         "share": {
             "title": "Share",
             "button": "Share",

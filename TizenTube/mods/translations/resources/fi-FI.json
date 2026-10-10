@@ -59,7 +59,6 @@
                     "longPress": "Ota pitkän painalluksen toiminnot käyttöön",
                     "shorts": "Ota Shorts käyttöön",
                     "videoPreviews": "Ota videon esikatselut käyttöön",
-                    "ttWelcomeMsg": "Näytä TT-tervetuloviesti",
                     "guestSignInReminder": "Näytä vieraskirjautumisen muistutus",
                     "reloadHomeOnStartup": "Lataa etusivu uudelleen käynnistyksessä"
                 }
@@ -144,7 +143,7 @@
                     },
                     "launchToOnStartup": {
                         "title": "Aloitussivu käynnistyksessä",
-                        "subtitle": "Valitse oletussivu, johon TizenTube avautuu käynnistyksessä"
+                        "subtitle": "Valitse oletussivu, johon YTArk avautuu käynnistyksessä"
                     },
                     "categories": {
                         "search": "Search",
@@ -199,8 +198,8 @@
                 "minutes": "{{count}} minutes"
             },
             "updater": {
-                "title": "TizenTube Cobalt Updater",
-                "menuSubtitle": "Manage TizenTube Cobalt updates",
+                "title": "YTArk Updates",
+                "menuSubtitle": "Manage YTArk updates",
                 "versionSubtitle": "Current version: {{version}}",
                 "options": {
                     "checkForUpdates": "Check for updates",
@@ -208,7 +207,7 @@
                 },
                 "updateAvailable": {
                     "title": "Update Available",
-                    "subtitle": "A new version of TizenTube Cobalt is available: {{latestVersion}}, current: {{currentVersion}}"
+                    "subtitle": "A new version of YTArk is available: {{latestVersion}}, current: {{currentVersion}}"
                 },
                 "releaseDate": "Release Date: {{date}}",
                 "updateNow": {
@@ -220,40 +219,24 @@
                     "subtitle": "Check for updates later."
                 },
                 "upToDate": {
-                    "title": "TizenTube is up to date",
-                    "subtitle": "You are using the latest version ({{version}}) of TizenTube Cobalt."
+                    "title": "YTArk is up to date",
+                    "subtitle": "You are using the latest version ({{version}}) of YTArk."
                 },
                 "checkFailed": {
-                    "title": "TizenTube update check failed",
+                    "title": "YTArk update check failed",
                     "subtitle": "Could not check for updates."
                 },
                 "downloading": {
-                    "title": "TizenTube Update",
+                    "title": "YTArk update",
                     "subtitle": "Downloading update, please wait..."
                 }
             }
         },
         "ttSettings": {
-            "title": "TizenTube-asetukset",
-            "madeByText": "Tekijä Reis Can (reisxd) ❤️",
-            "summary": "Avaa TizenTube-asetukset"
-        },
-        "supportTT": {
-            "title": "Tue TizenTubea",
-            "subtitle": "❤️ Tue TizenTubea ja sen kehitystä",
-            "content": {
-                "1": "Jos pidät TizenTuben käytöstä ja haluat tukea sen kehitystä, harkitse seuraavaa:",
-                "2": "1. Anna GitHub-repositorioon tähti, jotta sen näkyvyys kasvaa.",
-                "3": "2. Jaa TizenTubea muille.",
-                "4": "Jos haluat tukea taloudellisesti, harkitse lahjoittamista:",
-                "5": "- Buy Me A Coffee: https://www.buymeacoffee.com/reisxd (mieluiten)",
-                "6": "- GitHub Sponsors: https://github.com/sponsors/reisxd"
-            }
+            "title": "YTArk Settings",
+            "madeByText": "Playback, appearance and update controls",
+            "summary": "Open YTArk Settings"
         }
-    },
-    "welcomeMsg": {
-        "title": "Tervetuloa TizenTubeen",
-        "subtitle": "Siirry asetuksiin ja avaa TizenTube-asetukset."
     },
     "sponsorblock": {
         "segments": {
@@ -284,7 +267,7 @@
         "pictureInPicture": "Picture in Picture",
         "previous": "Previous",
         "next": "Next",
-        "withTizenTube": "with TizenTube",
+        "withTizenTube": "with YTArk",
         "share": {
             "title": "Share",
             "button": "Share",

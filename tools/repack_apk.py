@@ -417,6 +417,7 @@ YTARK_ICON_SOURCES = (
     # (source under android-updater/, target under decoded res/)
     ("ytark_launcher_fg.xml", "drawable/ytark_launcher_fg.xml"),
     ("ytark_launcher_bg.xml", "drawable/ytark_launcher_bg.xml"),
+    ("ytark_launcher_monochrome.xml", "drawable/ytark_launcher_monochrome.xml"),
     ("ytark_banner.xml", "drawable/ytark_banner.xml"),
     ("mipmap-anydpi-v26/ytark_launcher.xml", "mipmap-anydpi-v26/ytark_launcher.xml"),
     ("mipmap-mdpi/ytark_launcher.png", "mipmap-mdpi/ytark_launcher.png"),
@@ -478,6 +479,7 @@ def patch_launcher_icon(decoded_dir: str) -> None:
 UPDATER_PACKAGE = "io.github.twoarchiver.ytark.updater"
 UPDATER_ACTIVITY = UPDATER_PACKAGE + ".UpdateActivity"
 UPDATER_PROVIDER = UPDATER_PACKAGE + ".UpdateBootstrapProvider"
+UPDATE_FILE_PROVIDER = UPDATER_PACKAGE + ".PendingUpdateProvider"
 UPDATER_RECEIVER = UPDATER_PACKAGE + ".UpdateActionReceiver"
 
 
@@ -489,7 +491,8 @@ def patch_updater_manifest(decoded_dir: str, app_id: str) -> None:
 
     if not re.search(r"xmlns:android\s*=", xml):
         raise SystemExit("ERROR: decoded manifest has no android namespace.")
-    if UPDATER_PROVIDER in xml or UPDATER_ACTIVITY in xml or UPDATER_RECEIVER in xml:
+    if (UPDATER_PROVIDER in xml or UPDATER_ACTIVITY in xml or UPDATER_RECEIVER in xml
+            or UPDATE_FILE_PROVIDER in xml):
         raise SystemExit("ERROR: native YTArk updater components already exist in the manifest.")
 
     permissions = (
@@ -527,6 +530,13 @@ def patch_updater_manifest(decoded_dir: str, app_id: str) -> None:
         android:authorities="{app_id}.ytarkupdater"
         android:exported="false"
         android:initOrder="100" />
+    <provider
+        android:name="{UPDATE_FILE_PROVIDER}"
+        android:authorities="{app_id}.ytarkupdater.files"
+        android:exported="false"
+        android:grantUriPermissions="true">
+      <grant-uri-permission android:path="/update.apk" />
+    </provider>
     <receiver
         android:name="{UPDATER_RECEIVER}"
         android:exported="false" />\n"""
@@ -848,8 +858,12 @@ def self_test() -> None:
          "Android TV launcher banner changed to YTArk"),
         (UPDATER_ACTIVITY in patched_updater_manifest, "native update activity declared"),
         (UPDATER_PROVIDER in patched_updater_manifest, "startup provider declared"),
-        ("io.github.twoarchiver.ytark.ytarkupdater" in patched_updater_manifest,
-         "provider authority follows app id"),
+        (UPDATE_FILE_PROVIDER in patched_updater_manifest, "read-only update-file provider declared"),
+        ("io.github.twoarchiver.ytark.ytarkupdater.files" in patched_updater_manifest,
+         "update-file authority follows app id"),
+        ('android:grantUriPermissions="true"' in patched_updater_manifest
+         and 'android:path="/update.apk"' in patched_updater_manifest,
+         "only the verified update APK can be granted to Android Installer"),
         ('android:scheme="ytark" android:host="updates"' in patched_updater_manifest,
          "settings deep link declared"),
         ("android.permission.REQUEST_INSTALL_PACKAGES" in patched_updater_manifest,
@@ -957,8 +971,8 @@ def main():
     ap.add_argument("--app-id", default="io.github.twoarchiver.ytark")
     ap.add_argument("--script-url", required=False,
                     help="replacement userscript URL, must end with '?v='")
-    ap.add_argument("--version-code", type=int, default=20017)
-    ap.add_argument("--version-name", default="2.0.4-ytark.17")
+    ap.add_argument("--version-code", type=int, default=2010000)
+    ap.add_argument("--version-name", default="2.1.0")
     ap.add_argument("--apktool", default="apktool",
                     help="apktool command, e.g. 'java -jar apktool.jar'")
     ap.add_argument("--zipalign", default="zipalign")

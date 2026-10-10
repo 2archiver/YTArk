@@ -7,6 +7,18 @@ import { PRESETS, QUALITY_LEVELS } from '../features/tvControls.js';
 
 const qrcodes = {};
 
+function ytarkDisplayVersion() {
+    try {
+        const getVersion = window.h5vcc?.tizentube?.GetVersion;
+        const version = typeof getVersion === 'function' ? String(getVersion()) : '';
+        const match = version.match(/^(\d+)\.(\d+)\.(\d+)(?:-ytark\.[1-9]\d*)?$/);
+        if (match) return match[3] === '0' ? `${match[1]}.${match[2]}` : `${match[1]}.${match[2]}.${match[3]}`;
+    } catch (error) {
+        console.warn('[YTArk] Could not read display version for About YTArk:', error);
+    }
+    return 'unknown';
+}
+
 export default function modernUI(update, parameters) {
     const settings = [
         // ---- YTArk Quick Controls (first item) ----
@@ -132,62 +144,31 @@ export default function modernUI(update, parameters) {
         },
         // ---- End YTArk Quick Controls ----
         {
-            name: t('settings.supportTT.title'),
-            icon: 'MONEY_HEART',
+            name: 'About YTArk',
+            icon: 'INFO',
             value: null,
             options: {
-                title: t('settings.supportTT.title'),
-                subtitle: t('settings.supportTT.subtitle'),
+                title: 'About YTArk',
+                subtitle: `Version ${ytarkDisplayVersion()}`,
                 content: scrollPaneRenderer([
-                    overlayMessageRenderer(t('settings.supportTT.content.1')),
-                    overlayMessageRenderer(t('settings.supportTT.content.2')),
-                    overlayMessageRenderer(t('settings.supportTT.content.3')),
-                    overlayMessageRenderer(t('settings.supportTT.content.4')),
-                    overlayMessageRenderer(t('settings.supportTT.content.5')),
-                    overlayMessageRenderer(t('settings.supportTT.content.6'))
+                    overlayMessageRenderer(`YTArk ${ytarkDisplayVersion()} is an independent Android TV application.`),
+                    overlayMessageRenderer('The optional YouTube Premium wordmark is a local visual only. It does not provide a subscription or account benefits.'),
+                    overlayMessageRenderer('Third-party notices and source attribution are included in the release NOTICE.md, TizenTube/LICENSE, and upstream license files.')
                 ])
             }
         },
         {
-            name: t('settings.options.socialMedia.title'),
+            name: 'Support YTArk',
             icon: 'PRIVACY_UNLISTED',
             value: null,
             options: [
                 {
-                    name: 'GitHub',
+                    name: 'YTArk on GitHub',
                     link: 'https://github.com/2archiver/YTArk',
                 },
                 {
-                    name: 'Ko-fi',
+                    name: 'Support YTArk on Ko-fi',
                     link: 'https://ko-fi.com/2archiver',
-                },
-                {
-                    name: 'YouTube',
-                    link: 'https://www.youtube.com/@tizenbrew',
-                },
-                {
-                    name: 'Discord',
-                    link: 'https://discord.gg/m2P7v8Y2qR',
-                },
-                {
-                    name: `Telegram (${t('settings.options.socialMedia.announcements')})`,
-                    link: 'https://t.me/tizentubecobaltofficial',
-                },
-                {
-                    name: `Telegram (${t('settings.options.socialMedia.group')})`,
-                    link: 'https://t.me/tizentubeofficial',
-                },
-                {
-                    name: t('settings.options.socialMedia.website'),
-                    link: 'https://tizentube.6513006.xyz',
-                },
-                {
-                    name: 'Buy Me A Coffee',
-                    link: 'https://www.buymeacoffee.com/reisxd',
-                },
-                {
-                    name: t('settings.options.socialMedia.githubSponsors'),
-                    link: 'https://github.com/sponsors/reisxd',
                 }
             ].map((option) => {
                 if (!qrcodes[option.name]) {
@@ -420,10 +401,6 @@ export default function modernUI(update, parameters) {
                 {
                     name: t('settings.options.misc.options.videoPreviews'),
                     value: 'enablePreviews'
-                },
-                {
-                    name: t('settings.options.misc.options.ttWelcomeMsg'),
-                    value: 'showWelcomeToast',
                 },
                 {
                     name: t('settings.options.misc.options.guestSignInReminder'),
@@ -973,8 +950,8 @@ export default function modernUI(update, parameters) {
 
     showModal(
         {
-            title: t('settings.ttSettings.title'),
-            subtitle: t('settings.ttSettings.madeByText')
+            title: 'YTArk Settings',
+            subtitle: 'Playback, appearance and update controls'
         },
         overlayPanelItemListRenderer(buttons, parameters && parameters.length > 0 ? parameters[0] : 0),
         'tt-settings',

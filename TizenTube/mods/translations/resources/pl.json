@@ -59,7 +59,6 @@
                     "longPress": "Włącz funkcje przytrzymania",
                     "shorts": "Włącz Shorts",
                     "videoPreviews": "Włącz podgląd filmu",
-                    "ttWelcomeMsg": "Pokaż powitanie TT",
                     "guestSignInReminder": "Przypomnienie o zalogowaniu się dla gości",
                     "reloadHomeOnStartup": "Odśwież stronę główną przy starcie"
                 }
@@ -150,7 +149,7 @@
                     },
                     "launchToOnStartup": {
                         "title": "Strona startowa",
-                        "subtitle": "Wybierz domyślną stronę, która otwiera się po uruchomieniu TizenTube"
+                        "subtitle": "Wybierz domyślną stronę, która otwiera się po uruchomieniu YTArk"
                     },
                     "categories": {
                         "search": "Szukaj",
@@ -199,8 +198,8 @@
                 }
             },
             "updater": {
-                "title": "Aktualizacje TizenTube Cobalt",
-                "menuSubtitle": "Zarządzaj aktualizacjami TizenTube Cobalt",
+                "title": "YTArk Updates",
+                "menuSubtitle": "Manage YTArk updates",
                 "versionSubtitle": "Zainstalowana wersja: {{version}}",
                 "options": {
                     "checkForUpdates": "Sprawdź dostępność aktualizacji",
@@ -208,7 +207,7 @@
                 },
                 "updateAvailable": {
                     "title": "Dostępna aktualizacja",
-                    "subtitle": "Nowa wersja TizenTube Cobalt jest dostępna: {{latestVersion}}, zainstalowana: {{currentVersion}}"
+                    "subtitle": "Nowa wersja YTArk jest dostępna: {{latestVersion}}, zainstalowana: {{currentVersion}}"
                 },
                 "releaseDate": "Wydana: {{date}}",
                 "updateNow": {
@@ -220,40 +219,24 @@
                     "subtitle": "Sprawdź dostępność aktualizacji później"
                 },
                 "upToDate": {
-                    "title": "TizenTube jest aktualne",
-                    "subtitle": "Używasz już najnowszej wersji ({{version}}) TizenTube Cobalt."
+                    "title": "YTArk is up to date",
+                    "subtitle": "Używasz już najnowszej wersji ({{version}}) YTArk."
                 },
                 "checkFailed": {
-                    "title": "TizenTube update check failed",
+                    "title": "YTArk update check failed",
                     "subtitle": "Could not check for updates."
                 },
                 "downloading": {
-                    "title": "Aktualizacja TizenTube",
+                    "title": "YTArk update",
                     "subtitle": "Pobieranie aktualizacji, proszę czekać..."
                 }
             }
         },
         "ttSettings": {
-            "title": "Ustawienia TizenTube",
-            "madeByText": "Stworzony przez Reisa Cana „reisxd” z ❤️",
-            "summary": "Otwórz ustawienia TizenTube"
-        },
-        "supportTT": {
-            "title": "Wesprzyj TizenTube",
-            "subtitle": "❤️ Okaż wsparcie dla TizenTube i jego rozwoju",
-            "content": {
-                "1": "Jeśli podoba Ci się TizenTube i chcesz pomóc w jego rozwoju, oto co możesz zrobić:",
-                "2": "1. Oznacz repozytorium na GitHubie gwiazdką, aby zwiększyć jego widoczność.",
-                "3": "2. Poleć TizenTube znajomym.",
-                "4": "Jeśli chcesz wesprzeć projekt finansowo, możesz przekazać darowiznę:",
-                "5": "- Buy Me A Coffee: https://www.buymeacoffee.com/reisxd (Preferowane)",
-                "6": "- GitHub Sponsors: https://github.com/sponsors/reisxd"
-            }
+            "title": "YTArk Settings",
+            "madeByText": "Playback, appearance and update controls",
+            "summary": "Open YTArk Settings"
         }
-    },
-    "welcomeMsg": {
-        "title": "Witaj w TizenTube",
-        "subtitle": "Aby przejść do ustawień, wejdź w ustawienia i wybierz Ustawienia TizenTube."
     },
     "sponsorblock": {
         "segments": {
@@ -284,7 +267,7 @@
         "pictureInPicture": "Obraz w obrazie (PiP)",
         "previous": "Poprzedni",
         "next": "Następny",
-        "withTizenTube": "Za pomocą TizenTube",
+        "withTizenTube": "Za pomocą YTArk",
         "share": {
             "title": "Share",
             "button": "Share",

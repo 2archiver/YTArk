@@ -6,47 +6,86 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * Shared parser for the public GitHub Release metadata consumed by YTArk's updater.
- * Keep this contract in plain Java so CI can test it without an Android runtime.
+ * Strict parser for the public YTArk GitHub Releases contract.
+ * Keep this class Android-free so CI can exercise it on a host JRE.
  */
 final class UpdateReleaseContract {
     private static final String RELEASE_ASSET_PREFIX =
             "https://github.com/2archiver/YTArk/releases/download/";
     private static final Pattern VERSION_CODE = Pattern.compile(
             "(?i)version\\s*code\\s*[:=]?\\s*(\\d+)");
-    private static final Pattern YTARK_VERSION = Pattern.compile(
-            "^\\d+\\.\\d+\\.\\d+-ytark\\.[1-9]\\d*$");
+    private static final Pattern CLEAN_VERSION = Pattern.compile(
+            "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$");
 
     private UpdateReleaseContract() { }
 
     static long expectedVersionCodeForVersion(String version) throws IOException {
         if (version == null) throw new IOException("The YTArk release version is missing.");
-        Matcher matcher = YTARK_VERSION.matcher(version);
-        if (!matcher.matches()) throw new IOException("The YTArk release version is invalid.");
-        int marker = version.lastIndexOf('.');
+        Matcher matcher = CLEAN_VERSION.matcher(version);
+        if (!matcher.matches()) {
+            throw new IOException("The YTArk stable version must use clean MAJOR.MINOR.PATCH SemVer.");
+        }
         try {
-            return 20000L + Long.parseLong(version.substring(marker + 1));
+            long major = Long.parseLong(matcher.group(1));
+            long minor = Long.parseLong(matcher.group(2));
+            long patch = Long.parseLong(matcher.group(3));
+            if (major <= 0 || minor >= 100 || patch >= 100) {
+                throw new IOException("The YTArk SemVer components exceed the versionCode mapping.");
+            }
+            long code = major * 1_000_000L + minor * 10_000L + patch * 100L;
+            if (code <= 0 || code > 2_100_000_000L) {
+                throw new IOException("The derived Android versionCode exceeds the platform limit.");
+            }
+            return code;
         } catch (NumberFormatException invalid) {
-            throw new IOException("The YTArk release serial is invalid.", invalid);
+            throw new IOException("The YTArk version component is invalid.", invalid);
+        }
+    }
+
+    static String displayVersionForVersion(String version) throws IOException {
+        Matcher matcher = CLEAN_VERSION.matcher(version == null ? "" : version);
+        if (!matcher.matches()) throw new IOException("The YTArk release version is invalid.");
+        return "0".equals(matcher.group(3))
+                ? matcher.group(1) + "." + matcher.group(2)
+                : version;
+    }
+
+    static String releaseTitleForVersion(String version) throws IOException {
+        return "YTArk " + displayVersionForVersion(version);
+    }
+
+    static String tagForVersion(String version) throws IOException {
+        expectedVersionCodeForVersion(version);
+        return "v" + version;
+    }
+
+    static void requirePublishedStable(boolean hasDraftFlag, boolean draft,
+                                       boolean hasPrereleaseFlag, boolean prerelease)
+            throws IOException {
+        if (!hasDraftFlag || !hasPrereleaseFlag) {
+            throw new IOException("The latest release is missing its stable-publication flags.");
+        }
+        if (draft || prerelease) {
+            throw new IOException("Draft or prerelease YTArk builds are not installable updates.");
         }
     }
 
     static String assetNameForVersion(String version, String architectureSuffix) throws IOException {
-        if (version == null || !YTARK_VERSION.matcher(version).matches()) {
-            throw new IOException("The YTArk release version is invalid.");
-        }
-        // Validate against the exact mapping. Never accept a path, ABI alias, or
-        // arbitrary caller-provided suffix as part of a release asset name.
+        expectedVersionCodeForVersion(version);
+        // Validate against the exact ABI-to-filename mapping; do not accept path-like suffixes.
         NativeAbiContract.nativeAbiForSuffix(architectureSuffix);
         return "YTArk-v" + version + "-" + architectureSuffix + ".apk";
     }
 
     static String requireOfficialAssetUrl(String url, String tag, String assetName)
             throws IOException {
-        if (tag == null || !tag.matches("v\\d+\\.\\d+\\.\\d+-ytark\\.[1-9]\\d*")) {
-            throw new IOException("The YTArk release tag is invalid.");
+        if (tag == null || !tag.matches("v(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)")) {
+            throw new IOException("The YTArk stable release tag is invalid.");
         }
-        if (assetName == null || !(assetName.matches("YTArk-v\\d+\\.\\d+\\.\\d+-ytark\\.[1-9]\\d*-(?:arm64|armv7)\\.apk")
+        String version = tag.substring(1);
+        expectedVersionCodeForVersion(version);
+        if (assetName == null || !(assetName.matches(
+                "YTArk-v(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)-(?:arm64|armv7)\\.apk")
                 || "SHA256SUMS.txt".equals(assetName))) {
             throw new IOException("A release asset has an invalid YTArk filename.");
         }

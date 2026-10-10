@@ -144,8 +144,11 @@ jobs:
           mkdir -p "$RUNNER_TEMP/ytark-validation"
           gh api "repos/$GITHUB_REPOSITORY/releases/latest" \
             > "$RUNNER_TEMP/ytark-validation/latest-release.json"
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            > "$RUNNER_TEMP/ytark-validation/published-releases.json"
           python3 tools/validate_release.py check-version \
-            --latest-json "$RUNNER_TEMP/ytark-validation/latest-release.json"
+            --latest-json "$RUNNER_TEMP/ytark-validation/latest-release.json" \
+            --releases-json "$RUNNER_TEMP/ytark-validation/published-releases.json"
           test -n "$BASE_TAG"
           gh api "repos/reisxd/TizenTubeCobalt/releases/tags/$BASE_TAG" \
             > "$RUNNER_TEMP/ytark-validation/base-release.json"

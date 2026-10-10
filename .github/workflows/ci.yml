@@ -61,10 +61,11 @@ jobs:
           python3 tools/render_launcher_art.py --check
           python3 tools/check_no_secrets.py --history
           python3 tools/validate_release.py emit-env --file "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'VERSION_NAME=2.0.4-ytark.17' "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'VERSION_CODE=20017' "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'APK_ARMV7=YTArk-v2.0.4-ytark.17-armv7.apk' "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'APK_ARM64=YTArk-v2.0.4-ytark.17-arm64.apk' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'VERSION_NAME=2.1.0' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'DISPLAY_VERSION=2.1' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'VERSION_CODE=2010000' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'APK_ARMV7=YTArk-v2.1.0-armv7.apk' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'APK_ARM64=YTArk-v2.1.0-arm64.apk' "$RUNNER_TEMP/ytark-release.env"
           actual_cert="$(openssl x509 -in signing/YTArk-release-cert.pem -outform DER | sha256sum | awk '{print $1}')"
           expected_cert="$(grep -v '^[[:space:]]*#' signing/YTArk-cert-sha256.txt | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
           test "$actual_cert" = "$expected_cert"
@@ -81,9 +82,17 @@ jobs:
             android-updater/src/main/java/io/github/twoarchiver/ytark/updater/UpdateResumeContract.java \
             android-updater/src/main/java/io/github/twoarchiver/ytark/updater/UpdateVersion.java \
             android-updater/src/main/java/io/github/twoarchiver/ytark/updater/UpdateReleaseContract.java \
+            android-updater/src/main/java/io/github/twoarchiver/ytark/updater/UpdateSchedulePolicy.java \
+            android-updater/src/main/java/io/github/twoarchiver/ytark/updater/YtarkBranding.java \
             android-updater/src/test/java/io/github/twoarchiver/ytark/updater/UpdateVersionTest.java \
-            android-updater/src/test/java/io/github/twoarchiver/ytark/updater/UpdateReleaseContractTest.java
+            android-updater/src/test/java/io/github/twoarchiver/ytark/updater/UpdateReleaseContractTest.java \
+            android-updater/src/test/java/io/github/twoarchiver/ytark/updater/UpdateSchedulePolicyTest.java \
+            android-updater/src/test/java/io/github/twoarchiver/ytark/updater/YtarkBrandingTest.java
           java -cp "$RUNNER_TEMP/ytark-version-tests" \
             io.github.twoarchiver.ytark.updater.UpdateVersionTest
           java -cp "$RUNNER_TEMP/ytark-version-tests" \
             io.github.twoarchiver.ytark.updater.UpdateReleaseContractTest
+          java -cp "$RUNNER_TEMP/ytark-version-tests" \
+            io.github.twoarchiver.ytark.updater.UpdateSchedulePolicyTest
+          java -cp "$RUNNER_TEMP/ytark-version-tests" \
+            io.github.twoarchiver.ytark.updater.YtarkBrandingTest

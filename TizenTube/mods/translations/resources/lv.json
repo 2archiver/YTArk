@@ -59,7 +59,6 @@
                     "longPress": "Iespējot garā nospiediena darbības",
                     "shorts": "Iespējot Shorts",
                     "videoPreviews": "Iespējot video priekšskatījumus",
-                    "ttWelcomeMsg": "Rādīt TT sveiciena ziņojumu",
                     "guestSignInReminder": "Rādīt viesa pieteikšanās atgādinājumu",
                     "reloadHomeOnStartup": "Pārlādēt sākumlapu palaišanas brīdī"
                 }
@@ -144,7 +143,7 @@
                     },
                     "launchToOnStartup": {
                         "title": "Sākumlapa palaišanas brīdī",
-                        "subtitle": "Izvēlieties noklusējuma lapu, kuru TizenTube atvērs palaišanas brīdī"
+                        "subtitle": "Izvēlieties noklusējuma lapu, kuru YTArk atvērs palaišanas brīdī"
                     },
                     "sortSubscriptionsByAlphabet": "Sort Subscriptions Alphabetically",
                     "categories": {
@@ -193,8 +192,8 @@
                 }
             },
             "updater": {
-                "title": "TizenTube Cobalt atjauninātājs",
-                "menuSubtitle": "Pārvaldīt TizenTube Cobalt atjauninājumus",
+                "title": "YTArk Updates",
+                "menuSubtitle": "Manage YTArk updates",
                 "versionSubtitle": "Pašreizējā versija: {{version}}",
                 "options": {
                     "checkForUpdates": "Pārbaudīt atjauninājumus",
@@ -202,7 +201,7 @@
                 },
                 "updateAvailable": {
                     "title": "Update Available",
-                    "subtitle": "A new version of TizenTube Cobalt is available: {{latestVersion}}, current: {{currentVersion}}"
+                    "subtitle": "A new version of YTArk is available: {{latestVersion}}, current: {{currentVersion}}"
                 },
                 "releaseDate": "Release Date: {{date}}",
                 "updateNow": {
@@ -214,15 +213,15 @@
                     "subtitle": "Check for updates later."
                 },
                 "upToDate": {
-                    "title": "TizenTube is up to date",
-                    "subtitle": "You are using the latest version ({{version}}) of TizenTube Cobalt."
+                    "title": "YTArk is up to date",
+                    "subtitle": "You are using the latest version ({{version}}) of YTArk."
                 },
                 "checkFailed": {
-                    "title": "TizenTube update check failed",
+                    "title": "YTArk update check failed",
                     "subtitle": "Could not check for updates."
                 },
                 "downloading": {
-                    "title": "TizenTube Update",
+                    "title": "YTArk update",
                     "subtitle": "Downloading update, please wait..."
                 }
             },
@@ -234,26 +233,10 @@
             }
         },
         "ttSettings": {
-            "title": "TizenTube iestatījumi",
-            "madeByText": "Izveidoja Reis Can (reisxd) ar ❤️",
-            "summary": "Atvērt TizenTube iestatījumus"
-        },
-        "supportTT": {
-            "title": "Atbalstīt TizenTube",
-            "subtitle": "❤️ Atbalstiet TizenTube un tā izstrādi",
-            "content": {
-                "1": "Ja jums patīk lietot TizenTube un vēlaties atbalstīt tā izstrādi, apsveriet sekojošo:",
-                "2": "1. Atzīmējiet GitHub repozitoriju ar zvaigznīti, lai palīdzētu uzlabot tā redzamību.",
-                "3": "2. Dalieties ar TizenTube ar citiem.",
-                "4": "Ja vēlaties sniegt finansiālu ieguldījumu, apsveriet ziedošanu:",
-                "5": "- Buy Me A Coffee: https://www.buymeacoffee.com/reisxd (ieteicams)",
-                "6": "- GitHub Sponsors: https://github.com/sponsors/reisxd"
-            }
+            "title": "YTArk Settings",
+            "madeByText": "Playback, appearance and update controls",
+            "summary": "Open YTArk Settings"
         }
-    },
-    "welcomeMsg": {
-        "title": "Laipni lūdzam TizenTube",
-        "subtitle": "Dodieties uz iestatījumiem un noklikšķiniet uz 'TizenTube iestatījumi', lai veiktu izmaiņas."
     },
     "sponsorblock": {
         "segments": {
@@ -284,7 +267,7 @@
         "pictureInPicture": "Picture in Picture",
         "previous": "Previous",
         "next": "Next",
-        "withTizenTube": "with TizenTube",
+        "withTizenTube": "with YTArk",
         "share": {
             "title": "Share",
             "button": "Share",

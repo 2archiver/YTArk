@@ -1,8 +1,12 @@
 import { configRead, configChangeEmitter } from '../config.js';
 
 const LOGO_SELECTOR = 'ytlr-logo';
+const PLAYER_OVERLAY_SELECTOR = 'ytlr-player, ytd-player, #player, .html5-video-player, [data-player-overlay], [aria-modal="true"]';
 const WORDMARK_SELECTOR = '[data-ytark-premium-wordmark="true"]';
 const SVG_NS = 'http://www.w3.org/2000/svg';
+const OBSERVATION_WINDOW_MS = 25_000;
+const MAX_MUTATION_BATCHES = 48;
+const RECONCILE_DELAY_MS = 80;
 const patchByHost = new WeakMap();
 
 function saveStyle(element, property) {
@@ -70,6 +74,50 @@ function findArtwork(host) {
   return host.querySelector('img, svg, yt-icon');
 }
 
+function isFocusTarget(element) {
+  if (!element) return false;
+  if (element.hasAttribute && element.hasAttribute('tabindex')) return true;
+  if (element.hasAttribute && element.hasAttribute('focusable')
+      && String(element.getAttribute('focusable')).toLowerCase() !== 'false') return true;
+  if (element.isContentEditable) return true;
+
+  const tag = String(element.tagName || '').toUpperCase();
+  if (['BUTTON', 'INPUT', 'SELECT', 'TEXTAREA', 'SUMMARY'].includes(tag)) return true;
+  if (tag === 'A' && element.hasAttribute && element.hasAttribute('href')) return true;
+
+  const role = element.getAttribute && String(element.getAttribute('role') || '').toLowerCase();
+  return ['button', 'link', 'menuitem', 'option', 'radio', 'switch', 'tab', 'treeitem']
+    .includes(role);
+}
+
+function hasAccessibleArtworkName(artwork) {
+  if (!artwork || typeof artwork.hasAttribute !== 'function') return false;
+  if (artwork.hasAttribute('aria-label') || artwork.hasAttribute('aria-labelledby')) return true;
+  if (String(artwork.tagName || '').toLowerCase() === 'img' && artwork.hasAttribute('alt')
+      && String(artwork.getAttribute('alt') || '').trim().length > 0) return true;
+  if (artwork.hasAttribute('role')
+      && String(artwork.getAttribute('role')).toLowerCase() === 'img'
+      && artwork.querySelector && artwork.querySelector('title')) return true;
+  return false;
+}
+
+function isPlayerOverlay(host) {
+  if (!host || typeof host.closest !== 'function') return false;
+  try {
+    return !!host.closest(PLAYER_OVERLAY_SELECTOR);
+  } catch (_) {
+    return true;
+  }
+}
+
+function findLogoHost(doc) {
+  if (!doc) return null;
+  const candidates = typeof doc.querySelectorAll === 'function'
+    ? Array.from(doc.querySelectorAll(LOGO_SELECTOR))
+    : [doc.querySelector && doc.querySelector(LOGO_SELECTOR)].filter(Boolean);
+  return candidates.find(candidate => !isPlayerOverlay(candidate)) || null;
+}
+
 function restoreHost(host) {
   const state = patchByHost.get(host);
   if (!state) {
@@ -89,9 +137,9 @@ function restoreHost(host) {
 }
 
 /**
- * Safely replaces only artwork inside a known YouTube TV logo host. The original
- * artwork and inline styles are retained and restored when the option is off.
- * Returns false if the frontend's logo markup is not recognizable.
+ * Replaces only artwork inside the recognized YouTube TV logo host. The source
+ * artwork and inline styles are preserved and restored when the option is off.
+ * Returns false for unfamiliar or focusable markup, leaving the stock header in place.
  */
 export function setPremiumLogo(host, enabled, doc) {
   if (!host) return false;
@@ -105,15 +153,18 @@ export function setPremiumLogo(host, enabled, doc) {
 
   const artwork = findArtwork(host);
   const current = patchByHost.get(host);
+
+  // Never alter a control, D-pad target, player overlay, or the only
+  // accessible name for a logo. Restore an existing patch if markup changes.
+  if (!artwork || artwork === host || isPlayerOverlay(host)
+      || isFocusTarget(host) || isFocusTarget(artwork)
+      || hasAccessibleArtworkName(artwork) || !host.style || !artwork.style) {
+    if (current) restoreHost(host);
+    return false;
+  }
   if (current && current.wordmark && current.wordmark.parentNode === host
       && current.artwork === artwork) return true;
   if (current) restoreHost(host);
-
-  // Never replace an interactive or focusable node: logo changes must not alter
-  // search/account controls or the D-pad focus order.
-  if (!artwork || artwork === host || (artwork.hasAttribute && artwork.hasAttribute('tabindex')
-      && artwork.getAttribute('tabindex') !== '-1')) return false;
-  if (!host.style || !artwork.style) return false;
 
   const wordmark = makeWordmark(documentRef);
   const state = {
@@ -136,8 +187,26 @@ export function setPremiumLogo(host, enabled, doc) {
 
 let observer = null;
 let observerRoot = null;
+let observerDeadline = null;
+let observerBatches = 0;
 let currentHost = null;
 let reconcileTimer = null;
+let didReportFallback = false;
+
+function reportFallback(reason) {
+  if (didReportFallback) return;
+  didReportFallback = true;
+  console.warn(`[YTArk Premium] ${reason}. The cosmetic patch is limited to recognized, non-focusable header artwork.`);
+}
+
+function stopObserver() {
+  if (observer) observer.disconnect();
+  if (observerDeadline !== null) clearTimeout(observerDeadline);
+  observer = null;
+  observerDeadline = null;
+  observerRoot = null;
+  observerBatches = 0;
+}
 
 function containsLogo(node) {
   if (!node || node.nodeType !== 1) return false;
@@ -152,27 +221,44 @@ function containsLogo(node) {
 function reconcile() {
   reconcileTimer = null;
   if (typeof document === 'undefined') return;
-  const nextHost = document.querySelector(LOGO_SELECTOR);
+  const nextHost = findLogoHost(document);
   if (currentHost && currentHost !== nextHost) restoreHost(currentHost);
   currentHost = nextHost;
-  if (currentHost) setPremiumLogo(currentHost, configRead('enablePremiumLogo'), document);
+
+  if (!configRead('enablePremiumLogo')) {
+    if (currentHost) restoreHost(currentHost);
+    stopObserver();
+    return;
+  }
+  if (currentHost && !setPremiumLogo(currentHost, true, document)) {
+    reportFallback('the current TV logo markup is not safely patchable');
+  }
 }
 
 function scheduleReconcile() {
   if (reconcileTimer !== null) return;
-  reconcileTimer = setTimeout(reconcile, 80);
+  reconcileTimer = setTimeout(reconcile, RECONCILE_DELAY_MS);
 }
 
-function startObserver() {
-  if (typeof document === 'undefined' || !document.body || observerRoot === document.body) return;
-  if (observer) observer.disconnect();
+function startObserver(forceRestart = false) {
+  if (typeof document === 'undefined' || !document.body || !configRead('enablePremiumLogo')) return;
+  if (!forceRestart && observer && observerRoot === document.body) return;
+  stopObserver();
+
   observerRoot = document.body;
   if (typeof MutationObserver === 'undefined') {
+    reportFallback('MutationObserver is unavailable');
     scheduleReconcile();
     return;
   }
 
   observer = new MutationObserver((records) => {
+    observerBatches += 1;
+    if (observerBatches > MAX_MUTATION_BATCHES) {
+      stopObserver();
+      console.warn('[YTArk Premium] The bounded header observation limit was reached; no further DOM changes will be watched this navigation.');
+      return;
+    }
     let relevant = false;
     for (const record of records) {
       const target = record.target;
@@ -198,20 +284,61 @@ function startObserver() {
     }
     if (relevant) scheduleReconcile();
   });
+
   observer.observe(observerRoot, { childList: true, subtree: true });
+  observerDeadline = setTimeout(() => {
+    stopObserver();
+    if (!currentHost && configRead('enablePremiumLogo')) {
+      reportFallback('the YTArk header was not found within the observation window');
+    }
+  }, OBSERVATION_WINDOW_MS);
   scheduleReconcile();
+}
+
+function onNavigation() {
+  if (currentHost && currentHost.isConnected === false) {
+    restoreHost(currentHost);
+    currentHost = null;
+  }
+  startObserver(true);
+}
+
+function onConfigChange(event) {
+  if (!event.detail || event.detail.key !== 'enablePremiumLogo') return;
+  if (event.detail.value) {
+    didReportFallback = false;
+    startObserver(true);
+  } else {
+    if (currentHost) restoreHost(currentHost);
+    currentHost = null;
+    stopObserver();
+  }
+  scheduleReconcile();
+}
+
+function cleanup() {
+  stopObserver();
+  if (reconcileTimer !== null) clearTimeout(reconcileTimer);
+  reconcileTimer = null;
+  if (currentHost) restoreHost(currentHost);
+  currentHost = null;
+  // Keep route/config listeners installed so a back-forward-cache return can
+  // start a fresh bounded observation cycle without reloading the userscript.
 }
 
 function initialize() {
   if (typeof document === 'undefined') return;
+  document.addEventListener('yt-navigate-finish', onNavigation, true);
+  document.addEventListener('yt-page-data-fetched', onNavigation, true);
+  if (typeof window !== 'undefined') {
+    window.addEventListener('pagehide', cleanup, true);
+    window.addEventListener('pageshow', onNavigation, true);
+  }
   if (document.body) startObserver();
-  else document.addEventListener('DOMContentLoaded', startObserver, { once: true });
+  else document.addEventListener('DOMContentLoaded', () => startObserver(), { once: true });
 }
 
-configChangeEmitter.addEventListener('configChange', (event) => {
-  if (event.detail && event.detail.key === 'enablePremiumLogo') scheduleReconcile();
-});
-
+configChangeEmitter.addEventListener('configChange', onConfigChange);
 initialize();
 
-export { makeWordmark, restoreHost };
+export { makeWordmark, restoreHost, startObserver, cleanup };

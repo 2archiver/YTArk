@@ -30,7 +30,7 @@ export function findFunction(funcName) {
     }
 }
 
-// Patch resolveCommand to be able to change TizenTube settings
+// Patch resolveCommand to expose YTArk settings
 
 export function patchResolveCommand() {
     for (const key in window._yttv) {
@@ -39,7 +39,7 @@ export function patchResolveCommand() {
             const ogResolve = window._yttv[key].instance.resolveCommand;
             window._yttv[key].instance.resolveCommand = function (cmd, _) {
                 if (cmd.setClientSettingEndpoint) {
-                    // Command to change client settings. Use TizenTube configuration to change settings.
+                    // Command to change client settings. Use YTArk configuration to change settings.
                     for (const settings of cmd.setClientSettingEndpoint.settingDatas) {
                         if (!settings.clientSettingEnum.item.includes('_')) {
                             for (const setting of cmd.setClientSettingEndpoint.settingDatas) {
@@ -81,7 +81,7 @@ export function patchResolveCommand() {
                     customAction(cmd.playlistEditEndpoint.customAction.action, cmd.playlistEditEndpoint.customAction.parameters);
                     return true;
                 } else if (cmd?.openPopupAction?.uniqueId === 'playback-settings') {
-                    // Patch the playback settings popup to use TizenTube speed settings
+                    // Patch the playback settings popup to use YTArk speed settings
                     const items = cmd.openPopupAction.popup.overlaySectionRenderer.overlay.overlayTwoPanelRenderer.actionPanel.overlayPanelRenderer.content.overlayPanelItemListRenderer.items;
                     for (const item of items) {
                         if (item?.compactLinkRenderer?.icon?.iconType === 'SLOW_MOTION_VIDEO') {
@@ -268,15 +268,15 @@ function customAction(action, parameters) {
             window.h5vcc.tizentube.EnterPIP();
             break;
         case 'SHOW_TOAST':
-            showToast('TizenTube', parameters);
+            showToast('YTArk', parameters);
             break;
         case 'ADD_TO_QUEUE':
             window.queuedVideos.videos.push(parameters);
-            showToast('TizenTube', t('toasts.videoAddedToQueue'));
+            showToast('YTArk', t('toasts.videoAddedToQueue'));
             break;
         case 'CLEAR_QUEUE':
             window.queuedVideos.videos = [];
-            showToast('TizenTube', t('toasts.videoQueueCleared'));
+            showToast('YTArk', t('toasts.videoQueueCleared'));
             break;
         case 'CHECK_FOR_UPDATES':
             openYtArkUpdates();
@@ -302,9 +302,9 @@ function customAction(action, parameters) {
                             signal: 'POPUP_BACK'
                         }
                     });
-                    showToast('TizenTube', t('toasts.feedbackSent'));
+                    showToast('YTArk', t('toasts.feedbackSent'));
                 })
-                .catch(err => console.error('TizenTube: failed to send feedback:', err));
+                .catch(err => console.error('[YTArk] Failed to send feedback:', err));
             break;
         case 'SHARE':
             const videoPlayer = document.querySelector('.html5-video-player');
@@ -415,7 +415,7 @@ async function markFeedback(parameters, tokenIndex, showReasons) {
         ));
         showModal(extractText(dismissal.dismissalReasonsPrompt), overlayPanelItemListRenderer(buttons), 'tt-feedback-reasons');
     } catch (err) {
-        console.error('TizenTube: failed to mark feedback:', err);
+        console.error('[YTArk] Failed to mark feedback:', err);
     }
 }
 

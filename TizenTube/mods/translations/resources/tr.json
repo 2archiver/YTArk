@@ -59,7 +59,6 @@
                     "longPress": "Uzun Basma Eylemlerini Etkinleştir",
                     "shorts": "Shorts'u Etkinleştir",
                     "videoPreviews": "Video Önizlemelerini Etkinleştir",
-                    "ttWelcomeMsg": "TT Karşılama Mesajını Göster",
                     "guestSignInReminder": "Misafir Giriş Hatırlatmasını Göster",
                     "reloadHomeOnStartup": "Açılışta Ana Sayfayı Yeniden Yükle"
                 }
@@ -144,7 +143,7 @@
                     },
                     "launchToOnStartup": {
                         "title": "Açılışta Başlatılacak Sayfa",
-                        "subtitle": "TizenTube'un açılışta varsayılan olarak açacağı sayfayı seçin"
+                        "subtitle": "YTArk'un açılışta varsayılan olarak açacağı sayfayı seçin"
                     },
                     "sortSubscriptionsByAlphabet": "Abonelikleri Alfabetik Sırala",
                     "disableChannelsOnSidebar": "Kenar Çubuğunda Kanalları Devre Dışı Bırak",
@@ -193,8 +192,8 @@
                 }
             },
             "updater": {
-                "title": "TizenTube Cobalt Güncelleyici",
-                "menuSubtitle": "TizenTube Cobalt güncellemelerini yönetin",
+                "title": "YTArk Updates",
+                "menuSubtitle": "Manage YTArk updates",
                 "versionSubtitle": "Geçerli sürüm: {{version}}",
                 "options": {
                     "checkForUpdates": "Güncellemeleri kontrol et",
@@ -202,7 +201,7 @@
                 },
                 "updateAvailable": {
                     "title": "Güncelleme Mevcut",
-                    "subtitle": "TizenTube Cobalt'in yeni bir sürümü mevcut: {{latestVersion}}, şu anki sürüm: {{currentVersion}}"
+                    "subtitle": "YTArk'in yeni bir sürümü mevcut: {{latestVersion}}, şu anki sürüm: {{currentVersion}}"
                 },
                 "releaseDate": "Yayın Tarihi: {{date}}",
                 "updateNow": {
@@ -214,15 +213,15 @@
                     "subtitle": "Güncellemeleri daha sonra kontrol et."
                 },
                 "upToDate": {
-                    "title": "TizenTube Güncel",
-                    "subtitle": "TizenTube Cobalt'in en son sürümünü ({{version}}) kullanıyorsunuz."
+                    "title": "YTArk is up to date",
+                    "subtitle": "YTArk'in en son sürümünü ({{version}}) kullanıyorsunuz."
                 },
                 "checkFailed": {
-                    "title": "TizenTube güncelleme denetimi başarısız oldu",
+                    "title": "YTArk update check failed",
                     "subtitle": "Güncellemeler denetlenemedi."
                 },
                 "downloading": {
-                    "title": "TizenTube Güncellemesi",
+                    "title": "YTArk update",
                     "subtitle": "Güncelleme indiriliyor, lütfen bekleyin..."
                 }
             },
@@ -234,26 +233,10 @@
             }
         },
         "ttSettings": {
-            "title": "TizenTube Ayarları",
-            "madeByText": "Reis Can (reisxd) tarafından ❤️ ile yapıldı",
-            "summary": "TizenTube Ayarlarını Aç"
-        },
-        "supportTT": {
-            "title": "TizenTube'u Destekleyin",
-            "subtitle": "❤️ TizenTube'a ve geliştirilmesine destek olun",
-            "content": {
-                "1": "TizenTube'u kullanmaktan memnunsanız ve geliştirilmesini desteklemek istiyorsanız, şunları değerlendirebilirsiniz:",
-                "2": "1. Görünürlüğünü artırmaya yardımcı olmak için GitHub deposuna yıldız verin.",
-                "3": "2. TizenTube'u başkalarıyla paylaşın.",
-                "4": "Maddi olarak katkıda bulunmak isterseniz bağış yapmayı düşünebilirsiniz:",
-                "5": "- Buy Me A Coffee: https://www.buymeacoffee.com/reisxd (tercihen)",
-                "6": "- GitHub Sponsors: https://github.com/sponsors/reisxd"
-            }
+            "title": "YTArk Settings",
+            "madeByText": "Playback, appearance and update controls",
+            "summary": "Open YTArk Settings"
         }
-    },
-    "welcomeMsg": {
-        "title": "TizenTube'a Hoş Geldiniz",
-        "subtitle": "Ayarlar menüsüne gidip TizenTube Ayarları'na tıklayarak ayarları açabilirsiniz."
     },
     "sponsorblock": {
         "segments": {
@@ -284,7 +267,7 @@
         "pictureInPicture": "Resim İçinde Resim",
         "previous": "Önceki",
         "next": "Sonraki",
-        "withTizenTube": "TizenTube ile",
+        "withTizenTube": "YTArk ile",
         "share": {
             "title": "Paylaş",
             "button": "Paylaş",

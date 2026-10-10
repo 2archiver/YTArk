@@ -59,7 +59,6 @@
                     "longPress": "Ενεργοποίηση ενεργειών με παρατεταμένο πάτημα",
                     "shorts": "Ενεργοποίηση Shorts",
                     "videoPreviews": "Ενεργοποιήστε τις προεπισκοπήσεις βίντεο",
-                    "ttWelcomeMsg": "Εμφάνιση μηνύματος καλωσορίσματος TizenTube",
                     "guestSignInReminder": "Εμφάνιση υπενθύμισης σύνδεσης επισκέπτη",
                     "reloadHomeOnStartup": "Επαναφόρτωση αρχικής σελίδας κατά την εκκίνηση"
                 }
@@ -144,7 +143,7 @@
                     },
                     "launchToOnStartup": {
                         "title": "Εκκίνηση σε κατά την έναρξη",
-                        "subtitle": "Επιλέξτε την εξ'ορισμού σελίδα στην οποία ανοίγει το TizenTube κατά την έναρξη"
+                        "subtitle": "Επιλέξτε την εξ'ορισμού σελίδα στην οποία ανοίγει το YTArk κατά την έναρξη"
                     },
                     "sortSubscriptionsByAlphabet": "Ταξινόμηση εγγραφών αλφαβητικά",
                     "categories": {
@@ -193,8 +192,8 @@
                 }
             },
             "updater": {
-                "title": "Ενημερωτής TizenTube Cobalt",
-                "menuSubtitle": "Διαχειριστείτε τις ενημερώσεις του TizenTube Cobalt",
+                "title": "YTArk Updates",
+                "menuSubtitle": "Manage YTArk updates",
                 "versionSubtitle": "Τρέχουσα έκδοση: {{version}}",
                 "options": {
                     "checkForUpdates": "Έλεγχος ενημερώσεων",
@@ -202,7 +201,7 @@
                 },
                 "updateAvailable": {
                     "title": "Update Available",
-                    "subtitle": "A new version of TizenTube Cobalt is available: {{latestVersion}}, current: {{currentVersion}}"
+                    "subtitle": "A new version of YTArk is available: {{latestVersion}}, current: {{currentVersion}}"
                 },
                 "releaseDate": "Release Date: {{date}}",
                 "updateNow": {
@@ -214,15 +213,15 @@
                     "subtitle": "Check for updates later."
                 },
                 "upToDate": {
-                    "title": "TizenTube is up to date",
-                    "subtitle": "You are using the latest version ({{version}}) of TizenTube Cobalt."
+                    "title": "YTArk is up to date",
+                    "subtitle": "You are using the latest version ({{version}}) of YTArk."
                 },
                 "checkFailed": {
-                    "title": "TizenTube update check failed",
+                    "title": "YTArk update check failed",
                     "subtitle": "Could not check for updates."
                 },
                 "downloading": {
-                    "title": "TizenTube Update",
+                    "title": "YTArk update",
                     "subtitle": "Downloading update, please wait..."
                 }
             },
@@ -234,26 +233,10 @@
             }
         },
         "ttSettings": {
-            "title": "Έναρξη TizenTube",
-            "madeByText": "Φτιαγμένο από τον Reis Can (reisxd) με ❤️",
-            "summary": "Άνοιγμα ρυθμίσεων TizenTube"
-        },
-        "supportTT": {
-            "title": "Υποστηρίξτε το TizenTube",
-            "subtitle": "❤️ Δείξτε υποστήριξη για το TizenTube και την ανάπτυξή του",
-            "content": {
-                "1": "Εάν σας αρέσει να χρησιμοποιείτε το TizenTube και θέλετε να υποστηρίξετε την ανάπτυξή του, λάβετε υπ'όψη τα εξής:",
-                "2": "1. Βάλτε αστέρι στο αποθετήριο GitHub για να αυξήσετε την ορατότητά του.",
-                "3": "2. Μοιραστείτε το TizenTube με άλλους.",
-                "4": "Εάν θέλετε να συνεισφέρετε οικονομικά, σκεφτείτε να δωρίσετε:",
-                "5": "- Buy Me A Coffee: https://www.buymeacoffee.com/reisxd (κατά προτίμηση)",
-                "6": "- Χορηγοί GitHub: https://github.com/sponsors/reisxd"
-            }
+            "title": "YTArk Settings",
+            "madeByText": "Playback, appearance and update controls",
+            "summary": "Open YTArk Settings"
         }
-    },
-    "welcomeMsg": {
-        "title": "Καλώς ήρθατε στο TizenTube",
-        "subtitle": "Μεταβείτε στις ρυθμίσεις και κάντε κλικ στις ρυθμίσεις TizenTube για επιλογές."
     },
     "sponsorblock": {
         "segments": {
@@ -284,7 +267,7 @@
         "pictureInPicture": "Picture in Picture",
         "previous": "Previous",
         "next": "Next",
-        "withTizenTube": "with TizenTube",
+        "withTizenTube": "with YTArk",
         "share": {
             "title": "Share",
             "button": "Share",
