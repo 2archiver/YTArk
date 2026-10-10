@@ -360,8 +360,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$VERSION_TAG" \
-            > "$RUNNER_TEMP/pre-promotion-release.json"
+          # releases/tags/<tag> 404s for a draft release, so list and filter by
+          # tag exactly the way the draft job does.
+          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            | python3 -c '
+          import json, sys
+          tag = sys.argv[1]
+          for release in json.load(sys.stdin):
+              if release.get("tag_name") == tag:
+                  json.dump(release, sys.stdout)
+                  sys.exit(0)
+          raise SystemExit(f"Draft release {tag} not found")
+          ' "$VERSION_TAG" > "$RUNNER_TEMP/pre-promotion-release.json"
           python3 tools/validate_release.py verify-release \
             --release-json "$RUNNER_TEMP/pre-promotion-release.json" \
             --state draft
