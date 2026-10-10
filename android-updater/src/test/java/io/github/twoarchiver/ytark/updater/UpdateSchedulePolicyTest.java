@@ -35,14 +35,14 @@ public final class UpdateSchedulePolicyTest {
 
     private static void rateLimitDeadlineTakesPrecedence() {
         long now = 100_000L;
-        long retryAt = 200_000L;
-        long rateLimitAt = 250_000L;
+        long retryAt = 3_800_000L;
+        long rateLimitAt = 4_000_000L;
         assertFalse(due(now, now, 1L, now, retryAt, rateLimitAt, rateLimitAt - 1L),
                 "rate-limit cooldown is enforced");
         assertTrue(due(now, now, 1L, now, retryAt, rateLimitAt, rateLimitAt),
-                "check eligible when rate limit expires");
+                "check eligible when the later rate-limit deadline expires");
         assertEquals(rateLimitAt, next(now, now, 1L, now, retryAt, rateLimitAt, now),
-                "rate-limit time wins");
+                "rate-limit time wins over the retry deadline");
     }
 
     private static void interruptedLegacyAttemptRemainsThrottled() {
