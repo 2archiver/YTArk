@@ -263,6 +263,55 @@ class GitHub:
             raise GitHubApiError("Release update returned an unexpected JSON shape")
         return payload
 
+    def tag_ref(self, tag: str) -> dict[str, Any] | None:
+        payload = self.json(
+            "GET", f"/repos/{self.repository}/git/ref/tags/{urllib.parse.quote(tag)}",
+            allow_404=True,
+        )
+        return payload if isinstance(payload, dict) and payload.get("ref") else None
+
+    def ensure_tag(
+        self, tag: str, commit: str, *, attempts: int = 3, pause: float = 10.0
+    ) -> None:
+        """Make sure ``refs/tags/{tag}`` exists at ``commit``.
+
+        GitHub silently renames a release to ``untagged-<sha>`` when it cannot
+        create the requested tag (for instance while a tag deleted with an
+        earlier draft is still being processed). That would break the immutable
+        version binding without any error, so the tag is created and verified
+        before the release, and the release is checked afterwards.
+        """
+        last_error: ReleaseError | None = None
+        for attempt in range(1, attempts + 1):
+            try:
+                existing = self.tag_ref(tag)
+                if existing is None:
+                    self.json(
+                        "POST", f"/repos/{self.repository}/git/refs",
+                        data=self._json_body({"ref": f"refs/tags/{tag}", "sha": commit}),
+                        headers={"Content-Type": "application/json"},
+                    )
+                elif str(existing.get("object", {}).get("sha", "")) != commit:
+                    # No release references this tag here (the caller only gets
+                    # this far when the release state is "absent"), so pointing
+                    # it at the reviewed commit is safe.
+                    self.json(
+                        "PATCH",
+                        f"/repos/{self.repository}/git/refs/tags/{urllib.parse.quote(tag)}",
+                        data=self._json_body({"sha": commit, "force": True}),
+                        headers={"Content-Type": "application/json"},
+                    )
+            except ReleaseError as error:  # 403/422/404/rate limit/network
+                last_error = error
+            if self.tag_commit(tag) == commit:
+                return
+            if attempt < attempts:
+                self._sleep(pause)
+        raise ReleaseError(
+            f"Git tag {tag} could not be created at the reviewed commit {commit}"
+            + (f": {last_error}" if last_error else "")
+        )
+
     def delete_release(self, release_id: Any) -> None:
         self.request("DELETE", f"/repos/{self.repository}/releases/{release_id}")
 
@@ -629,6 +678,24 @@ def parse_identity(release: dict[str, Any] | None) -> dict[str, Any] | None:
     except json.JSONDecodeError:
         return None
     return payload if isinstance(payload, dict) else None
+
+
+def find_stray_draft(github: GitHub, config: dict[str, str]) -> dict[str, Any] | None:
+    """Return an unpublished draft that belongs to this release pipeline.
+
+    A draft is 404 on ``/releases/tags/{tag}``, and GitHub rewrites the tag to
+    ``untagged-<sha>`` when it cannot create the requested tag name, so an
+    interrupted run can leave a draft behind that no tag lookup will ever find
+    again. Such a draft is only ever unpublished, so it is recovered by shape:
+    the expected release name or one of the required asset names.
+    """
+    expected = set(required_asset_names(config))
+    for release in github.list_releases():
+        if not release.get("draft") or release.get("tag_name") == config["VERSION_TAG"]:
+            continue
+        if release.get("name") == config["RELEASE_NAME"] or set(release_assets(release)) & expected:
+            return release
+    return None
 
 
 def classify(
@@ -1039,6 +1106,14 @@ def publish_command(args: argparse.Namespace) -> int:
     github = GitHub(token=args.token, repository=args.repository, api_url=args.api_url)
 
     release = github.release_by_tag(config["VERSION_TAG"])
+    if release is None:
+        stray = find_stray_draft(github, config)
+        if stray is not None:
+            print(
+                f"Recovered an unpublished draft left by an earlier run: "
+                f"tag {stray.get('tag_name')!r} (id {stray.get('id')})."
+            )
+            release = stray
 
     if args.candidate_dir and args.manifest:
         candidate = load_candidate(
@@ -1095,12 +1170,7 @@ def publish_command(args: argparse.Namespace) -> int:
     notes_with_identity = with_identity(notes, candidate, ROOT / IDENTITY_NOTES)
 
     if plan.action == ACTION_CREATE:
-        existing_tag = github.tag_commit(config["VERSION_TAG"])
-        if existing_tag and existing_tag != args.commit:
-            raise ReleaseConflict(
-                f"Git tag {config['VERSION_TAG']} exists at {existing_tag}, not at the "
-                f"reviewed commit {args.commit}. Tags are never moved."
-            )
+        github.ensure_tag(config["VERSION_TAG"], args.commit)
         release = create_draft_release(
             github,
             config["VERSION_TAG"],
@@ -1108,6 +1178,17 @@ def publish_command(args: argparse.Namespace) -> int:
             title=config["RELEASE_NAME"],
             notes_file=notes_with_identity,
         )
+        if release.get("tag_name") != config["VERSION_TAG"]:
+            # GitHub fell back to untagged-<sha>; that release can never be
+            # published under the immutable version tag, so discard it and let
+            # the next run start clean instead of leaving a broken draft behind.
+            created_tag = release.get("tag_name")
+            delete_draft(github, release, config["VERSION_TAG"])
+            raise ReleaseError(
+                f"GitHub created the release with tag {created_tag!r} instead of "
+                f"{config['VERSION_TAG']!r}; the draft was discarded. Re-run the "
+                "publication once the tag is available again."
+            )
         release = refresh_release(github, release)
         if release is None:
             raise ReleaseError(f"Draft release {config['VERSION_TAG']} was not created")
