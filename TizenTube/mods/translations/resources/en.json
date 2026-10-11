@@ -234,8 +234,8 @@
         },
         "ttSettings": {
             "title": "YTArk Settings",
-            "madeByText": "Playback, appearance and update controls",
-            "summary": "Open YTArk Settings"
+            "madeByText": "Playback, appearance, privacy and updates",
+            "summary": "Playback, appearance, privacy and updates"
         }
     },
     "sponsorblock": {
@@ -292,6 +292,20 @@
         "about": {
             "changelog": "Version history: YTArk Settings › Changelog."
         },
+        "categories": {
+            "navigation": {
+                "description": "Guide, startup and the YouTube Settings page",
+                "title": "Navigation"
+            },
+            "playback": {
+                "description": "Player, video and subtitles",
+                "title": "Playback"
+            },
+            "privacy": {
+                "description": "Ads, content filtering and prompts",
+                "title": "Privacy"
+            }
+        },
         "appearance": {
             "colors": {
                 "edit": "Change them with the Midnight Blue and Classic Dark presets in YTArk Quick Controls, or in the colour panel opened with the remote's red button.",
@@ -347,6 +361,12 @@
             "keyboard": "On-screen keyboard",
             "placeholder": "Type a setting name",
             "space": "Space"
+        },
+        "navigation": {
+            "guideEntry": {
+                "description": "Shows a YTArk Settings entry in the TV guide so settings stay reachable even with a minimal sidebar",
+                "title": "YTArk entry in the guide"
+            }
         },
         "quick": {
             "hidePreviews": "Stops video previews when a tile is focused",

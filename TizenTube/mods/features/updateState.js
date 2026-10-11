@@ -93,33 +93,30 @@ export function displayVersion(version) {
 
 /**
  * YTArk publishes ARMv7 (`armeabi-v7a`) releases only from 2.1.2 onwards, so
- * only that ABI maps to a release asset. A device that reports a 64-bit ABI but
- * no 32-bit ABI cannot install these builds; `arm64-v8a` may still appear as the
- * ABI of an installation that was updated from an older dual-ABI release, and
- * cross-ABI updates are refused rather than silently attempted.
+ * only that ABI maps to a release asset. Asset selection happens exclusively
+ * on a `compatible` verdict (see features/abiEvidence.js): a missing, delayed,
+ * empty, malformed or 64-bit-only report is missing information (`unknown`)
+ * and never a categorical "unsupported device" result.
  */
 export function assetSuffixForArchitecture(architecture) {
   return architecture === 'armeabi-v7a' ? 'armv7' : null;
 }
 
-export function unsupportedArchitectureMessage(architecture) {
-  const value = String(architecture || '').trim();
-  if (value === 'arm64-v8a') {
-    return 'YTArk 2.1.2 and later are published for ARMv7 (armeabi-v7a) only. This '
-      + 'installation reports arm64-v8a, and cross-ABI updates are not supported: '
-      + 'install an ARMv7 build manually on a device whose Android userspace '
-      + 'supports 32-bit native code.';
-  }
-  if (!value) {
-    return 'This device did not report an Android ABI, so the ARMv7-only YTArk '
-      + 'release cannot be matched to it. A 64-bit CPU does not by itself mean the '
-      + 'Android userspace supports 32-bit applications; check '
-      + 'ro.product.cpu.abilist on the device.';
-  }
-  return `This device reports ${value} instead of armeabi-v7a, so the ARMv7-only `
-    + 'YTArk releases cannot be installed. A 64-bit CPU does not by itself mean the '
-    + 'Android userspace supports 32-bit applications; check ro.product.cpu.abilist '
-    + 'on the device.';
+/** Status line for the unknown-ABI case: missing information, not a verdict. */
+export function unknownArchitectureMessage(evidence) {
+  const details = evidence && Array.isArray(evidence.details) ? evidence.details : [];
+  const body = details.length ? details.join(' ') : 'The architecture query returned no usable value.';
+  return 'Could not confirm this device\'s app architecture. ' + body
+    + ' The release check, release notes and retrying detection still work; the manual '
+    + 'route on the official release page always does.';
+}
+
+/** Status line for the explicit non-ARM case (the only categorical message). */
+export function incompatibleArchitectureMessage(evidence) {
+  const bridge = evidence && evidence.bridge && evidence.bridge.abi ? evidence.bridge.abi : 'a non-ARM architecture';
+  return `This device reports ${bridge} as its first supported Android ABI, a non-ARM userspace. `
+    + 'YTArk publishes ARMv7 (armeabi-v7a) builds only, so no YTArk release is compatible '
+    + 'with this device. The official release page is still opened below for reference.';
 }
 
 function isPlainObject(value) {
@@ -200,8 +197,15 @@ export function buildCommand(command, payload) {
 /**
  * Validate the public stable-release payload for the fallback (read-only)
  * check. Returns `{ release }` or `{ error }`; it never throws.
+ *
+ * Asset selection is verdict-driven: a `compatible` verdict (explicit
+ * armeabi-v7a evidence or trusted installed-build evidence) requires exactly
+ * one official ARMv7 asset with the exact URL and a published SHA-256 digest.
+ * An `unknown` or `incompatible` verdict returns the release metadata for the
+ * manual route WITHOUT selecting any asset — there is nothing to install
+ * automatically in this surface, so no asset is ever guessed.
  */
-export function validateReleasePayload(payload, { installedVersion, architecture } = {}) {
+export function validateReleasePayload(payload, { installedVersion, architecture, abiVerdict } = {}) {
   if (!isPlainObject(payload)) return { error: 'The release response was not an object.' };
   if (payload.message === 'Not Found') {
     return { error: 'No stable YTArk release is published yet.' };
@@ -221,16 +225,37 @@ export function validateReleasePayload(payload, { installedVersion, architecture
   if (!bodyCode || Number(bodyCode[1]) !== expectedCode) {
     return { error: 'The release notes do not confirm the expected Android versionCode.' };
   }
-  const suffix = assetSuffixForArchitecture(architecture);
-  if (!suffix) {
-    return { error: unsupportedArchitectureMessage(architecture) };
+  // Verdict resolution: an explicit verdict wins. Callers that only pass an
+  // architecture keep the legacy input shape: exact armeabi-v7a is compatible
+  // evidence; anything else (64-bit report, empty, malformed) is missing
+  // information, i.e. unknown — never a categorical unsupported result.
+  const verdict = abiVerdict
+    || (assetSuffixForArchitecture(architecture) ? 'compatible' : 'unknown');
+  if (verdict !== 'compatible' && verdict !== 'unknown' && verdict !== 'incompatible') {
+    return { error: 'The release check was given an unusable architecture verdict.' };
   }
-  const assetName = `YTArk-v${version}-${suffix}.apk`;
+  const baseRelease = {
+    tag,
+    version,
+    display: displayVersion(version),
+    versionCode: expectedCode,
+    abi: verdict === 'compatible' ? architecture : null,
+    abiVerdict: verdict,
+    notes: cleanNotes(body),
+    newer: isNewerVersion(version, installedVersion),
+  };
+  if (verdict !== 'compatible') {
+    // No asset selection without compatible evidence: the UI shows the
+    // verified release metadata and the manual route instead.
+    return { release: baseRelease };
+  }
+  const assetName = `YTArk-v${version}-${assetSuffixForArchitecture(architecture)}.apk`;
   const assets = Array.isArray(payload.assets) ? payload.assets : [];
   const matches = assets.filter(asset => isPlainObject(asset) && asset.name === assetName);
   if (matches.length !== 1) {
     return {
-      error: `The release has ${matches.length} assets named ${assetName}; expected exactly one.`,
+      error: `The release has ${matches.length} assets named ${assetName}; expected exactly one. `
+        + 'No arm64, unsigned, source or first-asset fallback is ever selected.',
     };
   }
   const asset = matches[0];
@@ -240,22 +265,16 @@ export function validateReleasePayload(payload, { installedVersion, architecture
   }
   const digest = typeof asset.digest === 'string'
     ? asset.digest.replace(/^sha256:/i, '').toLowerCase() : '';
-  const release = {
-    tag,
-    version,
-    display: displayVersion(version),
-    versionCode: expectedCode,
-    assetName,
-    size: Number(asset.size) > 0 ? Number(asset.size) : 0,
-    notes: cleanNotes(body),
-    abi: architecture,
-  };
-  if (digest && !/^[0-9a-f]{64}$/.test(digest)) {
-    return { error: 'The release asset digest is malformed.' };
+  if (!digest || !/^[0-9a-f]{64}$/.test(digest)) {
+    return { error: 'The release asset has no valid published SHA-256 digest.' };
   }
-  release.sha256Published = digest;
-  release.newer = isNewerVersion(version, installedVersion);
-  return { release };
+  return {
+    release: Object.assign(baseRelease, {
+      assetName,
+      size: Number(asset.size) > 0 ? Number(asset.size) : 0,
+      sha256Published: digest,
+    }),
+  };
 }
 
 export function cleanNotes(body) {

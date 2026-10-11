@@ -275,9 +275,11 @@ describe('YTArk Settings menus', () => {
     const root = lastModal(recorded, 'tt-settings');
     const titles = modalItems(root).map(rowTitle);
     assert.equal(titles[0], 'Search settings');
-    for (const title of ['YTArk Quick Controls', 'Appearance', 'Customize YouTube Settings', 'YTArk Updates', 'Changelog', 'About YTArk']) {
+    for (const title of ['YTArk Quick Controls', 'Playback', 'Appearance', 'Privacy', 'Navigation', 'YTArk Updates', 'About YTArk']) {
       assert.ok(titles.includes(title), title);
     }
+    assert.ok(!titles.includes('Changelog'), 'no duplicate root changelog row');
+    assert.ok(!titles.includes('Customize YouTube Settings'), 'layout setting moved into Navigation');
     resolveCommand({ customAction: { action: 'YTARK_MENU_SHOW', parameters: { menuId: 'quickControls' } } });
     const quick = lastModal(recorded, 'tt-tv-quick-controls');
     assert.equal(rowSecondaryIcon(findRow(quick, 'Hide Shorts')), 'CHECK_BOX_OUTLINE_BLANK', 'Shorts are shown, so not hidden');

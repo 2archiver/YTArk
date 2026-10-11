@@ -131,6 +131,7 @@ export const trace = {
   state: 'disabled',
   reason: '',
   hostCount: 0,
+  renderedHosts: 0,
   patchedHosts: 0,
   attempts: 0,
   patchedAt: 0,
@@ -141,15 +142,30 @@ export const trace = {
 function publishTrace() {
   if (typeof window === 'undefined') return;
   try {
+    let hosts = [];
+    if (typeof document !== 'undefined' && document.body) {
+      try {
+        hosts = findLogoHosts(document).map((host) => ({
+          tag: host && host.tagName ? String(host.tagName).toLowerCase() : 'unknown',
+          rendered: isRenderedHost(host),
+          box: hostBox(host),
+          patched: patchByHost.has(host),
+        }));
+      } catch (_) {
+        hosts = [];
+      }
+    }
     window.__ytarkPremiumLogo = {
       state: trace.state,
       reason: trace.reason,
       hostCount: trace.hostCount,
+      renderedHosts: trace.renderedHosts,
       patchedHosts: trace.patchedHosts,
       attempts: trace.attempts,
       patchedAt: trace.patchedAt,
       theme: trace.theme,
       inkSource: trace.inkSource,
+      hosts,
     };
   } catch (_) {
     /* diagnostics must never break the header */
@@ -443,6 +459,37 @@ function isHiddenArtifact(element) {
     || (element.classList && element.classList.contains(WORDMARK_CLASS)));
 }
 
+/**
+ * Layout box of the host; zeros when it is not laid out (detached, hidden or
+ * not mounted yet).
+ */
+function hostBox(host) {
+  if (!host || typeof host.getBoundingClientRect !== 'function') return { height: 0, width: 0 };
+  try {
+    const rect = host.getBoundingClientRect();
+    return {
+      height: rect && Number(rect.height) > 0 ? Number(rect.height) : 0,
+      width: rect && Number(rect.width) > 0 ? Number(rect.width) : 0,
+    };
+  } catch (_) {
+    return { height: 0, width: 0 };
+  }
+}
+
+/**
+ * A host only counts as an active header slot when it is connected AND laid
+ * out. Patching a detached or zero-box host is how a stray wordmark ends up
+ * outside the intended header (rendered at the top-left of the document flow
+ * instead of inside the header container): the replacement is only made for
+ * slots that are actually visible, and the search cycle plus the per-host
+ * observer apply the patch the moment a slot gets a box.
+ */
+export function isRenderedHost(host) {
+  if (!host) return false;
+  if (typeof host.isConnected === 'boolean' && host.isConnected === false) return false;
+  return hostBox(host).height >= 6;
+}
+
 export function findLogoHosts(doc) {
   const target = documentRef(doc);
   if (!target || typeof target.querySelectorAll !== 'function') return [];
@@ -693,6 +740,16 @@ export function setPremiumLogo(host, enabled, doc) {
     return false;
   }
 
+  // Never replace artwork in a slot that is not being rendered: a detached
+  // or hidden host has no header position, so a wordmark placed there would
+  // appear away from the header (the top-left corner regression). The stock
+  // artwork is left untouched until the host is actually laid out.
+  if (!isRenderedHost(host)) {
+    if (patchByHost.has(host)) restoreHost(host);
+    reportOnce('the logo host has no rendered box yet; waiting for layout');
+    return false;
+  }
+
   const current = patchByHost.get(host);
   if (current && current.wordmark && current.wordmark.parentNode === host
       && current.wordmark.isConnected !== false) {
@@ -781,6 +838,10 @@ export function setPremiumLogo(host, enabled, doc) {
   trace.patchedAt = Date.now();
   trace.state = 'active';
   publishTrace();
+  // Every patched host gets its own scoped observer so re-renders, theme
+  // changes and route changes are handled without scanning the page, and so
+  // cleanup can always find the host through observedHosts.
+  watchHost(host);
   return true;
 }
 
@@ -840,7 +901,18 @@ function watchHost(host) {
     if (cleanupRequested) return;
     if (!configRead('enablePremiumLogo')) return;
     const state = patchByHost.get(host);
-    if (!state) return;
+    if (!state) {
+      if (host.isConnected === false) {
+        stopHostObserver(host);
+        return;
+      }
+      // The slot was skipped (no box yet, or unknown artwork) and the
+      // frontend just re-rendered it: apply now if it is an active header.
+      if (!isPlayerOverlay(host) && isRenderedHost(host)) {
+        setPremiumLogo(host, true, activeStyleDocument || undefined);
+      }
+      return;
+    }
     if (state.wordmark && state.wordmark.parentNode === host) {
       applyWordmarkSizing(host, state.wordmark);
       // A header re-render can change the theme token without replacing the
@@ -897,23 +969,43 @@ function reconcile() {
 
   ensureStyleSheet(document);
   trace.attempts += 1;
+  // Drop hosts the frontend removed (route change) so no stale observer or
+  // patch entry survives a navigation.
+  forgetDetachedHosts();
   const hosts = findLogoHosts(document);
   trace.hostCount = hosts.length;
+  trace.renderedHosts = 0;
 
   for (const host of hosts) {
+    const rendered = isRenderedHost(host);
+    if (rendered) trace.renderedHosts += 1;
     if (patchByHost.has(host)) {
       const state = patchByHost.get(host);
+      if (!rendered && state.wordmark) {
+        // The header slot lost its layout (route change that hides it):
+        // detach the wordmark again so nothing is ever drawn outside an
+        // active, rendered header.
+        restoreHost(host);
+        watchHost(host);
+        continue;
+      }
       if (state.wordmark && state.wordmark.parentNode === host) {
         applyInk(host, state.wordmark);
+        applyWordmarkSizing(host, state.wordmark);
         watchHost(host);
         continue;
       }
     }
+    // Every candidate is watched, patched or not: a slot that gets a box
+    // later must be picked up without waiting for the next search cycle.
     if (setPremiumLogo(host, true, document)) watchHost(host);
+    else watchHost(host);
   }
 
   if (hosts.length > 0) {
-    trace.state = trace.patchedHosts > 0 ? 'active' : 'idle';
+    trace.state = trace.patchedHosts > 0 ? 'active'
+      : trace.renderedHosts > 0 ? 'idle'
+        : 'waiting';
     publishTrace();
   } else if (trace.attempts < MAX_PATCH_ATTEMPTS) {
     reportOnce('the YouTube TV header logo host has not been found yet');
@@ -1006,7 +1098,18 @@ function onNavigation() {
   startObserver(true);
 }
 
+/**
+ * `observedHosts` holds every patched or watched host, so cleanup can reach
+ * hosts that the document query can no longer see (detached subtrees are
+ * invisible to querySelectorAll). Without this, each route change that
+ * replaces the header would leave a stale observer and patch entry behind.
+ */
 function forgetDetachedHosts() {
+  for (const host of Array.from(observedHosts)) {
+    if (host.isConnected === false) {
+      restoreHost(host);
+    }
+  }
   if (typeof document === 'undefined') return;
   let wordmarks = [];
   try {
