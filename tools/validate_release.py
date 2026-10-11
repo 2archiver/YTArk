@@ -560,9 +560,17 @@ def check_base_checksums(checksum_file: str, base_dir: str) -> None:
     print("The pinned TizenTubeCobalt ARMv7 base APK checksum verified.")
 
 
-def verify_release(release_path: str, state: str, latest_path: str | None) -> None:
+def verify_release_record(
+    release: dict, state: str, latest: dict | None = None
+) -> None:
+    """Validate an already-fetched GitHub release payload.
+
+    Both the CLI (``verify-release``) and ``tools/publish_release.py`` call this,
+    so the release contract tests cover the production publication path too.
+    """
     config = load_config()
-    release = json.loads(Path(release_path).read_text(encoding="utf-8"))
+    if not isinstance(release, dict):
+        raise ValueError("The GitHub release response must be a JSON object")
     if release.get("name") != config["RELEASE_NAME"]:
         raise ValueError(f"Release title must be exactly {config['RELEASE_NAME']}")
     if release.get("tag_name") != config["VERSION_TAG"]:
@@ -634,13 +642,21 @@ def verify_release(release_path: str, state: str, latest_path: str | None) -> No
         elif actual_url != expected_url:
             raise ValueError(f"Invalid official download URL for {name}: {actual_url}")
 
-    if state == "published" and latest_path:
-        latest = json.loads(Path(latest_path).read_text(encoding="utf-8"))
+    if state == "published" and latest is not None:
+        if not isinstance(latest, dict):
+            raise ValueError("The latest GitHub release response must be a JSON object")
         if latest.get("tag_name") != config["VERSION_TAG"]:
             raise ValueError("The published YTArk release is not the GitHub latest stable release")
         if latest.get("draft") or latest.get("prerelease"):
             raise ValueError("The latest YTArk release is not stable/published")
     print(f"Verified GitHub {state} release metadata and {len(expected_names)} required assets.")
+
+
+def verify_release(release_path: str, state: str, latest_path: str | None) -> None:
+    """CLI wrapper: validate a GitHub release payload stored on disk."""
+    release = json.loads(Path(release_path).read_text(encoding="utf-8"))
+    latest = json.loads(Path(latest_path).read_text(encoding="utf-8")) if latest_path else None
+    verify_release_record(release, state, latest)
 
 
 def main() -> None:

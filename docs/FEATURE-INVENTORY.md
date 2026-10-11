@@ -24,9 +24,10 @@ APK. Only the first two can be true before a device run.
 | Settings → YTArk Updates card (Installed / Latest / Status / QR fallback) | Yes (`features/updater.js`, `ui/settings.js`) | Node tests (`updates-settings.test.mjs`) | NOT RUN |
 | Bundled native updater (Java ABI and release contracts) | Yes (`android-updater/`) | `ci.yml` Java tests; DEX compiled in `build-apk.yml` | NOT RUN |
 | `ytark://updates` → native `UpdateActivity` | Manifest intent-filter declared by the repacker; **the 2.2 card does not trigger it** | `check-apk` (manifest validation) | **NOT RUN — native integration pending** |
-| ARMv7-only APK, signer, versionCode, checksums | Yes | `build-apk.yml` candidate and `publish-release.yml` verify | NOT RUN |
-| Workflow least privilege (PR read-only, candidate Actions-only, publish gated) | Yes | `tools/check_workflow_policy.py` in `ci.yml` | n/a |
-| Session preserved over 2.1.2 install; preferences survive | Not a source property | Not a CI property | **NOT RUN** (see `docs/DEVICE-ACCEPTANCE.md`) |
+| ARMv7-only APK, signer, versionCode, checksums | Yes | `build-apk.yml` candidate build and `publish-release` job verify; public assets re-downloaded | NOT RUN |
+| Workflow least privilege (PR read-only, build read-only, publish job alone writes) | Yes | `tools/check_workflow_policy.py` in `ci.yml` | n/a |
+| Automatic publication from a successful `main` build; resumable repair | Yes | `tools/publish_release.py`, covered by `tools/tests/test_publish_release.py` | n/a |
+| Session preserved over an in-place install; preferences survive | Not a source property | Not a CI property | **NOT RUN** (see `docs/DEVICE-ACCEPTANCE.md`, optional and not a gate) |
 
 ## Released-artefact identity (2.1.2, from GitHub API metadata)
 

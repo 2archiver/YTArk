@@ -1,30 +1,19 @@
-name: Publish a reviewed YTArk candidate (explicit, authorised steps only)
+name: Publish or repair a reviewed YTArk candidate (recovery)
 
-# This is the only workflow that writes tags or releases. It is manual-only
-# (workflow_dispatch). It never runs for pull requests, forks, or
-# pull_request_target, so no untrusted code ever sees the release token.
+# Recovery path for the same trusted pipeline. It never rebuilds on its own: it
+# publishes the EXACT candidate artefact produced by a successful build-apk.yml
+# run for a named commit, or resumes/repairs the release that already exists for
+# the configured version tag.
 #
-# It publishes the EXACT candidate artefact that build-apk.yml produced for the
-# reviewed commit. Three explicit stages, each run by a maintainer:
-#   1. script-tag : publish the immutable userscript tag (s21) from the candidate's bytes
-#   2. draft      : create a draft GitHub release with the candidate assets (stage 1 included)
-#   3. publish    : promote the draft to the stable, latest release. Requires the
-#                   device acceptance evidence to be recorded first (docs/DEVICE-ACCEPTANCE.md).
-# The job-level `environment: ytark-release` is where the repository owner
-# configures required reviewers. Without that protection, these jobs still run
-# only when a maintainer dispatches them.
-
+# Trust boundary: this workflow is manual-only (workflow_dispatch). It never runs
+# for pull requests, forks or pull_request_target, so no untrusted code ever
+# sees the release token. The candidate run is verified before anything is
+# downloaded: workflow file, head commit, conclusion, event, branch, source
+# repository. There is no environment approval gate: the checks above are the
+# gate, and publication is automatic once the verified bytes pass validation.
 on:
   workflow_dispatch:
     inputs:
-      mode:
-        description: "script-tag, draft, or publish"
-        type: choice
-        options:
-          - script-tag
-          - draft
-          - publish
-        required: true
       candidate_run_id:
         description: "Actions run ID of the successful build-apk.yml candidate run"
         type: string
@@ -33,8 +22,8 @@ on:
         description: "Full 40-character commit SHA the candidate was built from"
         type: string
         required: true
-      device_acceptance:
-        description: "Link to the recorded device acceptance evidence (required for mode=publish)"
+      device_test_notes:
+        description: "Optional self-reported notes from a real-device test of this build (never required, never a gate)"
         type: string
         required: false
         default: ""
@@ -42,8 +31,10 @@ on:
 permissions:
   contents: read
 
+# Shared with build-apk.yml: automatic and recovery publications of the same
+# release can never run at the same time, and neither is cancelled mid-upload.
 concurrency:
-  group: ytark-publish-${{ github.ref }}
+  group: ytark-release-publication
   cancel-in-progress: false
 
 env:
@@ -52,16 +43,13 @@ env:
 
 jobs:
   verify-candidate:
-    name: Verify the reviewed candidate artefact (read-only)
+    name: Verify the reviewed candidate run (read-only)
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     if: github.repository == '2archiver/YTArk'
     permissions:
       contents: read
       actions: read
-    outputs:
-      apk_sha256: ${{ steps.verify.outputs.apk_sha256 }}
-      version_tag: ${{ steps.verify.outputs.version_tag }}
     steps:
       - name: Checkout the reviewed commit (not the moving branch head)
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -79,10 +67,13 @@ jobs:
           [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]] || { echo "expected_head_sha must be a full commit SHA" >&2; exit 1; }
           [[ "$RUN_ID" =~ ^[0-9]+$ ]] || { echo "candidate_run_id must be numeric" >&2; exit 1; }
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" > "$RUNNER_TEMP/run.json"
-          python3 - "$RUNNER_TEMP/run.json" "$EXPECTED_SHA" <<'PY'
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts" > "$RUNNER_TEMP/artifacts.json"
+          python3 - "$RUNNER_TEMP/run.json" "$RUNNER_TEMP/artifacts.json" "$EXPECTED_SHA" "$RUN_ID" <<'PY'
           import json, sys
-          run = json.load(open(sys.argv[1], encoding="utf-8"))
-          expected = sys.argv[2]
+
+          run_path, artifacts_path, expected, run_id = sys.argv[1:5]
+          run = json.load(open(run_path, encoding="utf-8"))
+          artifacts = json.load(open(artifacts_path, encoding="utf-8"))
           checks = {
               "workflow file": run.get("path") == ".github/workflows/build-apk.yml",
               "head commit": run.get("head_sha") == expected,
@@ -90,23 +81,43 @@ jobs:
               "trusted event": run.get("event") in ("push", "workflow_dispatch"),
               "main branch": run.get("head_branch") == "main",
               "same repository": run.get("repository", {}).get("full_name") == "2archiver/YTArk",
+              "run id": str(run.get("id")) == str(run_id),
           }
           failed = [name for name, ok in checks.items() if not ok]
           if failed:
               raise SystemExit("Candidate run rejected: " + ", ".join(failed))
+          names = [item.get("name") for item in artifacts.get("artifacts", [])]
+          expired = [item.get("name") for item in artifacts.get("artifacts", []) if item.get("expired")]
+          if "ytark-armv7-candidate" not in names:
+              raise SystemExit(
+                  "The candidate artefact is gone (expired or deleted). Actions artefact "
+                  "retention is 30 days: rerun the build for this commit, or bump "
+                  "release/version.properties to the next patch version."
+              )
+          if expired:
+              raise SystemExit("Candidate artefact expired: " + ", ".join(str(n) for n in expired))
           print("Candidate run", run.get("id"), "verified for", expected)
+          print("Artefacts:", ", ".join(str(n) for n in names))
           PY
 
-      - name: Load release version and download the candidate artefact
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RUN_ID: ${{ inputs.candidate_run_id }}
-        run: |
-          set -euo pipefail
-          python3 tools/validate_release.py emit-env --file "$GITHUB_ENV"
-          gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n ytark-armv7-candidate -D candidate
+  publish-release:
+    name: Publish, resume or repair the stable release
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs:
+      - verify-candidate
+    if: github.repository == '2archiver/YTArk' && needs.verify-candidate.result == 'success'
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Checkout the reviewed commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ inputs.expected_head_sha }}
+          persist-credentials: false
 
-      - name: Install Android build tools
+      - name: Install Android build-tools to re-verify the published package
         run: |
           set -euo pipefail
           export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
@@ -114,241 +125,53 @@ jobs:
           sdkmanager "build-tools;${BUILD_TOOLS}" >/dev/null
           echo "$ANDROID_HOME/build-tools/$BUILD_TOOLS" >> "$GITHUB_PATH"
 
-      - name: Verify package, versionCode, signer, ABI, checksums and userScript binding
-        id: verify
-        run: |
-          set -euo pipefail
-          cp "candidate/release-assets/$APK_ARMV7" "$RUNNER_TEMP/candidate.apk"
-          python3 tools/validate_release.py check-apk \
-            --apk "$RUNNER_TEMP/candidate.apk" --architecture armv7 \
-            --cert-file signing/YTArk-cert-sha256.txt \
-            --aapt "$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt" \
-            --apksigner "$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner"
-          python3 tools/validate_release.py check-checksums \
-            --checksums "candidate/release-assets/SHA256SUMS.txt" \
-            --armv7 "candidate/release-assets/$APK_ARMV7" \
-            --user-script "candidate/release-assets/userScript.js"
-          # The APK must load exactly the userscript tag this run is about to publish.
-          python3 - "$RUNNER_TEMP/candidate.apk" "https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@${SCRIPT_TAG}/userScript.js?v=" <<'PY'
-          import sys, zipfile
-          apk, url = sys.argv[1], sys.argv[2].encode()
-          with zipfile.ZipFile(apk) as archive:
-              hits = [info.filename for info in archive.infolist()
-                      if url in archive.read(info.filename)]
-          if not hits:
-              raise SystemExit("The candidate APK does not load the expected immutable userscript URL")
-          print("Script URL bound in:", ", ".join(hits))
-          PY
-          sha="$(sha256sum "$RUNNER_TEMP/candidate.apk" | cut -d' ' -f1)"
-          echo "apk_sha256=$sha" >> "$GITHUB_OUTPUT"
-          echo "version_tag=$VERSION_TAG" >> "$GITHUB_OUTPUT"
-          {
-            echo "## Verified candidate"
-            echo "- Run: \`${{ inputs.candidate_run_id }}\`, commit \`${{ inputs.expected_head_sha }}\`"
-            echo "- APK \`$APK_ARMV7\` sha256 \`$sha\`"
-            echo "- Only armeabi-v7a; signer pinned to the configured YTArk certificate"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-  publish-script-tag:
-    name: Stage 1 - publish the immutable userscript tag
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: verify-candidate
-    if: github.repository == '2archiver/YTArk' && inputs.mode != ''
-    environment: ytark-release
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout the reviewed commit
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ inputs.expected_head_sha }}
-          persist-credentials: false
-
-      - name: Load release version and download the candidate artefact
+      - name: Download the named candidate artefact
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ inputs.candidate_run_id }}
         run: |
           set -euo pipefail
-          python3 tools/validate_release.py emit-env --file "$GITHUB_ENV"
-          gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n ytark-armv7-candidate -D candidate
-          # Stage 1 publishes the candidate's userScript bytes, and nothing else.
-          test -s "candidate/release-assets/userScript.js"
+          gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" \
+            -n ytark-armv7-candidate -D candidate
+          find candidate -maxdepth 2 -type f | sort
 
-      - name: Publish the immutable userscript tag (refuses to move an existing tag)
+      - name: Publish, resume or repair the stable release from the verified bytes
         env:
           GH_TOKEN: ${{ github.token }}
+          # Dispatch inputs are passed through the environment, never pasted
+          # into the shell command line.
+          YTARK_COMMIT: ${{ inputs.expected_head_sha }}
+          YTARK_RUN_ID: ${{ inputs.candidate_run_id }}
+          YTARK_DEVICE_TEST_NOTES: ${{ inputs.device_test_notes }}
         run: |
           set -euo pipefail
-          bash tools/publish_script_tag.sh candidate/release-assets/userScript.js
-
-      - name: Verify jsDelivr serves the exact reviewed bytes
-        run: |
-          set -euo pipefail
-          url="https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@${SCRIPT_TAG}/userScript.js?v="
-          for attempt in $(seq 1 20); do
-            if curl -fsSL "$url" -o "$RUNNER_TEMP/served.js" && cmp -s candidate/release-assets/userScript.js "$RUNNER_TEMP/served.js"; then
-              echo "Served exact bytes at $url"
-              exit 0
-            fi
-            echo "Waiting for jsDelivr propagation ($attempt/20)."
-            sleep 15
-          done
-          echo "jsDelivr did not serve the exact immutable userscript" >&2
-          exit 1
-
-  create-draft:
-    name: Stage 2 - create the draft release (assets from the verified candidate)
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs:
-      - verify-candidate
-      - publish-script-tag
-    if: github.repository == '2archiver/YTArk' && (inputs.mode == 'draft' || inputs.mode == 'publish')
-    environment: ytark-release
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout the reviewed commit
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ inputs.expected_head_sha }}
-          persist-credentials: false
-
-      - name: Load release version and download the candidate artefact
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RUN_ID: ${{ inputs.candidate_run_id }}
-        run: |
-          set -euo pipefail
-          python3 tools/validate_release.py emit-env --file "$GITHUB_ENV"
-          gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n ytark-armv7-candidate -D candidate
-          mkdir -p release-assets
-          cp -a candidate/release-assets/. release-assets/
-          test "$(sha256sum "release-assets/$APK_ARMV7" | cut -d' ' -f1)" = "${{ needs.verify-candidate.outputs.apk_sha256 }}"
-
-      - name: Create the draft release (tags are never moved; existing releases are refused)
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GITHUB_SHA: ${{ inputs.expected_head_sha }}
-        run: |
-          set -euo pipefail
-          export SIGNING_CERT_SHA256="$(grep -v '^[[:space:]]*#' signing/YTArk-cert-sha256.txt | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
-          bash tools/create_release.sh
-          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-            | python3 -c '
-          import json, sys
-          tag = sys.argv[1]
-          for release in json.load(sys.stdin):
-              if release.get("tag_name") == tag:
-                  json.dump(release, sys.stdout)
-                  sys.exit(0)
-          raise SystemExit(f"Draft release {tag} not found")
-          ' "$VERSION_TAG" > "$RUNNER_TEMP/draft-release.json"
-          python3 tools/validate_release.py verify-release \
-            --release-json "$RUNNER_TEMP/draft-release.json" --state draft
-          echo "The release remains a draft. Static packaging checks are not physical-device validation."
-
-  promote-stable-release:
-    name: Stage 3 - publish as the stable, latest release (after device acceptance)
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    needs:
-      - verify-candidate
-      - create-draft
-    if: github.repository == '2archiver/YTArk' && inputs.mode == 'publish'
-    environment: ytark-release
-    permissions:
-      contents: write
-    steps:
-      - name: Refuse without recorded device acceptance
-        env:
-          EVIDENCE: ${{ inputs.device_acceptance }}
-        run: |
-          set -euo pipefail
-          if [ -z "$EVIDENCE" ]; then
-            echo "mode=publish needs device_acceptance evidence (docs/DEVICE-ACCEPTANCE.md). Refusing." >&2
-            exit 1
+          args=(
+            --commit "$YTARK_COMMIT"
+            --run-id "$YTARK_RUN_ID"
+            --candidate-dir candidate
+            --manifest candidate/candidate-manifest.json
+            --workdir publish-work
+          )
+          if [ -n "${YTARK_DEVICE_TEST_NOTES:-}" ]; then
+            args+=(--device-test-notes "$YTARK_DEVICE_TEST_NOTES")
           fi
-          echo "Device acceptance evidence recorded: $EVIDENCE"
-
-      - name: Checkout the reviewed commit
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ inputs.expected_head_sha }}
-          persist-credentials: false
-
-      - name: Load release version
-        run: python3 tools/validate_release.py emit-env --file "$GITHUB_ENV"
-
-      - name: Re-verify the draft
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-            | python3 -c '
-          import json, sys
-          tag = sys.argv[1]
-          for release in json.load(sys.stdin):
-              if release.get("tag_name") == tag:
-                  json.dump(release, sys.stdout)
-                  sys.exit(0)
-          raise SystemExit(f"Draft release {tag} not found")
-          ' "$VERSION_TAG" > "$RUNNER_TEMP/pre-promotion-release.json"
-          python3 tools/validate_release.py verify-release \
-            --release-json "$RUNNER_TEMP/pre-promotion-release.json" --state draft
-
-      - name: Publish as stable, non-prerelease and latest
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          gh release edit "$VERSION_TAG" --draft=false --prerelease=false --latest
-          echo "Published $VERSION_TAG as a stable non-prerelease release."
-
-      - name: Install Android build-tools to re-verify the published APK bytes
-        run: |
-          set -euo pipefail
-          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
-          (set +o pipefail; yes | sdkmanager --licenses >/dev/null)
-          sdkmanager "build-tools;${BUILD_TOOLS}" >/dev/null
-          echo "$ANDROID_HOME/build-tools/$BUILD_TOOLS" >> "$GITHUB_PATH"
-
-      - name: Re-download the candidate and verify published bytes, metadata and signer
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RUN_ID: ${{ inputs.candidate_run_id }}
-        run: |
-          set -euo pipefail
-          gh run download "$RUN_ID" -R "$GITHUB_REPOSITORY" -n ytark-armv7-candidate -D candidate
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$VERSION_TAG" > "$RUNNER_TEMP/published-release.json"
-          gh api "repos/$GITHUB_REPOSITORY/releases/latest" > "$RUNNER_TEMP/latest-release.json"
-          python3 tools/validate_release.py verify-release \
-            --release-json "$RUNNER_TEMP/published-release.json" \
-            --state published --latest-json "$RUNNER_TEMP/latest-release.json"
-          mkdir -p published
-          for asset in "$APK_ARMV7" userScript.js SHA256SUMS.txt base-apk-sha256.txt NOTICE.md; do
-            curl -fsSL --retry 3 \
-              "https://github.com/$GITHUB_REPOSITORY/releases/download/$VERSION_TAG/$asset" \
-              -o "published/$asset"
-          done
-          cmp "candidate/release-assets/$APK_ARMV7" "published/$APK_ARMV7"
-          python3 tools/validate_release.py check-apk \
-            --apk "published/$APK_ARMV7" --architecture armv7 \
-            --cert-file signing/YTArk-cert-sha256.txt \
+          python3 tools/publish_release.py publish "${args[@]}" \
             --aapt "$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt" \
             --apksigner "$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner"
-          for asset in userScript.js SHA256SUMS.txt base-apk-sha256.txt; do
-            cmp "candidate/release-assets/$asset" "published/$asset"
-          done
-          python3 tools/validate_release.py check-checksums \
-            --checksums published/SHA256SUMS.txt \
-            --armv7 "published/$APK_ARMV7" --user-script published/userScript.js
-          {
-            echo "## YTArk stable release published"
-            echo "- \`$VERSION_TAG\` is published, non-draft, non-prerelease and resolves as GitHub latest."
-            echo "- The APK was re-downloaded and verified byte-identical to the reviewed candidate."
-            echo "- Physical device acceptance is recorded separately: ${{ inputs.device_acceptance }}"
-          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Record the public release state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 tools/validate_release.py emit-env --file "$GITHUB_ENV"
+
+      - name: Print the release and latest JSON
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$VERSION_TAG" \
+            --jq '{tag: .tag_name, draft: .draft, prerelease: .prerelease, name: .name, assets: [.assets[].name]}'
+          gh api "repos/$GITHUB_REPOSITORY/releases/latest" \
+            --jq '{latest: .tag_name, draft: .draft, prerelease: .prerelease}'

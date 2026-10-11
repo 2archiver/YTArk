@@ -106,6 +106,23 @@ jobs:
           grep -Fq 'enableAdBlock: true' TizenTube/mods/config.js
           grep -Fq "enablePremiumLogo: true" TizenTube/mods/config.js
           grep -Fq 'baseTag=v2.0.2' release/version.properties
+          # The release pipeline is automatic: build-apk.yml publishes the
+          # verified candidate itself, and no workflow may gate publication on a
+          # manual approval stage or on device-acceptance evidence.
+          grep -Fq 'group: ytark-release-publication' .github/workflows/build-apk.yml
+          grep -Fq 'group: ytark-release-publication' .github/workflows/publish-release.yml
+          grep -Fq 'name: Publish the verified ARMv7 APK as the stable release' .github/workflows/build-apk.yml
+          if grep -rniE '(device_acceptance|^\s*environment:)' \
+              .github/workflows/build-apk.yml \
+              .github/workflows/publish-release.yml \
+              .github/workflows/fetch-premium-logo.yml; then
+            echo "A manual approval/acceptance gate is back in the release workflow" >&2
+            exit 1
+          fi
+          # The production publisher must refuse any repository but the trusted
+          # one, classify an empty release as repairable, and treat a complete
+          # published release as a no-op.
+          python3 tools/publish_release.py self-check
 
       - name: Test native updater ABI and release metadata contracts
         run: |

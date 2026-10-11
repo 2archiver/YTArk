@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
-# Create the validation-gated YTArk ARMv7 candidate release; stable promotion is separate.
+# Render the YTArk release notes and NOTICE.md for the configured release.
+#
+# This helper only writes files (NOTICE.md, release-assets/NOTICE.md and
+# release-notes.md). Creating, resuming or promoting the GitHub Release is done
+# by tools/publish_release.py, which needs to inspect the existing release
+# state before it decides what to do.
 set -euo pipefail
 
-: "${GH_TOKEN:?GH_TOKEN is required}"
 : "${GITHUB_REPOSITORY:?GITHUB_REPOSITORY is required}"
 : "${GITHUB_SHA:?GITHUB_SHA is required}"
 : "${VERSION_NAME:?VERSION_NAME is required}"
@@ -23,6 +27,8 @@ for apk in "$APK_ARMV7"; do
     echo "the validated architecture-specific APK release asset is missing: $apk" >&2; exit 1;
   }
 done
+
+mkdir -p release-assets
 
 cat > NOTICE.md <<EOF
 # YTArk notices and provenance
@@ -146,52 +152,3 @@ Source and upstream attribution: https://github.com/${GITHUB_REPOSITORY}
 and TizenTubeCobalt ${BASE_TAG}.
 EOF
 cp NOTICE.md release-assets/NOTICE.md
-
-REPO_URL="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-EXISTING_RELEASES_JSON="$(mktemp "${RUNNER_TEMP:-/tmp}/ytark-existing-releases.XXXXXX.json")"
-gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" > "$EXISTING_RELEASES_JSON"
-python3 - "$EXISTING_RELEASES_JSON" "$VERSION_TAG" <<'PYRELEASE'
-import json
-import sys
-
-path, tag = sys.argv[1:]
-with open(path, encoding="utf-8") as stream:
-    releases = json.load(stream)
-for release in releases:
-    if release.get("tag_name") == tag:
-        # Never replace a release: a published one is final, and a draft from an
-        # earlier run needs an explicit owner decision before it is removed.
-        state = "draft" if release.get("draft") else "published"
-        raise SystemExit(f"Release {tag} already exists ({state}); refusing to replace it")
-PYRELEASE
-rm -f "$EXISTING_RELEASES_JSON"
-
-create_draft_release() {
-  local target_args=("$@")
-  gh release create "$VERSION_TAG" \
-    --repo "$GITHUB_REPOSITORY" \
-    "${target_args[@]}" \
-    --draft \
-    --title "$RELEASE_TITLE" \
-    --notes-file release-notes.md \
-    "release-assets/$APK_ARMV7" \
-    release-assets/userScript.js \
-    release-assets/SHA256SUMS.txt \
-    release-assets/base-apk-sha256.txt \
-    release-assets/NOTICE.md
-}
-
-# Release tags are never moved or force-pushed. If the tag already exists it must
-# already point at the reviewed commit; otherwise a new tag is created at it.
-existing_tag_commit="$(git ls-remote "$REPO_URL" "refs/tags/$VERSION_TAG^{}" | awk '{print $1}')"
-if [ -n "$existing_tag_commit" ]; then
-  [ "$existing_tag_commit" = "$GITHUB_SHA" ] || {
-    echo "Tag $VERSION_TAG points at $existing_tag_commit, not the reviewed commit $GITHUB_SHA; refusing." >&2
-    exit 1
-  }
-  create_draft_release
-else
-  create_draft_release --target "$GITHUB_SHA"
-fi
-echo "Created draft release $VERSION_TAG with the single ARMv7 candidate."
-echo "Do not publish until device installation, launch, navigation, playback, and same-ABI update acceptance tests are recorded."

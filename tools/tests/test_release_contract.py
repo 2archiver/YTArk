@@ -393,8 +393,8 @@ arm64-v8a (a 64-bit-only system) cannot install this release.
                 validate_release.verify_release(str(path), "draft", None)
 
     def test_rendered_release_notes_satisfy_the_verify_release_contract(self):
-        """Render the notes exactly as the workflow does and check every gate."""
-        template = (ROOT / "tools" / "create_release.sh").read_text(encoding="utf-8")
+        """Render the notes exactly as the publish job does and check every gate."""
+        template = (ROOT / "tools" / "render_release_notes.sh").read_text(encoding="utf-8")
         for forbidden in ("APK_ARM64", "cobalt-arm64.apk", "ytark-dual-abi"):
             self.assertNotIn(forbidden, template,
                              "the release script still advertises a second architecture")
