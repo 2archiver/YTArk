@@ -65,6 +65,30 @@ resolution, with the cosmetic toggle on.
 | W5 | Theme switch while the app is running | Lettering follows the header without a reload, flash of the wrong colour, or duplicated mark | |
 | W6 | Toggle off → on after W1–W5 | Stock artwork returns byte-for-byte, then the vector wordmark mounts again with the correct theme on the first frame | |
 
+## YTArk 2.3 features (OLED, player cleanup, search, YouTube Settings, changelog)
+
+Every row is **NOT RUN** until recorded on the build under test. Static and unit
+tests do not replace these rows.
+
+| # | Check | Expected | Result |
+|---|---|---|---|
+| 22 | Cold launch on a fresh install | No bright flash before the YouTube TV home; Home, sidebar and Search show true black; thumbnails and video keep their colours | |
+| 23 | Cold launch after updating from 2.2 | Same look as 2.2 (YouTube default, saved colours); the three new options are off; one What's new toast when not playing; the card in YTArk Settings until dismissed | |
+| 24 | OLED Black ⇄ YouTube default, live | Every supported surface switches without a reload; saved custom colours return; the Premium wordmark stays legible with its red emblem | |
+| 25 | OLED readability at 720p, 1080p and 4K | Text, focus ring, switches, disabled rows and errors stay distinguishable | |
+| 26 | Signed-in and guest navigation | Account selector and Continue as guest still work; theme stays applied across screens | |
+| 27 | Remove player dimming | Video brightness unchanged when controls open; controls, captions, seek previews, loading/error states and dialogs readable; inactivity dimming still works on its own | |
+| 28 | Hide channel watermark | A channel with a branding watermark shows none (if the frontend draws it); no focus lands on an invisible target; feed avatars and the header unchanged; turning it off restores it | |
+| 29 | Player transitions | Next video, fullscreen and back to Home show no watermark flash and no stale hidden overlay | |
+| 30 | Search settings with the D-pad keyboard | Typing, Delete, Clear, Done; results update; selecting a result opens the real control; Back returns to results with query and focus kept | |
+| 31 | Search settings with the TV keyboard | The input method appears; Back closes it first, then the panel, without leaving YTArk Settings | |
+| 32 | Customize YouTube Settings | Move up/down and Show/Hide change the YouTube Settings page on its next load; focus follows the moved section; protected sections can't be hidden | |
+| 33 | Pinned entries | A pinned entry appears in Pinned near the top and works exactly like the original (same switch/menu) | |
+| 34 | Restore default layout | Only the layout resets; YTArk and YouTube settings and the session are unchanged | |
+| 35 | Changelog reader | Version list newest first with the installed version marked; long versions scroll with the D-pad; Back returns; QR opens the release page | |
+| 36 | Section reset | The confirmation lists the defaults; only that section changes | |
+| 37 | In-place update to 2.3 | Installs over 2.2 without uninstalling; session, cookies and preferences preserved | |
+
 ## 64-bit-only userspace check (expected exclusion)
 
 On a device or emulator image whose `ro.product.cpu.abilist` contains only

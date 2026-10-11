@@ -22,6 +22,14 @@ set -euo pipefail
 
 [ "$APP_NAME" = "YTArk" ] || { echo "application label must be YTArk" >&2; exit 1; }
 RELEASE_TITLE="YTArk ${DISPLAY_VERSION}"
+
+# "What changed" comes from CHANGELOG.md, the single changelog source that also
+# feeds the in-app reader, so the release notes cannot drift from it.
+SCRIPT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+WHAT_CHANGED="$(python3 "$SCRIPT_ROOT/tools/build_changelog.py" release-notes --version "$VERSION_NAME")" || {
+  echo "CHANGELOG.md has no valid entry for $VERSION_NAME" >&2; exit 1;
+}
+[ -n "$WHAT_CHANGED" ] || { echo "CHANGELOG.md has no entry for $VERSION_NAME" >&2; exit 1; }
 for apk in "$APK_ARMV7"; do
   [ -f "release-assets/$apk" ] || {
     echo "the validated architecture-specific APK release asset is missing: $apk" >&2; exit 1;
@@ -77,30 +85,7 @@ on a named device.
 
 ## What changed in this release
 
-- **Maintenance and UX release on TizenTubeCobalt `${BASE_TAG}`.** YTArk 2.2 keeps the
-  2.1.2 runtime and the TizenTubeCobalt v2.0.2 ARMv7 base. It is not a newer
-  Cobalt engine, not a newer YouTube client, and not an official YouTube upgrade.
-- **SponsorBlock lookups are bounded.** Segment lookups have a real deadline that
-  covers both the response and the body. Malformed numbers, reversed ranges and
-  late responses are discarded, so they cannot change the video that is playing.
-- **YTArk Updates card.** Settings → YTArk Updates shows the installed version,
-  the latest stable release, and a plain status (checking, up to date, update
-  available, or couldn't check). When this build cannot install updates itself,
-  it shows the official release page with a QR code. Install by downloading the
-  ARMv7 APK from that page.
-- **Premium wordmark (cosmetic).** The header uses the bundled vector artwork and
-  follows the light and dark theme. It is a cosmetic preference, not a
-  subscription, and it grants no Premium entitlement.
-- **ARMv7-only releases.** This version publishes exactly one APK: 32-bit ARM
-  `armeabi-v7a`. There is no ARM64 or universal asset. The updater checks
-  Android's supported ABI list before offering a download.
-- **Clearer unsupported-device message.** A 64-bit CPU by itself does not mean
-  the Android userspace runs 32-bit native code, so the app reports the ABI check
-  result instead of failing later at install time.
-- **Native updater status.** The native updater code (PackageInstaller hand-off
-  with user confirmation) is bundled in this APK. Its device path is **not yet
-  verified** for this release, so these notes do not claim automatic prompts.
-  Installs are always user-confirmed; YTArk never installs silently.
+${WHAT_CHANGED}
 
 ## Choose and install the APK
 

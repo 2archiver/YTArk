@@ -109,6 +109,11 @@ jobs:
           python3 tools/fetch_premium_logo.py --verify-only --out-dir TizenTube/mods/assets
           python3 tools/build_logo_asset.py --check
 
+      - name: Verify CHANGELOG.md and the bundled changelog data before building
+        run: |
+          set -euo pipefail
+          python3 tools/build_changelog.py --check
+
       - name: Build and test the userscript bundle
         working-directory: TizenTube/mods
         run: |
@@ -119,6 +124,10 @@ jobs:
           node --check ../dist/userScript.js
           grep -q "YTArk Quick Controls" ../dist/userScript.js
           grep -q "YouTube Premium" ../dist/userScript.js
+          for needle in ytark-theme-oled ytark-no-player-scrim featuredChannel YTARK_SEARCH_OPEN \
+              YTARK_YTS_EDITOR YTARK_CHANGELOG_SHOW v2.0.2-personal.14 configSchemaVersion; do
+            grep -q "$needle" ../dist/userScript.js || { echo "Bundle is missing $needle" >&2; exit 1; }
+          done
           if grep -Eqi '<text|<image|href="http|url\(https?:' ../dist/userScript.js; then
             echo "The generated userscript must not carry text/raster/external logo content" >&2
             exit 1

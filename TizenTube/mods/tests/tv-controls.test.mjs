@@ -213,6 +213,26 @@ describe('Preset undo', () => {
   });
 });
 
+describe('Colour presets and the OLED Black theme', () => {
+  it('switch to the YouTube default theme so the colours are visible, and undo restores the theme', () => {
+    setAndVerify('uiTheme', 'oled');
+    setAndVerify('focusContainerColor', '#0f0f0f');
+    applyPreset('midnightBlue');
+    assert.equal(configRead('uiTheme'), 'youtube');
+    assert.equal(configRead('focusContainerColor'), '#0a1628');
+    assert.equal(undoLastPreset(), true);
+    assert.equal(configRead('uiTheme'), 'oled');
+    assert.equal(configRead('focusContainerColor'), '#0f0f0f');
+  });
+
+  it('leave the theme alone for the content preset', () => {
+    setAndVerify('uiTheme', 'oled');
+    applyPreset('cleanTV');
+    assert.equal(configRead('uiTheme'), 'oled');
+    undoLastPreset();
+  });
+});
+
 describe('Quality selection', () => {
   it('QUALITY_LEVELS contains expected levels', () => {
     assert.deepEqual(QUALITY_LEVELS, ['auto', '2160', '1440', '1080', '720']);

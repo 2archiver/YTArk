@@ -51,6 +51,21 @@ def sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
+def copy_release_note_inputs(scratch: Path) -> None:
+    """Copy what tools/render_release_notes.sh reads into a scratch checkout.
+
+    The "What changed" section is generated from CHANGELOG.md by
+    tools/build_changelog.py, so the changelog, its generator and the version
+    file travel with the script.
+    """
+    (scratch / "tools").mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(ROOT / "tools" / "render_release_notes.sh", scratch / "tools" / "render_release_notes.sh")
+    shutil.copyfile(ROOT / "tools" / "build_changelog.py", scratch / "tools" / "build_changelog.py")
+    shutil.copyfile(ROOT / "CHANGELOG.md", scratch / "CHANGELOG.md")
+    (scratch / "release").mkdir(parents=True, exist_ok=True)
+    shutil.copyfile(ROOT / "release" / "version.properties", scratch / "release" / "version.properties")
+
+
 def rendered_notice() -> bytes:
     """Render the real NOTICE.md once, exactly as the publish job does."""
     global _RENDERED_NOTICE
@@ -59,10 +74,7 @@ def rendered_notice() -> bytes:
     with tempfile.TemporaryDirectory() as temp:
         scratch = Path(temp) / "scratch"
         (scratch / "tools").mkdir(parents=True)
-        shutil.copyfile(
-            ROOT / "tools" / "render_release_notes.sh",
-            scratch / "tools" / "render_release_notes.sh",
-        )
+        copy_release_note_inputs(scratch)
         (scratch / "release-assets").mkdir(parents=True)
         (scratch / "release-assets" / APK).write_bytes(APK_BYTES)
         with patch.object(publish_release, "ROOT", scratch), patch.dict(
@@ -367,6 +379,14 @@ class Scenario:
     def called_with(self, fragment: str) -> bool:
         return any(fragment in " ".join(call) for call in self.calls)
 
+    def called_verb(self, verb: str) -> bool:
+        """True when an API call with exactly this verb was made.
+
+        Unlike called_with(), this never matches words inside a release body
+        (the changelog-generated notes can say "created" or "deleted").
+        """
+        return any(call and call[0] == verb for call in self.calls)
+
 def namespace(**values):
     return type("Args", (), values)
 
@@ -381,10 +401,7 @@ class PublishReleaseTestCase(unittest.TestCase):
         # repository checkout is never modified by a test.
         self.scratch = self.root / "scratch"
         (self.scratch / "tools").mkdir(parents=True)
-        shutil.copyfile(
-            ROOT / "tools" / "render_release_notes.sh",
-            self.scratch / "tools" / "render_release_notes.sh",
-        )
+        copy_release_note_inputs(self.scratch)
         (self.scratch / "signing").mkdir(parents=True)
         shutil.copyfile(
             ROOT / "signing" / "YTArk-cert-sha256.txt",
@@ -587,8 +604,8 @@ class PublicationTests(PublishReleaseTestCase):
         draft = release_payload(draft=True, body=identity_body(self.candidate))
         result, scenario = self.run_publish(draft)
         self.assertEqual(result, 0)
-        self.assertFalse(scenario.called_with("create"))
-        self.assertFalse(scenario.called_with("delete"))
+        self.assertFalse(scenario.called_verb("create"))
+        self.assertFalse(scenario.called_verb("delete"))
         self.assertEqual(scenario.uploads(), [])
         self.assertTrue(scenario.called_with("--draft=False"))
         self.assertFalse(scenario.release["draft"])
@@ -636,7 +653,7 @@ class PublicationTests(PublishReleaseTestCase):
         )
         result, scenario = self.run_publish(published)
         self.assertEqual(result, 0)
-        self.assertFalse(scenario.called_with("create"))
+        self.assertFalse(scenario.called_verb("create"))
         uploads = scenario.uploads()
         self.assertEqual(len(uploads), 1)
         self.assertEqual(uploads[0][1], APK)
@@ -684,7 +701,7 @@ class PublicationTests(PublishReleaseTestCase):
             self.run_publish(None, scenario=scenario)
         self.assertIn("asset upload refused", str(caught.exception))
         version, code = publish_release.next_patch_version(CONFIG)
-        self.assertEqual((version, code), ("2.2.1", 2020100))
+        self.assertEqual((version, code), ("2.3.1", 2030100))
 
     def test_repair_refuses_a_rebuild_that_disagrees_with_published_checksums(self):
         published = release_payload(
@@ -698,7 +715,7 @@ class PublicationTests(PublishReleaseTestCase):
                 manifest=str(rebuilt.manifest), run_id=rebuilt.run_id,
             )
         self.assertIn("next patch version", str(caught.exception))
-        self.assertIn("2020100", str(caught.exception))
+        self.assertIn("2030100", str(caught.exception))
 
     def test_repair_guard_rejects_bytes_the_published_checksums_refuse(self):
         """The published checksum file decides whether a rebuild may repair an APK."""
@@ -885,10 +902,7 @@ class ReleaseNotesTests(unittest.TestCase):
             root = Path(temp)
             scratch = root / "scratch"
             (scratch / "tools").mkdir(parents=True)
-            shutil.copyfile(
-                ROOT / "tools" / "render_release_notes.sh",
-                scratch / "tools" / "render_release_notes.sh",
-            )
+            copy_release_note_inputs(scratch)
             (scratch / "release-assets").mkdir(parents=True)
             (scratch / "release-assets" / APK).write_bytes(APK_BYTES)
             factory = CandidateFactory(root)

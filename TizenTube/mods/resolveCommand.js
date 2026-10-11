@@ -8,7 +8,8 @@ import { t } from 'i18next';
 import { requestNextAndNavigateChannel, getFeedbackPanelTokens, sendFeedbackToken } from './utils/innerTubeCalls.js';
 import qrcode from 'qrcode-npm';
 import showGuideSettings from './ui/sidebarModification.js';
-import { applyPreset, undoLastPreset, setQuickQuality, updateThemeStylesheet } from './features/tvControls.js';
+import { applyPreset, undoLastPreset, setQuickQuality, updateThemeStylesheet, PRESETS } from './features/tvControls.js';
+import { handleYtarkAction } from './ui/ytarkActions.js';
 import { resetUserAgentProfile } from './features/userAgentSpoofing.js';
 
 export default function resolveCommand(cmd, _) {
@@ -30,6 +31,36 @@ export function findFunction(funcName) {
     }
 }
 
+function isYtarkSettingData(setting) {
+    const item = setting && setting.clientSettingEnum && setting.clientSettingEnum.item;
+    return typeof item === 'string' && item.length > 0 && !item.includes('_');
+}
+
+/**
+ * Apply a setClientSettingEndpoint whose items are all YTArk configuration
+ * keys. Returns false (and changes nothing) for YouTube's own settings.
+ */
+export function applyYtarkSettingCommand(cmd) {
+    const datas = cmd && cmd.setClientSettingEndpoint && cmd.setClientSettingEndpoint.settingDatas;
+    if (!Array.isArray(datas) || !datas.length || !datas.every(isYtarkSettingData)) return false;
+    for (const setting of datas) {
+        const key = setting.clientSettingEnum.item;
+        const valName = Object.keys(setting).find(name => name.includes('Value'));
+        if (!valName) continue;
+        const value = valName === 'intValue' ? Number(setting[valName]) : setting[valName];
+        if (valName === 'arrayValue') {
+            const current = configRead(key);
+            const arr = Array.isArray(current) ? current.slice() : [];
+            if (arr.includes(value)) arr.splice(arr.indexOf(value), 1);
+            else arr.push(value);
+            configWrite(key, arr);
+        } else {
+            configWrite(key, value);
+        }
+    }
+    return true;
+}
+
 // Patch resolveCommand to expose YTArk settings
 
 export function patchResolveCommand() {
@@ -39,23 +70,12 @@ export function patchResolveCommand() {
             const ogResolve = window._yttv[key].instance.resolveCommand;
             window._yttv[key].instance.resolveCommand = function (cmd, _) {
                 if (cmd.setClientSettingEndpoint) {
-                    // Command to change client settings. Use YTArk configuration to change settings.
+                    // Command to change client settings. YTArk keys (no underscore)
+                    // are written to the YTArk configuration and stay on the TV:
+                    // they are not forwarded to YouTube's own setting handler.
+                    if (applyYtarkSettingCommand(cmd)) return true;
                     for (const settings of cmd.setClientSettingEndpoint.settingDatas) {
-                        if (!settings.clientSettingEnum.item.includes('_')) {
-                            for (const setting of cmd.setClientSettingEndpoint.settingDatas) {
-                                const valName = Object.keys(setting).find(key => key.includes('Value'));
-                                const value = valName === 'intValue' ? Number(setting[valName]) : setting[valName];
-                                if (valName === 'arrayValue') {
-                                    const arr = configRead(setting.clientSettingEnum.item);
-                                    if (arr.includes(value)) {
-                                        arr.splice(arr.indexOf(value), 1);
-                                    } else {
-                                        arr.push(value);
-                                    }
-                                    configWrite(setting.clientSettingEnum.item, arr);
-                                } else configWrite(setting.clientSettingEnum.item, value);
-                            }
-                        } else if (settings.clientSettingEnum.item === 'I18N_LANGUAGE') {
+                        if (settings.clientSettingEnum.item === 'I18N_LANGUAGE') {
                             const lang = settings.stringValue;
                             const date = new Date();
                             date.setFullYear(date.getFullYear() + 10);
@@ -257,15 +277,21 @@ function customAction(action, parameters) {
             // updater must verify the release before opening Android Installer.
             openYtArkUpdates();
             break;
-        case 'SET_PLAYER_SPEED':
+        case 'SET_PLAYER_SPEED': {
             const speed = Number(parameters);
-            document.querySelector('video').playbackRate = speed;
+            const video = document.querySelector('video');
+            if (video && Number.isFinite(speed) && speed > 0) video.playbackRate = speed;
             break;
+        }
         case 'ENTER_MP':
             enablePip();
             break;
         case 'ENTER_PIP':
-            window.h5vcc.tizentube.EnterPIP();
+            if (window.h5vcc && window.h5vcc.tizentube && typeof window.h5vcc.tizentube.EnterPIP === 'function') {
+                window.h5vcc.tizentube.EnterPIP();
+            } else {
+                showToast('YTArk', 'Picture-in-picture is not available on this device.');
+            }
             break;
         case 'SHOW_TOAST':
             showToast('YTArk', parameters);
@@ -316,11 +342,15 @@ function customAction(action, parameters) {
                 })
                 .catch(err => console.error('[YTArk] Failed to send feedback:', err));
             break;
-        case 'SHARE':
+        case 'SHARE': {
             const videoPlayer = document.querySelector('.html5-video-player');
-            const videoData = videoPlayer.getVideoData();
-            const videoId = videoData.video_id;
-            const shareUrl = `https://www.youtube.com/watch?v=${videoId}`;
+            const videoData = videoPlayer && typeof videoPlayer.getVideoData === 'function' ? videoPlayer.getVideoData() : null;
+            const videoId = videoData && videoData.video_id;
+            if (!videoId) {
+                showToast('YTArk', 'There is no video to share right now.');
+                break;
+            }
+            const shareUrl = `https://www.youtube.com/watch?v=${encodeURIComponent(videoId)}`;
 
             const qr = qrcode.qrcode(6, 'H');
             qr.addData(shareUrl);
@@ -336,6 +366,7 @@ function customAction(action, parameters) {
                 QrCodeRenderer(qrDataUrl)
             ]), 'tt-share-modal');
             break;
+        }
         case 'SHOW_GUIDE_BUTTONS':
             showGuideSettings('SHOW_GUIDE_BUTTONS', parameters);
             break;
@@ -370,8 +401,9 @@ function customAction(action, parameters) {
             window.screenTurnedOffAt = Date.now();
             break;
         case 'TV_APPLY_PRESET':
+            if (!PRESETS[parameters]) break;
             applyPreset(parameters);
-            showToast('YTArk Quick Controls', `Applied ${parameters} preset`);
+            showToast('YTArk Quick Controls', `Applied ${PRESETS[parameters].label} preset`);
             break;
         case 'TV_UNDO_PRESET':
             if (undoLastPreset()) {
@@ -383,6 +415,11 @@ function customAction(action, parameters) {
         case 'TV_SET_QUALITY':
             setQuickQuality(parameters);
             showToast('YTArk Quick Controls', `Quality set to ${parameters}`);
+            break;
+        default:
+            if (!handleYtarkAction(action, parameters)) {
+                console.warn('[YTArk] Unknown custom action:', action);
+            }
             break;
     }
 }

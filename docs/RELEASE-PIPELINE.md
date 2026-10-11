@@ -127,6 +127,22 @@ Rules that never change:
   malformed JSON are hard errors, never "absent".
 - Concurrency group `ytark-release-publication`, `cancel-in-progress: false`.
 
+## Release notes and CHANGELOG.md
+
+`CHANGELOG.md` is the single changelog source. `tools/render_release_notes.sh`
+takes the "What changed in this release" section from the entry whose version
+matches `release/version.properties` (`python3 tools/build_changelog.py
+release-notes --version <versionName>`) and fails when the entry is missing, so a
+release can never ship with hand-written notes that disagree with the in-app
+history. The same file is generated into
+`TizenTube/mods/assets/changelog.generated.js`; `ci.yml` and `build-apk.yml` run
+`python3 tools/build_changelog.py --check` before building the userscript.
+
+The newest entry stays "Unreleased" while it is reviewed; the publication date is
+the one GitHub records when the release workflow publishes the build. Record it
+in `CHANGELOG.md` in a follow-up commit (with the next version's work), never by
+moving a tag.
+
 ## Job summaries
 
 The publish job writes three clearly separated blocks: the build artefact (an

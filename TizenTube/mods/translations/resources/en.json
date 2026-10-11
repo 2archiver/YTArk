@@ -287,5 +287,175 @@
             "title": "Sidebar Contents Updated",
             "subtitle": "The sidebar contents have been updated."
         }
+    },
+    "ytark": {
+        "about": {
+            "changelog": "Version history: YTArk Settings › Changelog."
+        },
+        "appearance": {
+            "colors": {
+                "edit": "Change them with the Midnight Blue and Classic Dark presets in YTArk Quick Controls, or in the colour panel opened with the remote's red button.",
+                "oled": "OLED Black is active and draws true black instead; your colours are kept and come back with YouTube default.",
+                "saved": "Saved colours: navigation {{focus}}, content {{route}}.",
+                "subtitle": "Your saved custom colours",
+                "title": "Navigation and content colours",
+                "youtube": "YouTube default is active, so these colours are in use."
+            },
+            "colorsSwitched": "Theme set to YouTube default so your colours are visible.",
+            "description": "Theme and player look",
+            "player": {
+                "description": "Watermark and control-overlay dimming",
+                "hideWatermark": "Hide channel watermark",
+                "hideWatermarkDescription": "Hide the clickable channel logo over videos.",
+                "idleDimming": "Screen dimming when idle",
+                "idleDimmingDescription": "Separate setting under User Interface",
+                "removeScrim": "Remove player dimming",
+                "removeScrimDescription": "Keep the video bright when playback controls are visible.",
+                "title": "Player"
+            },
+            "theme": {
+                "description": "YouTube default or OLED Black",
+                "oled": "OLED Black",
+                "oledDescription": "True black backgrounds for supported screens; images and video keep their colours",
+                "title": "Theme",
+                "youtube": "YouTube default",
+                "youtubeDescription": "YouTube TV colours with your saved navigation and content colours"
+            },
+            "title": "Appearance"
+        },
+        "changelog": {
+            "continued": "(continued)",
+            "entryDescription": "Version history bundled with this build",
+            "entryFromUpdates": "What's new and changelog",
+            "installed": "Installed",
+            "published": "Published {{date}}",
+            "qrMessage": "Scan the QR code to open the official release page on your phone: {{url}}",
+            "qrTitle": "Official release page (QR code)",
+            "releasePage": "Release page: {{url}}",
+            "subtitle": "Every published YTArk version, newest first",
+            "subtitleInstalled": "Every published YTArk version, newest first · installed {{version}}",
+            "thisBuild": "this build",
+            "title": "Changelog",
+            "unreleased": "Not yet published"
+        },
+        "dependency": "Takes effect when \"{{setting}}\" is on",
+        "entry": {
+            "clear": "Clear",
+            "delete": "Delete",
+            "done": "Done",
+            "hint": "OK types · Down moves to the keyboard · Back closes this panel",
+            "keyboard": "On-screen keyboard",
+            "placeholder": "Type a setting name",
+            "space": "Space"
+        },
+        "quick": {
+            "hidePreviews": "Stops video previews when a tile is focused",
+            "hideShorts": "Removes Shorts shelves and tiles from feeds"
+        },
+        "reset": {
+            "cancel": "Cancel",
+            "confirm": "Reset",
+            "confirmScope": "Only these YTArk settings change. Your Google account, app data and other settings stay as they are.",
+            "confirmTitle": "Reset {{section}}?",
+            "done": "{{section}}: defaults restored",
+            "listIntro": "These settings return to their defaults:",
+            "subtitle": "Restore this section's settings to their defaults",
+            "title": "Reset {{section}}",
+            "videoSpeed": "Playback speed"
+        },
+        "search": {
+            "backToResults": "Back to search results",
+            "clear": "Clear search",
+            "entry": "Search settings",
+            "entryDescription": "Find any YTArk setting by name or keyword",
+            "fieldEdit": "Select to change the search",
+            "fieldEmpty": "Search settings…",
+            "fieldHint": "Select to type with the remote, or pick a suggestion below",
+            "fieldWithQuery": "Search: \"{{query}}\"",
+            "liveCount": "{{count}} matching: {{titles}}",
+            "liveNone": "No matching settings yet",
+            "noResults": "No settings match \"{{query}}\". Try another word or a suggestion.",
+            "resultCount": "{{count}} matching settings · searches stay on this TV",
+            "subtitle": "Every YTArk setting · searches stay on this TV",
+            "suggestion": "Try \"{{term}}\"",
+            "topLevel": "YTArk Settings",
+            "typeToSearch": "Type to search every YTArk setting"
+        },
+        "stock": {
+            "restore": "Restore YouTube Settings layout",
+            "search": "Search YTArk settings",
+            "updatesSummary": "Check the official stable YTArk release",
+            "whatsNew": "What's new in YTArk"
+        },
+        "storage": {
+            "saveFailed": "Settings could not be saved on this TV. Changes apply until the app restarts."
+        },
+        "ui": {
+            "screenDimmingDescription": "Dims the app after inactivity; separate from player dimming"
+        },
+        "unavailable": {
+            "frameRate": "Not available on this device: it did not provide the YTArk frame-rate bridge.",
+            "generic": "Not available on this device.",
+            "pip": "Not available on this device: Android reports no picture-in-picture support.",
+            "userAgent": "Not available here: this runtime has no Cobalt user-agent bridge."
+        },
+        "value": {
+            "current": "Current: {{value}}",
+            "custom": "Custom",
+            "notSet": "Not set",
+            "off": "Off",
+            "on": "On",
+            "selected": "{{count}} selected"
+        },
+        "whatsNew": {
+            "dismiss": "Dismiss What's new for {{version}}",
+            "dismissShort": "Dismiss What's new",
+            "dismissSubtitle": "Hides the What's new card in YTArk Settings for this version",
+            "title": "What's new in YTArk {{version}}",
+            "toastBody": "See What's new at the top of YTArk Settings.",
+            "toastTitle": "YTArk updated to {{version}}"
+        },
+        "ytSettings": {
+            "atBottom": "Already at the bottom",
+            "atTop": "Already at the top",
+            "cannotHide": "Always shown",
+            "done": "Done",
+            "dormant": "Not on the page right now (for example signed out or guest)",
+            "empty": "Open the YouTube Settings page once (Settings in the YouTube sidebar) so YTArk can detect its sections, then come back here.",
+            "entries": "Pin or hide entries",
+            "entriesSubtitle": "Pinned entries move to a Pinned section near the top",
+            "entryCount": "{{count}} entries",
+            "entryDescription": "Reorder, hide or pin sections of the YouTube Settings page",
+            "hidden": "Hidden",
+            "hide": "Hide section",
+            "hideEntry": "Hide entry",
+            "hideNote": "Hiding only removes it from this page; its settings keep working",
+            "moveDown": "Move down",
+            "moveUp": "Move up",
+            "noEntries": "No customizable entries in this section",
+            "pin": "Pin to the top",
+            "pinned": "Pinned",
+            "pinnedCount": "{{count}} pinned",
+            "position": "Position {{position}} of {{total}}",
+            "protected": "Protected · always shown",
+            "protectedReason": "Account, sign-in, help and YTArk sections stay visible so you can always get back",
+            "protectedRowReason": "Account and sign-in entries stay visible",
+            "restore": "Restore default layout",
+            "restoreConfirmTitle": "Restore the YouTube Settings layout?",
+            "restoreScope": "This restores YouTube's own order for the YouTube Settings page, shows hidden sections and entries again and removes pins. Your YTArk settings, YouTube settings, Google account and app data are not changed.",
+            "restoreSubtitle": "Undo section order, hidden sections, hidden entries and pins",
+            "restoreUnchanged": "The layout is already YouTube's default",
+            "restored": "Default layout restored. It applies the next time YouTube Settings opens.",
+            "rowHidden": "Hidden",
+            "rowPinned": "Pinned to the top",
+            "rowProtected": "Protected",
+            "rowShown": "Shown in place",
+            "show": "Show section",
+            "showEntry": "Show entry",
+            "shown": "Shown",
+            "subtitle": "Changes apply the next time YouTube Settings opens. Protected sections always stay visible.",
+            "title": "Customize YouTube Settings",
+            "unpin": "Unpin"
+        }
     }
 }
