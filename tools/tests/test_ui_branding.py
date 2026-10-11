@@ -92,7 +92,6 @@ class YTArkUiBrandingTests(unittest.TestCase):
             "enablePremiumLogo:!0",
             "YTARK_UPDATE_COMMAND",         # settings card -> update engine actions
             "api.github.com/repos/2archiver/YTArk/releases/latest",
-            "ytark://updates",              # native updater screen hand-off
         ):
             self.assertIn(needle, built)
         self.assertNotIn("Personal Tube TV", built, "deprecated branding in the bundle")

@@ -342,3 +342,13 @@ describe('state -> status and actions', () => {
     assert.equal(cleanNotes('# YTArk 2.1.1\n\n**Fix** the wordmark\nAndroid versionCode: 2010100\n'), 'YTArk 2.1.1\n\nFix the wordmark');
   });
 });
+
+describe('official manual-install release page', () => {
+  test('links to the exact tag only for a clean vX.Y.Z release tag', async () => {
+    const { officialReleasePageUrl, LATEST_RELEASE_PAGE } = await import('../features/updateState.js');
+    assert.equal(officialReleasePageUrl('v2.1.2'), 'https://github.com/2archiver/YTArk/releases/tag/v2.1.2');
+    for (const bad of ['', undefined, 'v2.1', '2.1.2', 'v2.1.2/../x', 'v2.1.2?x=1']) {
+      assert.equal(officialReleasePageUrl(bad), LATEST_RELEASE_PAGE, `rejects ${String(bad)}`);
+    }
+  });
+});

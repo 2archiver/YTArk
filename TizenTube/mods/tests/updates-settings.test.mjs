@@ -67,25 +67,25 @@ function actionIds(modal) {
   return modal.content.items
     .filter(item => item.commands)
     .map(item => item.commands[0].customAction)
-    .filter(custom => custom.action === 'YTARK_UPDATE_COMMAND')
+    .filter(custom => custom && custom.action === 'YTARK_UPDATE_COMMAND')
     .map(custom => custom.parameters);
 }
 
 function makeController(options = {}) {
   const ui = recordingUi();
   const commands = [];
-  const deepLinks = [];
   const bridge = options.bridge === undefined ? null : options.bridge;
   const controller = createUpdateController({
     ui,
     bridge,
     installedVersion: options.installedVersion || (() => '2.1.0'),
     architecture: options.architecture || (() => 'armeabi-v7a'),
-    fetchRelease: options.fetchRelease || (async () => releasePayload()),
-    deepLink: () => { deepLinks.push('ytark://updates'); return true; },
+    // `network: true` exercises the real default fetch path instead of a fixture.
+    fetchRelease: options.network ? undefined : (options.fetchRelease || (async () => releasePayload())),
+    checkTimeoutMs: options.checkTimeoutMs,
     now: options.now || (() => Date.now()),
   });
-  return { controller, ui, commands, deepLinks };
+  return { controller, ui, commands };
 }
 
 function fakeBridge(state, log = []) {
@@ -105,7 +105,7 @@ beforeEach(() => {
 describe('YTArk Updates card with the native engine connected', () => {
   it('renders the engine state, the real installed version and the available release', async () => {
     const log = [];
-    const { controller, ui, deepLinks } = makeController({
+    const { controller, ui } = makeController({
       bridge: fakeBridge({
         contract: 1,
         state: 'available',
@@ -133,7 +133,6 @@ describe('YTArk Updates card with the native engine connected', () => {
     assert.deepEqual(log.at(-1), { contract: 1, command: 'install' });
     controller.handleAction('open');
     assert.deepEqual(log.at(-1), { contract: 1, command: 'open' });
-    assert.deepEqual(deepLinks, [], 'the bridge is preferred over the best-effort deep link');
     controller.dispose();
   });
 
@@ -185,26 +184,95 @@ describe('YTArk Updates card with the native engine connected', () => {
 });
 
 describe('YTArk Updates card without a connected native engine', () => {
-  it('performs a real read-only check and reports the newer stable release', async () => {
-    const { controller, ui, deepLinks } = makeController({});
+  it('performs a real read-only check and shows the manual install fallback', async () => {
+    const { controller, ui } = makeController({});
     await controller.open();
-    const text = flatText(ui.modals.at(-1));
-    assert.match(text, /YTArk 2\.1\.2 is available for this device/);
-    assert.match(text, /Available stable version: 2\.1\.2/);
+    const modal = ui.modals.at(-1);
+    const text = flatText(modal);
+    assert.equal(modal.header.title, 'YTArk Updates');
+    assert.match(text, /Latest stable: 2\.1\.2 \(armeabi-v7a\)/);
+    assert.match(text, /Status: Update available/);
+    assert.match(text, /Check here, then download the ARMv7 APK from the official page\./);
+    assert.match(text, /Official page: https:\/\/github\.com\/2archiver\/YTArk\/releases\/tag\/v2\.1\.2/);
     assert.match(text, /Release notes/);
     assert.match(text, /Vector Premium wordmark/);
-    assert.match(text, /Read-only release check/);
-    assert.match(text, /Download and installation run in the native YTArk updater/);
-    assert.deepEqual(actionIds(ui.modals.at(-1)), ['check', 'later', 'open']);
+    assert.doesNotMatch(text, /Reload the app|reconnect|Open YTArk Updates screen/i,
+      'no reconnect or native-screen promise in this build');
+    // Only a real check and a real close are offered; no download or install.
+    assert.deepEqual(actionIds(modal), ['check']);
+    const closes = modal.content.items.filter(item => item.commands
+      && item.commands[0].signalAction && item.commands[0].signalAction.signal === 'POPUP_BACK');
+    assert.equal(closes.length, 1, 'a Close action dismisses the modal');
 
     // Without the native engine a download request must not pretend to start.
     await controller.handleAction('download');
     assert.match(ui.toasts.at(-1).subtitle, /native YTArk updater/);
-    assert.deepEqual(ui.modals.at(-1).content.items.length, 2 + 3 + 1,
-      'no download action is offered without an engine');
-    controller.handleAction('open');
-    assert.deepEqual(deepLinks, ['ytark://updates']);
+    assert.deepEqual(actionIds(ui.modals.at(-1)), ['check'], 'still no download control');
+
+    const qrItem = ui.modals.at(-1).content.items.find(item => item.qrCodeRenderer);
+    assert.ok(qrItem, 'a QR code item is rendered in the fallback');
+    assert.match(qrItem.qrCodeRenderer.qrCodeImage.thumbnails[0].url, /^data:image\//,
+      'the QR code is a real image generated from the official page');
     controller.dispose();
+  });
+
+  it('points the open request at the official releases page, with no native-screen claim', async () => {
+    const { controller, ui } = makeController({});
+    await controller.open();
+    await controller.handleAction('open');
+    assert.equal(ui.toasts.at(-1).subtitle, 'Official page: https://github.com/2archiver/YTArk/releases/latest');
+    controller.dispose();
+  });
+
+  it('suppresses an overlapping check while one is already running', async () => {
+    let calls = 0;
+    let release;
+    const gate = new Promise((resolve) => { release = resolve; });
+    const { controller } = makeController({
+      fetchRelease: async () => { calls += 1; await gate; return releasePayload(); },
+    });
+    const first = controller.runFallbackCheck();
+    const second = controller.runFallbackCheck();
+    release();
+    await Promise.all([first, second]);
+    assert.equal(calls, 1, 'only one release request is made');
+    controller.dispose();
+  });
+
+  it('settles a hung release request at the deadline and reports it as a failed check', async () => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = () => new Promise(() => {});
+    try {
+      const { controller, ui } = makeController({ checkTimeoutMs: 30, network: true });
+      const started = Date.now();
+      await controller.runFallbackCheck();
+      assert.ok(Date.now() - started < 2000, 'the check gives up promptly');
+      assert.equal(controller.state.model.state, 'check_error');
+      assert.match(flatText(ui.modals.at(-1)), /timed out/);
+      assert.doesNotMatch(flatText(ui.modals.at(-1)), /up to date/i);
+      controller.dispose();
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
+
+  it('refuses an oversized release body instead of parsing it', async () => {
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = async () => ({
+      ok: true,
+      status: 200,
+      headers: { get: () => null },
+      text: async () => 'x'.repeat(600 * 1024),
+    });
+    try {
+      const { controller, ui } = makeController({ network: true });
+      await controller.runFallbackCheck();
+      assert.equal(controller.state.model.state, 'check_error');
+      assert.match(flatText(ui.modals.at(-1)), /larger than expected/);
+      controller.dispose();
+    } finally {
+      globalThis.fetch = realFetch;
+    }
   });
 
   it('reports a malformed release as a check error, never as up to date', async () => {
@@ -303,7 +371,6 @@ describe('YTArk Updates card without a connected native engine', () => {
         bridge: null,
         installedVersion: () => '2.1.0',
         architecture: () => 'arm64-v8a',
-        deepLink: () => true,
       });
       await real.open();
       assert.deepEqual(urls, ['https://api.github.com/repos/2archiver/YTArk/releases/latest']);
@@ -323,8 +390,8 @@ describe('state model hand-off', () => {
     });
     await controller.open();
     assert.equal(controller.state.model.state, 'current');
-    assert.match(flatText(ui.modals.at(-1)), /running the latest published stable YTArk release/);
-    assert.deepEqual(actionIds(ui.modals.at(-1)), ['check', 'open']);
+    assert.match(flatText(ui.modals.at(-1)), /Status: Up to date/);
+    assert.deepEqual(actionIds(ui.modals.at(-1)), ['check']);
     controller.dispose();
   });
 
@@ -334,7 +401,7 @@ describe('state model hand-off', () => {
       fetchRelease: async () => releasePayload(),
     });
     await controller.open();
-    assert.match(flatText(ui.modals.at(-1)), /Installed version: 2\.0\.4/);
+    assert.match(flatText(ui.modals.at(-1)), /Installed: 2\.0\.4/);
     assert.equal(controller.state.fallback.newer, true);
     controller.dispose();
   });

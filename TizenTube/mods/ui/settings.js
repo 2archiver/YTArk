@@ -22,7 +22,7 @@ function ytarkDisplayVersion() {
 function ytarkUpdateSubtitle() {
     const version = ytarkDisplayVersion();
     if (version === 'unknown') {
-        return 'Installed version: unknown · stable release checks run in the YTArk app';
+        return 'Installed version: unknown · check the official YTArk release from here';
     }
     return 'Installed version: ' + version + ' · check the official stable release';
 }
@@ -885,7 +885,7 @@ export default function modernUI(update, parameters) {
             subtitle: ytarkUpdateSubtitle(),
             options: [
                 buttonItem(
-                    { title: 'Open YTArk Updates', subtitle: 'Installed version, stable release and verified installation' },
+                    { title: 'Check for YTArk updates', subtitle: 'Opens the official release check and download page' },
                     { icon: 'SYSTEM_UPDATE' },
                     [
                         {

@@ -2,6 +2,7 @@ import sha256 from '../tiny-sha256.js';
 import { configRead, configChangeEmitter } from '../config.js';
 import { showToast } from '../ui/ytUI.js';
 import { t } from 'i18next';
+import { fetchSkipSegments, skipTargetFor } from './sponsorblockRequest.js';
 
 // Copied from https://github.com/ajayyy/SponsorBlock/blob/da1a535de784540ee10166a75a3eb8537073838c/src/config.ts#L113-L134
 const barTypes = {
@@ -73,9 +74,14 @@ class SponsorBlockHandler {
   skippableCategories = [];
   manualSkippableCategories = [];
   skippedCategories = new Map();
+  // Segments already auto-skipped by this handler: key -> segment start.
+  // Prevents re-seeking the same range (e.g. after the end-of-video `end - 1`
+  // adjustment). Entries are dropped when the playhead moves back before them.
+  handledSegments = new Map();
 
-  constructor(videoID) {
+  constructor(videoID, options = {}) {
     this.videoID = videoID;
+    this.timeoutMs = options.timeoutMs;
   }
 
   async init() {
@@ -92,30 +98,30 @@ class SponsorBlockHandler {
         'music_offtopic',
         'poi_highlight'
       ];
-      const resp = await fetch(
-        `${sponsorblockAPI}/skipSegments/${videoHash}?categories=${encodeURIComponent(
-          JSON.stringify(categories)
-        )}`
-      );
-      if (!resp || resp.ok === false) {
-        throw new Error(`SponsorBlock returned HTTP ${resp ? resp.status : 'no response'}`);
-      }
-      const results = await resp.json();
+      // Bounded request; a timeout, HTTP error or malformed body resolves to a
+      // failure result instead of throwing, so playback is never held up.
+      const outcome = await fetchSkipSegments({
+        api: sponsorblockAPI,
+        videoID: this.videoID,
+        hash: videoHash,
+        categories,
+        fetchImpl: fetch,
+        timeoutMs: this.timeoutMs,
+      });
+      // Discard late results. Each handler belongs to one video; syncSponsorBlock
+      // destroys it (clearing `active`) as soon as the route or setting changes.
       if (!this.active) return;
-
-      const result = Array.isArray(results)
-        ? results.find((v) => v && v.videoID === this.videoID)
-        : null;
-      if (!result || !Array.isArray(result.segments) || !result.segments.length) {
+      if (!outcome.ok) {
+        // One line per video; playback is unaffected.
+        console.warn('[YTArk SponsorBlock] Segment lookup unavailable; playback continues:', outcome.reason);
+        return;
+      }
+      if (!outcome.segments.length) {
         console.info(this.videoID, 'No SponsorBlock segments found.');
         return;
       }
 
-      this.segments = result.segments.filter(segment =>
-        Array.isArray(segment.segment) && segment.segment.length === 2
-        && Number.isFinite(Number(segment.segment[0]))
-        && Number.isFinite(Number(segment.segment[1]))
-        && Number(segment.segment[1]) > Number(segment.segment[0]));
+      this.segments = outcome.segments;
       if (!this.segments.length) return;
 
       this.manualSkippableCategories = configRead('sponsorBlockManualSkips');
@@ -300,11 +306,22 @@ class SponsorBlockHandler {
       return;
     }
 
+    const duration = this.video.duration;
+    // A user who seeks back before a handled range becomes eligible again.
+    for (const [key, start] of this.handledSegments) {
+      if (start > this.video.currentTime + 1) this.handledSegments.delete(key);
+    }
+
     // Sometimes timeupdate event (that calls scheduleSkip) gets fired right before
     // already scheduled skip routine below. Let's just look back a little bit
     // and, in worst case, perform a skip at negative interval (immediately)...
+    // Only enabled, in-bounds ranges are scheduled. Point highlights and
+    // out-of-duration or live ranges never block or drive a seek.
     const nextSegments = this.segments.filter(
       (seg) =>
+        this.skippableCategories.includes(seg.category) &&
+        skipTargetFor(seg, duration) !== null &&
+        !this.handledSegments.has(segmentKey(seg)) &&
         seg.segment[0] > this.video.currentTime - 0.3 &&
         seg.segment[1] > this.video.currentTime - 0.3
     );
@@ -326,6 +343,7 @@ class SponsorBlockHandler {
     );
 
     this.nextSkipTimeout = setTimeout(() => {
+      if (!this.active) return;
       if (this.video.paused) {
         console.info(this.videoID, 'Currently paused, ignoring...');
         return;
@@ -337,6 +355,11 @@ class SponsorBlockHandler {
           segment.category,
           'is not skippable, ignoring...'
         );
+        return;
+      }
+      const target = skipTargetFor(segment, this.video.duration);
+      if (!target) {
+        console.info(this.videoID, 'Segment is outside playable media, ignoring...');
         return;
       }
 
@@ -370,9 +393,10 @@ class SponsorBlockHandler {
         if (configRead('enableSponsorBlockToasts')) {
           showToast('SponsorBlock', t('sponsorblock.toasts.skipping', { segment: skipName }));
         }
-        if (this.video.duration - end < 1) {
-          this.video.currentTime = end - 1;
-        } else this.video.currentTime = end;
+        this.handledSegments.set(segmentKey(segment), target.start);
+        if (this.video.duration - target.end < 1) {
+          this.video.currentTime = target.end - 1;
+        } else this.video.currentTime = target.end;
         this.scheduleSkip();
       }
     }, (start - this.video.currentTime) * 1000);
@@ -423,7 +447,12 @@ class SponsorBlockHandler {
     }
 
     this.skippedCategories.clear();
+    this.handledSegments.clear();
   }
+}
+
+function segmentKey(segment) {
+  return `${segment.UUID || ''}|${segment.category}|${segment.segment[0]}|${segment.segment[1]}`;
 }
 
 // Route changes and setting changes are independent from YouTube playback. A
@@ -476,3 +505,5 @@ configChangeEmitter.addEventListener('configChange', (event) => {
 });
 
 syncSponsorBlock();
+
+export { SponsorBlockHandler };

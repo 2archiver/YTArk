@@ -16,7 +16,6 @@ ROOT = Path(__file__).resolve().parents[1]
 VERSION_FILE = ROOT / "release" / "version.properties"
 APP_ID = "io.github.twoarchiver.ytark"
 APP_NAME = "YTArk"
-RELEASE_NAME = "YTArk 2.1"
 CLEAN_VERSION_PATTERN = re.compile(r"^(?P<major>0|[1-9]\d*)\.(?P<minor>0|[1-9]\d*)\.(?P<patch>0|[1-9]\d*)$")
 HISTORICAL_VERSION_PATTERN = re.compile(
     r"^(?P<semver>\d+\.\d+\.\d+)-(?P<channel>ytark|personal)\.(?P<serial>[1-9]\d*)$"

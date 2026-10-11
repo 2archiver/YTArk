@@ -71,41 +71,30 @@ on a named device.
 
 ## What changed in this release
 
-- **The Premium wordmark is now the real vector artwork.** The previous release
-  drew the lettering with the frontend font as an approximation. This build
-  bundles the exact 2024 YouTube Premium lockup from Wikimedia Commons — the
-  original \`viewBox\` (101×20), the red play emblem, its white triangle and all
-  seven lettering paths are used byte-for-byte as path geometry. Nothing is
-  retyped, no font is substituted, no raster preview is used, and no runtime
-  request is made for the asset: the geometry ships inside \`userScript.js\`.
-  Provenance, retrieval date, revision SHA-1 and the bundled SHA-256 are recorded
-  in \`TizenTube/mods/assets/youtube-premium-logo-2024.provenance.json\` and in
-  \`NOTICE.md\`.
-- **Dark and light headers are handled correctly.** The emblem keeps its literal
-  source paint in both themes (the red stays red, the triangle stays white) and
-  only the lettering follows the native header foreground, resolved from the live
-  Leanback header colour on first mount and on theme changes. The stylesheet
-  applies no filter and no inversion, the background stays transparent, and the
-  artwork scales as vector geometry at 720p, 1080p and 4K.
-- **The cosmetic toggle still restores the stock header exactly.** The setting
-  keeps its saved preference, mounting stays idempotent, and turning it off
-  restores the native artwork byte-for-byte.
-- **ARMv7-only releases.** From this version YTArk builds, signs, verifies and
-  publishes exactly one APK: 32-bit ARM \`armeabi-v7a\`. The ARM64 job, its
-  download, its release asset and the ARM64 documentation were removed from the
-  active pipeline; historical releases keep their assets untouched. The updater
-  selects the ARMv7 asset by name and metadata (never by asset order), refuses
-  the legacy ARM64 asset, and checks Android's supported ABI list before any
-  download.
-- **Clearer unsupported-device message.** Android systems that accept only
-  64-bit applications cannot install these releases. A 64-bit CPU by itself does
-  not mean the Android userspace runs 32-bit native code, so the app reports the
-  ABI check result (\`ro.product.cpu.abilist\`) instead of failing later at
-  install time.
-- **Settings → YTArk Updates keeps its real states** — installed version,
-  checking, up to date, available update with size and notes, download progress,
-  verification, installer hand-off, cancellation and actionable failures — and a
-  failed check is never displayed as "up to date".
+- **Maintenance and UX release on TizenTubeCobalt `${BASE_TAG}`.** YTArk 2.2 keeps the
+  2.1.2 runtime and the TizenTubeCobalt v2.0.2 ARMv7 base. It is not a newer
+  Cobalt engine, not a newer YouTube client, and not an official YouTube upgrade.
+- **SponsorBlock lookups are bounded.** Segment lookups have a real deadline that
+  covers both the response and the body. Malformed numbers, reversed ranges and
+  late responses are discarded, so they cannot change the video that is playing.
+- **YTArk Updates card.** Settings → YTArk Updates shows the installed version,
+  the latest stable release, and a plain status (checking, up to date, update
+  available, or couldn't check). When this build cannot install updates itself,
+  it shows the official release page with a QR code. Install by downloading the
+  ARMv7 APK from that page.
+- **Premium wordmark (cosmetic).** The header uses the bundled vector artwork and
+  follows the light and dark theme. It is a cosmetic preference, not a
+  subscription, and it grants no Premium entitlement.
+- **ARMv7-only releases.** This version publishes exactly one APK: 32-bit ARM
+  `armeabi-v7a`. There is no ARM64 or universal asset. The updater checks
+  Android's supported ABI list before offering a download.
+- **Clearer unsupported-device message.** A 64-bit CPU by itself does not mean
+  the Android userspace runs 32-bit native code, so the app reports the ABI check
+  result instead of failing later at install time.
+- **Native updater status.** The native updater code (PackageInstaller hand-off
+  with user confirmation) is bundled in this APK. Its device path is **not yet
+  verified** for this release, so these notes do not claim automatic prompts.
+  Installs are always user-confirmed; YTArk never installs silently.
 
 ## Choose and install the APK
 
@@ -126,25 +115,12 @@ For updates, use the YTArk update screen or install the same package/signer
 build over the existing app; do not uninstall as a default troubleshooting step.
 App data, cookies and the Google session are preserved by an in-place update.
 
-## Automatic update prompts
+## Update checks and installs
 
-YTArk checks the official stable GitHub release metadata over HTTPS when the
-Android app starts and every six hours while it runs; the update screen
-discloses this and **Later** snoozes prompts for 24 hours. The native updater
-reads the ABI embedded in the installed APK, confirms Android still supports it,
-selects the ARMv7 asset from the validated file name and metadata (never from
-asset order), verifies the exact official URL, size, SHA-256, package identity,
-native library ABI and pinned certificate, and then opens Android's standard
-PackageInstaller. The user must choose **Install Update** and approve Android's
-confirmation. YTArk never installs silently and does not grant unknown-app
-permission automatically. Cancelling the installer is recoverable.
-
-An in-place update requires the same package ID and signing certificate. This
-repository intentionally uses Hearth's public community signing key: certificate
-continuity does not prove publisher identity. Install only release assets from
-the official YTArk repository. An installation that was updated from an older
-dual-ABI release whose native code is \`arm64-v8a\` receives no automatic
-update — cross-ABI migration is unsupported and the app reports it instead.
+Settings → YTArk Updates checks the official stable release metadata over HTTPS.
+Installs are user-confirmed only. The bundled native updater's own prompt and
+PackageInstaller path are **pending device verification** for this release (see
+the runtime status above). Until that is recorded, use the official release page.
 
 ## Upstream YouTube runtime
 
@@ -174,7 +150,7 @@ cp NOTICE.md release-assets/NOTICE.md
 REPO_URL="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 EXISTING_RELEASES_JSON="$(mktemp "${RUNNER_TEMP:-/tmp}/ytark-existing-releases.XXXXXX.json")"
 gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" > "$EXISTING_RELEASES_JSON"
-EXISTING_IDS="$(python3 - "$EXISTING_RELEASES_JSON" "$VERSION_TAG" <<'PYRELEASE'
+python3 - "$EXISTING_RELEASES_JSON" "$VERSION_TAG" <<'PYRELEASE'
 import json
 import sys
 
@@ -183,36 +159,12 @@ with open(path, encoding="utf-8") as stream:
     releases = json.load(stream)
 for release in releases:
     if release.get("tag_name") == tag:
-        if not release.get("draft"):
-            raise SystemExit(f"Refusing to replace already-published stable release {tag}")
-        print(release.get("id", ""))
+        # Never replace a release: a published one is final, and a draft from an
+        # earlier run needs an explicit owner decision before it is removed.
+        state = "draft" if release.get("draft") else "published"
+        raise SystemExit(f"Release {tag} already exists ({state}); refusing to replace it")
 PYRELEASE
-)"
 rm -f "$EXISTING_RELEASES_JSON"
-for rel_id in $EXISTING_IDS; do
-  if [ -n "$rel_id" ]; then
-    gh api --method DELETE "repos/$GITHUB_REPOSITORY/releases/$rel_id"
-    echo "Removed existing draft $rel_id for $VERSION_TAG before creating a new draft."
-  fi
-done
-
-publish_clean_release_tag() {
-  local tag_dir
-  tag_dir="$(mktemp -d "${RUNNER_TEMP:-/tmp}/ytark-release-tag.XXXXXX")"
-  cp NOTICE.md release-notes.md "$tag_dir/"
-  (
-    cd "$tag_dir"
-    git init -q
-    git config user.name "github-actions[bot]"
-    git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-    git add NOTICE.md release-notes.md
-    git commit -qm "YTArk release ${VERSION_TAG} (${GITHUB_SHA})"
-    git tag "$VERSION_TAG"
-    git push -q --force "$REPO_URL" "refs/tags/${VERSION_TAG}"
-  )
-  rm -rf "$tag_dir"
-  echo "Published release tag $VERSION_TAG."
-}
 
 create_draft_release() {
   local target_args=("$@")
@@ -229,18 +181,17 @@ create_draft_release() {
     release-assets/NOTICE.md
 }
 
-if git ls-remote --exit-code --tags "$REPO_URL" "refs/tags/$VERSION_TAG" >/dev/null 2>&1; then
-  if ! create_draft_release; then
-    echo "Existing tag $VERSION_TAG could not be used directly; refreshing release tag."
-    publish_clean_release_tag
-    create_draft_release
-  fi
+# Release tags are never moved or force-pushed. If the tag already exists it must
+# already point at the reviewed commit; otherwise a new tag is created at it.
+existing_tag_commit="$(git ls-remote "$REPO_URL" "refs/tags/$VERSION_TAG^{}" | awk '{print $1}')"
+if [ -n "$existing_tag_commit" ]; then
+  [ "$existing_tag_commit" = "$GITHUB_SHA" ] || {
+    echo "Tag $VERSION_TAG points at $existing_tag_commit, not the reviewed commit $GITHUB_SHA; refusing." >&2
+    exit 1
+  }
+  create_draft_release
 else
-  if ! create_draft_release --target "$GITHUB_SHA"; then
-    echo "Direct commit target requires elevated workflow permissions; publishing clean release tag $VERSION_TAG."
-    publish_clean_release_tag
-    create_draft_release
-  fi
+  create_draft_release --target "$GITHUB_SHA"
 fi
 echo "Created draft release $VERSION_TAG with the single ARMv7 candidate."
 echo "Do not publish until device installation, launch, navigation, playback, and same-ABI update acceptance tests are recorded."

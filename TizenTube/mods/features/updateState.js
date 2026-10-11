@@ -383,3 +383,16 @@ export function describeState(state) {
       return 'Ready to check the official YTArk stable release.';
   }
 }
+
+export const RELEASES_PAGE = 'https://github.com/2archiver/YTArk/releases';
+export const LATEST_RELEASE_PAGE = `${RELEASES_PAGE}/latest`;
+
+/**
+ * Official, human-openable release page for the manual-install fallback.
+ * Only a clean vX.Y.Z tag is turned into a tag URL; anything else falls back
+ * to the latest stable release page so the link never points at a guess.
+ */
+export function officialReleasePageUrl(tag) {
+  const clean = typeof tag === 'string' && /^v\d+\.\d+\.\d+$/.test(tag);
+  return clean ? `${RELEASES_PAGE}/tag/${tag}` : LATEST_RELEASE_PAGE;
+}
