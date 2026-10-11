@@ -134,18 +134,19 @@ jobs:
           fi
           echo "Built YTArk userscript: $(wc -c < ../dist/userScript.js) bytes, sha256 $(sha256sum ../dist/userScript.js | cut -d' ' -f1)"
 
+      - name: Load release version
+        run: python3 tools/validate_release.py emit-env --file "$GITHUB_ENV"
+
       - name: Bind the APK to the immutable userscript URL (no tag is created here)
         run: |
           set -euo pipefail
-          # The APK loads its script from ${SCRIPT_TAG}. The tag is published only
-          # by publish-release.yml, from these exact bytes, after review.
-          python3 tools/validate_release.py emit-env --file "$GITHUB_ENV"
+          # GITHUB_ENV is available only in subsequent steps, never in the step
+          # that writes it. The preceding step provides SCRIPT_TAG here.
+          # The tag is published only by publish-release.yml after review.
           test -n "${SCRIPT_TAG:-}"
-          echo "SCRIPT_URL=https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@${SCRIPT_TAG}/userScript.js?v=" >> "$GITHUB_ENV"
-          echo "Candidate APK script URL: $SCRIPT_URL (tag publication is a separate, gated step)"
-
-      - name: Load release version
-        run: python3 tools/validate_release.py emit-env --file "$GITHUB_ENV"
+          script_url="https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@${SCRIPT_TAG}/userScript.js?v="
+          echo "SCRIPT_URL=$script_url" >> "$GITHUB_ENV"
+          echo "Candidate APK script URL: $script_url (tag publication is a separate, gated step)"
 
       - name: Install Android build tools and validate release inputs
         env:
