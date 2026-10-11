@@ -320,6 +320,12 @@ class Scenario:
                 if key == "make_latest":
                     continue
                 self.release[key] = value
+            if "tag_name" not in body:
+                # GitHub treats a PATCH on a draft without tag_name as "unbind
+                # the tag": the release becomes untagged-<hash>.
+                self.release["tag_name"] = "untagged-" + sha256(
+                    json.dumps(body).encode()
+                )[:20]
             return Response(200, public(self.release))
         if method == "POST" and url.endswith("/git/refs"):
             body = json.loads((request.data or b"{}").decode())
@@ -742,6 +748,17 @@ class PublicationTests(PublishReleaseTestCase):
             sorted(call[1] for call in scenario.calls if call[0] == "upload"),
             sorted(ALL_ASSETS),
         )
+
+    def test_every_release_update_re_sends_the_tag(self):
+        """A PATCH without tag_name unbinds the tag from a draft; it must not happen."""
+        result, scenario = self.run_publish(None)
+        self.assertEqual(result, 0)
+        edits = [call for call in scenario.calls if call[0] == "edit"]
+        self.assertTrue(edits, "the release is updated before it is promoted")
+        for edit in edits:
+            self.assertIn(f"--tag_name={CONFIG['VERSION_TAG']}", " ".join(edit), edit)
+        self.assertEqual(scenario.release["tag_name"], CONFIG["VERSION_TAG"])
+        self.assertFalse(scenario.release["draft"])
 
     def test_a_stray_untagged_draft_is_recovered_and_replaced(self):
         """A draft no tag lookup can find must still be replaced, not duplicated."""

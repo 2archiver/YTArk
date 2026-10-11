@@ -81,22 +81,37 @@ tag-keyed upload (for example `gh release upload v2.2.0 …`) cannot stage asset
 on an unpublished release. This bit the 2.2 release once; it is now covered by
 `test_assets_are_uploaded_by_release_id_not_by_tag`.
 
-The git tag is created and verified **before** the release, and a release whose
-tag GitHub rewrote is deleted and recreated after a longer settle (default 90s,
-then 180s). Three failure modes made this necessary:
+## Keeping the release bound to its tag
 
-- GitHub silently renames a release to `untagged-<sha>` when it cannot create
-  the requested tag, which breaks the immutable version binding without any
-  error. Deleting a release also deletes its tag, and recreating that tag
-  seconds later is what makes GitHub fall back to the synthetic name, so a
-  stale draft is now **restaged in place** instead of deleted and recreated.
-- A tag that was created or moved moments before the release is created is not
-  always resolved by GitHub's release service, which then silently renames the
-  release to `untagged-<sha>`. The tag is therefore written first and given time
-  to settle before the release is created.
+A release update must always re-send `tag_name`. GitHub treats a `PATCH` on a
+*draft* that omits it as "unbind the tag": the release keeps its assets but its
+tag becomes a synthetic `untagged-<hash>` that no tag lookup resolves, that
+`release/version.properties` no longer matches, and that no amount of waiting
+repairs. Reproduced live while fixing 2.2:
+
+```
+POST  /releases {tag_name: v2.2.0, draft: true}   -> tag_name v2.2.0
+PATCH /releases/1 {name, body}                    -> tag_name untagged-64af2e6bffd2f608a6c7
+PATCH /releases/1 {tag_name: v2.2.0, name, body}  -> tag_name v2.2.0
+```
+
+Every 2.2 publish run staged the draft correctly, then lost the tag when it
+refreshed the release notes, and was refused by validation for exactly that
+reason. `edit_release()` therefore takes the tag and sends it on every update,
+and `test_every_release_update_re_sends_the_tag` fails if it is dropped again.
+
+Two safeguards surround it:
+
+- The git tag is created and verified at the reviewed commit **before** the
+  release, and a draft that still comes back with a rewritten tag is discarded
+  and recreated instead of being left behind (`--tag-settle-seconds` can give a
+  freshly written tag time to settle if GitHub is slow to resolve it).
 - A draft that no tag lookup can find any more (because its tag was rewritten)
   is recovered by shape — the expected release name, or holding one of the
   required asset names — so an interrupted run never leaves a duplicate draft.
+  A stale draft whose tag is still correct is **restaged in place**: its staged
+  assets are deleted and the verified bytes are uploaded to the same release,
+  which avoids the tag churn of deleting and recreating releases.
 
 Rules that never change:
 
