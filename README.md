@@ -316,8 +316,22 @@ python3 tools/check_no_secrets.py --history    # no key material in tree or hist
 
 A complete APK build additionally needs Java 17, Android SDK platform/build
 tools, Apktool, OpenSSL, GitHub access, and the pinned public community
-keystore. Update `release/version.properties` for each release; the serial
-increases monotonically and determines `versionCode` as `20000 + serial`.
+keystore. Update `release/version.properties` for the next release: it is the
+only place that defines `versionName`, `displayVersion`, `versionCode`,
+`versionTag` and the immutable userscript `scriptTag` (a new revision is needed
+whenever the bundle bytes change; published tags are never moved). The
+`versionCode` follows `major * 1_000_000 + minor * 10_000 + patch * 100`, and CI
+refuses any candidate that is not above every published installable build.
+
+Release runs are triggered by pushes to `main`, or manually from the Actions
+tab. A manual run defaults to **candidate only** (`publish: false`): it builds
+and validates both APKs, publishes the immutable userscript tag, and leaves the
+release as a **draft** so it can be installed and exercised on a device without
+being offered to other users. Promote it by running the workflow again with
+`publish: true`, or by merging to `main`. Record the device results in
+[`docs/RUNTIME-CHECKLIST.md`](docs/RUNTIME-CHECKLIST.md) before promoting; the
+updater ignores drafts and prereleases, so a candidate draft is never offered as
+an update.
 
 ## Support and upstream attribution
 
