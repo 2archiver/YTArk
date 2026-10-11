@@ -167,19 +167,20 @@ public final class UpdateReleaseContractTest {
         metadata.setProperty("url", "https://github.com/2archiver/YTArk/releases/download/" + TAG + "/" + ARMV7_APK);
         metadata.setProperty("sha256", SHA256.toUpperCase());
         metadata.setProperty("size", "4096");
-        metadata.setProperty("abi", "arm64-v8a");
+        // A resumed ARMv7 download records the ARMv7 ABI, not the legacy one.
+        metadata.setProperty("abi", "armeabi-v7a");
         assertTrue(UpdateResumeContract.metadataMatches(metadata, ARMV7_APK,
-                metadata.getProperty("url"), SHA256, 4096L, "arm64-v8a"), "matching resume metadata");
+                metadata.getProperty("url"), SHA256, 4096L, "armeabi-v7a"), "matching resume metadata");
+        assertFalse(UpdateResumeContract.metadataMatches(metadata, "YTArk-v2.1.1-armv7.apk",
+                metadata.getProperty("url"), SHA256, 4096L, "armeabi-v7a"), "different asset rejects resume");
         assertFalse(UpdateResumeContract.metadataMatches(metadata, ARMV7_APK,
-                metadata.getProperty("url"), SHA256, 4096L, "arm64-v8a"), "different asset rejects resume");
+                metadata.getProperty("url") + "?redirect=1", SHA256, 4096L, "armeabi-v7a"), "different URL rejects resume");
         assertFalse(UpdateResumeContract.metadataMatches(metadata, ARMV7_APK,
-                metadata.getProperty("url") + "?redirect=1", SHA256, 4096L, "arm64-v8a"), "different URL rejects resume");
+                metadata.getProperty("url"), SHA256_B, 4096L, "armeabi-v7a"), "different digest rejects resume");
         assertFalse(UpdateResumeContract.metadataMatches(metadata, ARMV7_APK,
-                metadata.getProperty("url"), SHA256_B, 4096L, "arm64-v8a"), "different digest rejects resume");
+                metadata.getProperty("url"), SHA256, 4097L, "armeabi-v7a"), "different size rejects resume");
         assertFalse(UpdateResumeContract.metadataMatches(metadata, ARMV7_APK,
-                metadata.getProperty("url"), SHA256, 4097L, "arm64-v8a"), "different size rejects resume");
-        assertFalse(UpdateResumeContract.metadataMatches(metadata, ARMV7_APK,
-                metadata.getProperty("url"), SHA256, 4096L, "armeabi-v7a"), "different ABI rejects resume");
+                metadata.getProperty("url"), SHA256, 4096L, "arm64-v8a"), "different ABI rejects resume");
 
         assertTrue(UpdateResumeContract.shouldAppend(1024L, 206), "partial response appends existing bytes");
         assertFalse(UpdateResumeContract.shouldAppend(1024L, 200), "full response restarts rather than appends");
