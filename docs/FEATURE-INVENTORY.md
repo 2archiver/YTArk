@@ -1,7 +1,7 @@
 # YTArk feature inventory (regression checklist)
 
 Derived from the current source (`TizenTube/mods/config.js` defaults and
-`TizenTube/mods/features`, `ui`, `resolveCommand.js`) for the 2.3.0 candidate.
+`TizenTube/mods/features`, `ui`, `resolveCommand.js`) for the 2.4.0 candidate.
 "Code" means the feature is implemented in the bundled userscript and covered by
 a source-level test where noted. "Device" means a physical TV run is recorded;
 **no device run has been recorded for this candidate**, so every device column is
@@ -11,7 +11,7 @@ Base: TizenTubeCobalt `v2.0.2` (Cobalt runtime and YouTube TV frontend are the
 upstream ones, unchanged). YTArk adds the userscript layer and native updater.
 The complete version history is in [`CHANGELOG.md`](../CHANGELOG.md).
 
-## 2.3.0 candidate: what each claim is backed by
+## 2.4.0 candidate: what each claim is backed by
 
 Three separate columns, never merged. **Source implemented** means the code exists
 in this repository. **Packaged / CI verified** means a named CI gate or the candidate
@@ -20,7 +20,11 @@ APK. Only the first two can be true before a device run.
 
 | Claim | Source implemented | Packaged / CI verified | Device tested |
 |---|---|---|---|
-| Version 2.3.0 / versionCode 2030000 / `v2.3.0` / `s22` metadata | Yes (`release/version.properties`) | `ci.yml` grep checks, `validate_release.py`, release contract tests | NOT RUN |
+| Version 2.4.0 / versionCode 2040000 / `v2.4.0` / `s23` metadata | Yes (`release/version.properties`) | `ci.yml` grep checks, `validate_release.py`, release contract tests | NOT RUN |
+| Verdict-aware updater check (compatible / incompatible / unknown evidence, manual route + recovery) | Yes (`features/abiEvidence.js`, `features/updater.js`, `features/updateState.js`) | `abi-evidence.test.mjs`, `updates-settings.test.mjs`, `update-state.test.mjs` | NOT RUN |
+| Settings categories (Playback, Appearance, Privacy, Navigation) with preserved setting ids | Yes (`ui/settingsRegistry.js`) | `settings-search.test.mjs`, `guide-entry.test.mjs` | NOT RUN |
+| YTArk entry in the guide (default on, one per guide load, survives hiding/reordering) | Yes (`ui/customGuideAction.js`) | `guide-entry.test.mjs` | NOT RUN |
+| Premium wordmark lifecycle (scoped observers, restored detached hosts, no duplicate mounts) | Yes (`features/premiumBranding.js`) | `premium-branding-lifecycle.test.mjs`, `premium-branding-a11y.test.mjs` | NOT RUN |
 | OLED Black theme; custom colours preserved; Premium wordmark composition | Yes (`ui/theme.js`, `ui/appearanceStyles.js`, `ui/themeTokens.js`) | `appearance-theme.test.mjs`; bundle grep | NOT RUN |
 | Remove player dimming (scrim only; idle dimming independent) | Yes (`ui/appearanceStyles.js`) | `appearance-theme.test.mjs` | NOT RUN |
 | Hide channel watermark (renderer removal, recoverable original, player-scoped DOM net) | Yes (`features/playerWatermark.js`, `features/adblock.js`) | `player-watermark.test.mjs`; bundle grep | NOT RUN |

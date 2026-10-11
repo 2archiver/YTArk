@@ -632,6 +632,40 @@ class PublicationTests(PublishReleaseTestCase):
         )
         self.assertEqual(len([call for call in scenario.calls if call[0] == "delete"]), 0)
 
+    def test_re_downloaded_public_bytes_are_checked_under_their_published_names(self):
+        """Static checks on the public release must see the exact published
+        basenames.
+
+        ``validate_apk`` rejects any other file name and ``check_checksums``
+        keys the SHA256SUMS.txt entries by basename, so the scratch names used
+        for the re-downloaded copies must never leak into those checks. Before
+        this fix a successful publication reported a failed run with
+        "Expected APK filename YTArk-v<version>-armv7.apk, got
+        published-YTArk-v<version>-armv7.apk" (the 2.3/2.4 re-verify failure).
+        """
+        published = release_payload(draft=False, body=identity_body(self.candidate))
+
+        def fake_validate_apk(path, architecture, expected_cert_file, aapt, apksigner):
+            # The same filename contract as validate_release.validate_apk,
+            # without needing aapt/apksigner binaries in the test environment.
+            config = validate_release.load_config()
+            expected_name = config[validate_release.ARCHITECTURES[architecture]["key"]]
+            if Path(path).name != expected_name:
+                raise ValueError(
+                    f"Expected APK filename {expected_name}, got {Path(path).name}"
+                )
+
+        with patch.object(validate_release, "validate_apk", fake_validate_apk), \
+             patch.object(publish_release, "verify_script_binding", lambda *a, **k: None):
+            # Real check_checksums runs against the real re-downloaded bytes:
+            # the fake release serves exactly the digests its SHA256SUMS.txt
+            # records, so only the file *names* can make it fail here.
+            result, _scenario = self.run_publish(
+                published, candidate_dir="", manifest="", run_id="999999999",
+                skip_static_checks=False,
+            )
+        self.assertEqual(result, 0)
+
     def test_repair_still_refuses_to_take_bytes_from_the_release(self):
         """Only a verify-only run may use the release as its own reference."""
         incomplete = release_payload(
@@ -701,7 +735,7 @@ class PublicationTests(PublishReleaseTestCase):
             self.run_publish(None, scenario=scenario)
         self.assertIn("asset upload refused", str(caught.exception))
         version, code = publish_release.next_patch_version(CONFIG)
-        self.assertEqual((version, code), ("2.3.1", 2030100))
+        self.assertEqual((version, code), ("2.4.1", 2040100))
 
     def test_repair_refuses_a_rebuild_that_disagrees_with_published_checksums(self):
         published = release_payload(
@@ -715,7 +749,7 @@ class PublicationTests(PublishReleaseTestCase):
                 manifest=str(rebuilt.manifest), run_id=rebuilt.run_id,
             )
         self.assertIn("next patch version", str(caught.exception))
-        self.assertIn("2030100", str(caught.exception))
+        self.assertIn("2040100", str(caught.exception))
 
     def test_repair_guard_rejects_bytes_the_published_checksums_refuse(self):
         """The published checksum file decides whether a rebuild may repair an APK."""

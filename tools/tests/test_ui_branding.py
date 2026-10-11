@@ -110,6 +110,10 @@ class YTArkUiBrandingTests(unittest.TestCase):
             "YTARK_CHANGELOG_SHOW",         # in-app changelog reader
             "v2.0.2-personal.14",           # oldest published release in the bundled history
             "configSchemaVersion",          # explicit settings migration marker
+            # 2.4 features must ship in the artefact, not only in the source.
+            "enableYtarkGuideEntry",        # YTArk entry in the guide toggle
+            "recheck-arch",                 # re-detect device architecture action
+            "Could not confirm this device",  # unknown-ABI status, never "unsupported"
         ):
             self.assertIn(needle, built)
         self.assertNotIn("Personal Tube TV", built, "deprecated branding in the bundle")

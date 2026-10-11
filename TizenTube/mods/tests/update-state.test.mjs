@@ -201,6 +201,16 @@ describe('stable release validation', () => {
     assert.equal(release.abiVerdict, 'incompatible');
   });
 
+  test('a compatible verdict with unmappable architecture evidence is refused, never guessed', () => {
+    for (const architecture of ['', 'arm64-v8a', 'x86', 'aarch64']) {
+      const { error, release } = validateReleasePayload(releaseFixture(), {
+        installedVersion: '2.1.1', architecture, abiVerdict: 'compatible',
+      });
+      assert.equal(release, undefined, `no release is offered for architecture ${JSON.stringify(architecture)}`);
+      assert.match(error, /inconsistent architecture evidence/);
+    }
+  });
+
   test('never selects a legacy ARM64 asset, even when it is present', () => {
     const fixture = releaseFixture({
       assets: [
