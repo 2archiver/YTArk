@@ -95,6 +95,22 @@ class ImmutableRelease(ReleaseError):
 # --------------------------------------------------------------------------- #
 
 
+class _RedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Follow redirects without leaking the API token to the asset CDN."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        redirected = super().redirect_request(req, fp, code, msg, headers, newurl)
+        if redirected is None:
+            return None
+        old_host = urllib.parse.urlsplit(req.full_url).hostname
+        new_host = urllib.parse.urlsplit(newurl).hostname
+        if new_host and new_host != old_host:
+            for header in ("Authorization", "authorization"):
+                redirected.headers.pop(header, None)
+                redirected.unredirected_hdrs.pop(header, None)
+        return redirected
+
+
 @dataclass
 class Response:
     status: int
@@ -125,7 +141,8 @@ class GitHub:
 
     def _default_transport(self, request: urllib.request.Request) -> Response:
         try:
-            with urllib.request.urlopen(request, timeout=120) as raw:
+            opener = urllib.request.build_opener(_RedirectHandler)
+            with opener.open(request, timeout=120) as raw:
                 return Response(
                     status=int(raw.status),
                     headers={key.lower(): value for key, value in raw.headers.items()},
@@ -154,6 +171,7 @@ class GitHub:
         data: Any = None,
         headers: dict[str, str] | None = None,
         retries: int | None = None,
+        anonymous: bool = False,
     ) -> Response | None:
         url = path if path.startswith("http") else f"{self.api_url}{path}"
         if params:
@@ -166,7 +184,7 @@ class GitHub:
             request.add_header("Accept", accept)
             request.add_header("X-GitHub-Api-Version", "2022-11-28")
             request.add_header("User-Agent", "ytark-release-publisher")
-            if self.token:
+            if self.token and not anonymous:
                 request.add_header("Authorization", f"Bearer {self.token}")
             for name, value in (headers or {}).items():
                 request.add_header(name, value)
@@ -424,13 +442,25 @@ class GitHub:
         asset_id = asset.get("id")
         if not asset_id:
             raise ReleaseError(f"Release asset {asset.get('name')!r} has no id")
-        response = self.request(
-            "GET",
-            f"/repos/{self.repository}/releases/assets/{asset_id}",
-            accept="application/octet-stream",
-        )
+        path = f"/repos/{self.repository}/releases/assets/{asset_id}"
+        try:
+            response = self.request("GET", path, accept="application/octet-stream")
+        except GitHubApiError as error:
+            if error.status != 403:
+                raise
+            # GitHub's asset CDN refuses a request that carries an API token;
+            # a published asset is readable without one.
+            response = self.request(
+                "GET", path, accept="application/octet-stream", anonymous=True
+            )
         if response is None or not response.body:
             raise ReleaseError(f"Release asset {asset.get('name')!r} downloaded empty")
+        expected_size = int(asset.get("size", 0) or 0)
+        if expected_size and len(response.body) != expected_size:
+            raise ReleaseError(
+                f"Release asset {asset.get('name')!r} downloaded {len(response.body)} "
+                f"bytes instead of {expected_size}"
+            )
         destination.parent.mkdir(parents=True, exist_ok=True)
         destination.write_bytes(response.body)
         return destination
