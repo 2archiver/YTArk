@@ -259,6 +259,11 @@ is ever committed here; CI scans the tree and full history for secret material.
   cannot stream the native download percentage. Live download/verify progress
   and the installer hand-off stay on the native **YTArk Updates** screen; the
   settings card is honest about that instead of faking a progress bar.
+- The updater follows Hearth's rules (canonical release endpoint, numeric
+  versionCode, mandatory integrity metadata, same-ABI asset, installer
+  confirmation) but not every Hearth feature; the source-inspected comparison
+  and the deliberate differences are in
+  [`docs/UPDATES-PARITY.md`](docs/UPDATES-PARITY.md).
 - The physical-device acceptance run (install, launch, guest/sign-in, playback,
   D-pad, toggling the cosmetic logo in both themes, same-ABI in-place update) is
   recorded per device in the release notes. Until it is recorded for a build,
