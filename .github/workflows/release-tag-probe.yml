@@ -1,0 +1,100 @@
+# TEMPORARY diagnostic workflow: find out why GitHub rewrites the release tag.
+# Not part of the release pipeline; deleted once the question is answered.
+name: Release tag probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      case:
+        description: "A=tag then release, B=no tag, C=tag+upload, D=real v2.2.0, E=real v2.2.0 with wait"
+        required: true
+        default: "D"
+      wait:
+        description: "Seconds to wait between creating/moving the tag and creating the release"
+        required: true
+        default: "0"
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Probe
+        run: |
+          set -euo pipefail
+          REPO="$GITHUB_REPOSITORY"
+          HEAD="${GITHUB_SHA}"
+          CASE="${{ inputs.case }}"
+          WAIT="${{ inputs.wait }}"
+          echo "case=$CASE wait=${WAIT}s head=$HEAD"
+
+          tag_sha() { gh api "repos/$REPO/git/ref/tags/$1" --jq .object.sha 2>/dev/null || echo none; }
+          make_tag() {  # <tag> <sha>
+            if [ "$(tag_sha "$1")" = "none" ]; then
+              gh api -X POST "repos/$REPO/git/refs" -f "ref=refs/tags/$1" -f "sha=$2" --jq .ref
+            else
+              gh api -X PATCH "repos/$REPO/git/refs/tags/$1" -f "sha=$2" -F force=true --jq .ref
+            fi
+          }
+          make_release() { # <tag> <sha> <name>
+            gh api -X POST "repos/$REPO/releases" \
+              -f "tag_name=$1" -f "target_commitish=$2" -f "name=$3" \
+              -f "body=probe body for $1" -F draft=true --jq '{id, tag_name}'
+          }
+          cleanup() { # <tag> <release-id>
+            gh api -X DELETE "repos/$REPO/releases/$2" >/dev/null 2>&1 || true
+            gh api -X DELETE "repos/$REPO/git/refs/tags/$1" >/dev/null 2>&1 || true
+          }
+
+          case "$CASE" in
+            A)
+              TAG="v2.2.0-probeA"
+              make_tag "$TAG" "$HEAD"
+              REL="$(make_release "$TAG" "$HEAD" "probe A")"
+              echo "create: $REL"
+              ID="$(echo "$REL" | python3 -c 'import json,sys;print(json.load(sys.stdin)["id"])')"
+              sleep "$WAIT"; sleep 5
+              echo "after: $(gh api "repos/$REPO/releases/$ID" --jq .tag_name)"
+              cleanup "$TAG" "$ID"
+              ;;
+            B)
+              TAG="v2.2.0-probeB"
+              REL="$(make_release "$TAG" "$HEAD" "probe B")"
+              echo "create: $REL"
+              ID="$(echo "$REL" | python3 -c 'import json,sys;print(json.load(sys.stdin)["id"])')"
+              sleep "$WAIT"; sleep 5
+              echo "after: $(gh api "repos/$REPO/releases/$ID" --jq .tag_name)"
+              cleanup "$TAG" "$ID"
+              ;;
+            C)
+              TAG="v2.2.0-probeC"
+              make_tag "$TAG" "$HEAD"
+              REL="$(make_release "$TAG" "$HEAD" "probe C")"
+              ID="$(echo "$REL" | python3 -c 'import json,sys;print(json.load(sys.stdin)["id"])')"
+              echo "create: $REL"
+              head -c 20000000 /dev/urandom > "$RUNNER_TEMP/big.bin"
+              gh api -X POST "https://uploads.github.com/repos/$REPO/releases/$ID/assets?name=big.bin" \
+                --header "Content-Type: application/octet-stream" --input "$RUNNER_TEMP/big.bin" --jq .name
+              sleep "$WAIT"; sleep 5
+              echo "after upload: $(gh api "repos/$REPO/releases/$ID" --jq .tag_name)"
+              cleanup "$TAG" "$ID"
+              ;;
+            D|E)
+              TAG="v2.2.0"
+              echo "tag before: $(tag_sha "$TAG")"
+              make_tag "$TAG" "$HEAD"
+              echo "tag now:    $(tag_sha "$TAG")"
+              sleep "$WAIT"
+              REL="$(make_release "$TAG" "$HEAD" "YTArk 2.2")"
+              ID="$(echo "$REL" | python3 -c 'import json,sys;print(json.load(sys.stdin)["id"])')"
+              echo "create: $REL"
+              sleep 5;  echo "t+5s:  $(gh api "repos/$REPO/releases/$ID" --jq .tag_name)"
+              sleep 25; echo "t+30s: $(gh api "repos/$REPO/releases/$ID" --jq .tag_name)"
+              sleep 30; echo "t+60s: $(gh api "repos/$REPO/releases/$ID" --jq .tag_name)"
+              echo "tag after: $(tag_sha "$TAG")"
+              gh api -X DELETE "repos/$REPO/releases/$ID" >/dev/null 2>&1 || true
+              ;;
+          esac
