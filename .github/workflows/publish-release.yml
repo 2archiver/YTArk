@@ -279,12 +279,14 @@ jobs:
           ref: ${{ inputs.expected_head_sha }}
           persist-credentials: false
 
-      - name: Load release version and re-verify the draft
+      - name: Load release version
+        run: python3 tools/validate_release.py emit-env --file "$GITHUB_ENV"
+
+      - name: Re-verify the draft
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          python3 tools/validate_release.py emit-env --file "$GITHUB_ENV"
           gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
             | python3 -c '
           import json, sys
