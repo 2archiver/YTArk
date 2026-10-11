@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -132,6 +133,40 @@ class BundledAssetTests(unittest.TestCase):
         self.assertEqual(root.get("viewBox"), f"0 0 {logo.SOURCE_WIDTH} {logo.SOURCE_HEIGHT}")
 
 
+class FetchIdempotenceTests(unittest.TestCase):
+    """Re-running the pinned fetch must not rewrite an unchanged revision."""
+
+    def test_an_unchanged_revision_keeps_its_first_verification_date(self):
+        previous = {
+            "retrieved_sha1": logo.SOURCE_SHA1,
+            "sanitized_sha256": "a" * 64,
+            "retrieved_utc": "2026-10-11T05:04:55Z",
+        }
+        self.assertEqual(
+            logo.first_verified_retrieval_utc(
+                previous, logo.SOURCE_SHA1, "a" * 64, "2030-01-01T00:00:00Z"),
+            "2026-10-11T05:04:55Z")
+
+    def test_a_new_revision_or_sanitizer_change_records_a_new_date(self):
+        previous = {
+            "retrieved_sha1": logo.SOURCE_SHA1,
+            "sanitized_sha256": "a" * 64,
+            "retrieved_utc": "2026-10-11T05:04:55Z",
+        }
+        self.assertEqual(
+            logo.first_verified_retrieval_utc(
+                previous, "b" * 40, "a" * 64, "2030-01-01T00:00:00Z"),
+            "2030-01-01T00:00:00Z")
+        self.assertEqual(
+            logo.first_verified_retrieval_utc(
+                previous, logo.SOURCE_SHA1, "c" * 64, "2030-01-01T00:00:00Z"),
+            "2030-01-01T00:00:00Z")
+        self.assertEqual(
+            logo.first_verified_retrieval_utc(None, logo.SOURCE_SHA1, "a" * 64,
+                                               "2030-01-01T00:00:00Z"),
+            "2030-01-01T00:00:00Z")
+
+
 class GeneratedModuleTests(unittest.TestCase):
     """The runtime module must stay the bundled vector, never a redraw."""
 
@@ -164,6 +199,24 @@ class GeneratedModuleTests(unittest.TestCase):
         self.assertIn("paint: 'ink'", self.text)
         self.assertEqual(self.text.count("paint: 'ink'"), len(source_paths) - 2,
                          "exactly the lettering paths are ink-painted")
+
+    def test_module_is_independent_of_the_retrieval_timestamp(self):
+        """Re-running the pinned fetch must never move the userscript bytes."""
+        with tempfile.TemporaryDirectory() as temp:
+            temp_path = Path(temp)
+            provenance = json.loads(
+                (ASSET_DIR / "youtube-premium-logo-2024.provenance.json").read_text("utf-8"))
+            provenance["retrieved_utc"] = "1999-01-01T00:00:00Z"
+            provenance_path = temp_path / "provenance.json"
+            provenance_path.write_text(json.dumps(provenance, indent=2), encoding="utf-8")
+            out_path = temp_path / "generated.js"
+            subprocess.run(
+                [sys.executable, str(ROOT / "tools" / "build_logo_asset.py"),
+                 "--svg", str(ASSET_DIR / "youtube-premium-logo-2024.svg"),
+                 "--provenance", str(provenance_path), "--out", str(out_path)],
+                check=True, capture_output=True, text=True)
+            self.assertEqual(out_path.read_text(encoding="utf-8"), self.text,
+                             "the runtime module must not depend on the retrieval date")
 
     def test_module_carries_no_text_raster_or_external_reference(self):
         # Provenance URLs live in the leading comment block only. No executable

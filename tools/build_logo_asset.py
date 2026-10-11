@@ -139,7 +139,7 @@ def render_module(paths: list[dict], provenance: dict) -> str:
         "//",
         f"// Source page : {provenance['source_page']}",
         f"// Asset origin: {provenance['source_url']}",
-        f"// Retrieved   : {provenance['retrieved_utc']}",
+        "// Provenance  : TizenTube/mods/assets/youtube-premium-logo-2024.provenance.json",
         f"// Revision    : SHA-1 {provenance['retrieved_sha1']} "
         f"({provenance['retrieved_bytes']} bytes), bundled SHA-256 "
         f"{provenance['sanitized_sha256']}",
@@ -173,7 +173,10 @@ def render_module(paths: list[dict], provenance: dict) -> str:
         "  provenance: Object.freeze({",
         f"    sourcePage: {js_string(provenance['source_page'])},",
         f"    sourceUrl: {js_string(provenance['source_url'])},",
-        f"    retrievedUtc: {js_string(provenance['retrieved_utc'])},",
+        # The retrieval date is deliberately not bundled: it changes on every
+        # (idempotent) re-verification and would otherwise move the userscript
+        # bytes for identical geometry.
+
         f"    revisionSha1: {js_string(provenance['retrieved_sha1'])},",
         f"    bundledSha256: {js_string(provenance['sanitized_sha256'])},",
         f"    licence: {js_string(provenance['license'])},",
@@ -228,7 +231,11 @@ def main() -> None:
     paints = {}
     for entry in paths:
         paints[entry["paint"]] = paints.get(entry["paint"], 0) + 1
-    print(f"Wrote {out_path.relative_to(ROOT)}: {len(paths)} paths "
+    try:
+        written = out_path.relative_to(ROOT)
+    except ValueError:
+        written = out_path
+    print(f"Wrote {written}: {len(paths)} paths "
           f"({', '.join(f'{name}={count}' for name, count in sorted(paints.items()))}), "
           f"viewBox {provenance['viewBox']}.")
 

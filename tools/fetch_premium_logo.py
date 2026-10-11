@@ -84,6 +84,24 @@ def log(message: str) -> None:
     print(f"[premium-logo] {message}")
 
 
+def first_verified_retrieval_utc(previous: dict | None, revision_sha1: str,
+                                sanitized_sha256: str, now_utc: str) -> str:
+    """Keep the first verified retrieval date while the revision is unchanged.
+
+    Re-running this job (for example because a build-time tool changed) must be
+    byte-for-byte idempotent: the committed provenance records when this exact
+    revision was first downloaded and verified, not when the job last ran.
+    """
+    if not isinstance(previous, dict):
+        return now_utc
+    if previous.get("retrieved_sha1") != revision_sha1:
+        return now_utc
+    if previous.get("sanitized_sha256") != sanitized_sha256:
+        return now_utc
+    recorded = previous.get("retrieved_utc")
+    return recorded if isinstance(recorded, str) and recorded else now_utc
+
+
 def sha1_of(data: bytes) -> str:
     return hashlib.sha1(data).hexdigest()
 
@@ -336,6 +354,14 @@ def main() -> None:
     verify_bytes(raw, expected_sha1=expected_sha1, expected_size=expected_size)
 
     sanitized, report = sanitize(raw, "the downloaded SVG")
+    sanitized_bytes = sanitized.encode("utf-8")
+    sanitized_sha256 = sha256_of(sanitized_bytes)
+    previous = None
+    if provenance_path.is_file():
+        try:
+            previous = json.loads(provenance_path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            previous = None
     source_path.write_bytes(raw)
     sanitized_path.write_text(sanitized, encoding="utf-8")
     provenance = {
@@ -344,12 +370,17 @@ def main() -> None:
         "source_page": SOURCE_PAGE,
         "source_metadata_api": SOURCE_API,
         "source_url": args.url,
-        "retrieved_utc": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "retrieved_utc": first_verified_retrieval_utc(
+            previous,
+            sha1_of(raw),
+            sanitized_sha256,
+            datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+        ),
         "retrieved_sha1": sha1_of(raw),
         "retrieved_sha256": sha256_of(raw),
         "retrieved_bytes": len(raw),
-        "sanitized_sha256": sha256_of(sanitized.encode("utf-8")),
-        "sanitized_bytes": len(sanitized.encode("utf-8")),
+        "sanitized_sha256": sanitized_sha256,
+        "sanitized_bytes": len(sanitized_bytes),
         "viewBox": report["viewBox"],
         "nominal_width": SOURCE_WIDTH,
         "nominal_height": SOURCE_HEIGHT,

@@ -5,7 +5,7 @@
 //
 // Source page : https://commons.wikimedia.org/wiki/File:YouTube_Premium_logo_2024.svg
 // Asset origin: https://upload.wikimedia.org/wikipedia/commons/8/88/YouTube_Premium_logo_2024.svg
-// Retrieved   : 2026-10-11T05:04:55Z
+// Provenance  : TizenTube/mods/assets/youtube-premium-logo-2024.provenance.json
 // Revision    : SHA-1 9ec3ad62f293d10e98cb637d0303a7e7e4188947 (3561 bytes), bundled SHA-256 e2ba301c01340c2cc0163447a388d9f578c7ae1e8b434c1ebcfe8ad263c00ecf
 // Licence     : Public domain on Wikimedia Commons (PD-simple / PD-text: simple geometry and non-copyrightable lettering). Trademark rights remain with Google LLC; the mark is rendered locally as a cosmetic header preference only.
 // Trademark   : YouTube and YouTube Premium are trademarks of Google LLC. YTArk renders the mark locally as a cosmetic header preference and is not affiliated with, endorsed by, or entitled by Google or YouTube.
@@ -79,7 +79,6 @@ export const YOUTUBE_PREMIUM_WORDMARK = Object.freeze({
   provenance: Object.freeze({
     sourcePage: 'https://commons.wikimedia.org/wiki/File:YouTube_Premium_logo_2024.svg',
     sourceUrl: 'https://upload.wikimedia.org/wikipedia/commons/8/88/YouTube_Premium_logo_2024.svg',
-    retrievedUtc: '2026-10-11T05:04:55Z',
     revisionSha1: '9ec3ad62f293d10e98cb637d0303a7e7e4188947',
     bundledSha256: 'e2ba301c01340c2cc0163447a388d9f578c7ae1e8b434c1ebcfe8ad263c00ecf',
     licence: 'Public domain on Wikimedia Commons (PD-simple / PD-text: simple geometry and non-copyrightable lettering). Trademark rights remain with Google LLC; the mark is rendered locally as a cosmetic header preference only.',
