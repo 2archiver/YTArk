@@ -271,15 +271,17 @@ class GitHub:
         return payload if isinstance(payload, dict) and payload.get("ref") else None
 
     def ensure_tag(
-        self, tag: str, commit: str, *, attempts: int = 3, pause: float = 10.0
+        self, tag: str, commit: str, *, attempts: int = 3, pause: float = 10.0,
+        settle: float = 0.0,
     ) -> None:
+        """...settle: seconds to let a tag that was just created or moved settle."""
         """Make sure ``refs/tags/{tag}`` exists at ``commit``.
 
         GitHub silently renames a release to ``untagged-<sha>`` when it cannot
-        create the requested tag (for instance while a tag deleted with an
-        earlier draft is still being processed). That would break the immutable
+        resolve or create the requested tag. That would break the immutable
         version binding without any error, so the tag is created and verified
-        before the release, and the release is checked afterwards.
+        before the release, the tag is given time to settle when it was just
+        written, and the resulting release is checked afterwards.
         """
         last_error: ReleaseError | None = None
         for attempt in range(1, attempts + 1):
@@ -304,6 +306,8 @@ class GitHub:
             except ReleaseError as error:  # 403/422/404/rate limit/network
                 last_error = error
             if self.tag_commit(tag) == commit:
+                if settle:
+                    self._sleep(settle)
                 return
             if attempt < attempts:
                 self._sleep(pause)
@@ -887,6 +891,43 @@ def create_draft_release(
     return release
 
 
+def stage_draft_with_tag(
+    github: GitHub,
+    tag: str,
+    *,
+    commit: str,
+    title: str,
+    notes_file: Path,
+    settle: float = 0.0,
+    attempts: int = 2,
+) -> dict[str, Any]:
+    """Create the draft under ``tag``, retrying once the tag has settled.
+
+    GitHub answers with ``untagged-<sha>`` when it cannot resolve the tag at
+    creation time; that draft can never be published, so it is discarded and
+    recreated after a longer settle. Giving up still fails the run loudly rather
+    than leaving a draft that cannot be published.
+    """
+    last_tag: Any = None
+    for attempt in range(1, attempts + 1):
+        github.ensure_tag(tag, commit, settle=settle * attempt)
+        release = create_draft_release(
+            github, tag, commit=commit, title=title, notes_file=notes_file,
+        )
+        if release.get("tag_name") == tag:
+            return release
+        last_tag = release.get("tag_name")
+        delete_draft(github, release, tag)
+        print(
+            f"GitHub created the release with tag {last_tag!r} instead of {tag!r}; "
+            f"discarded it (attempt {attempt}/{attempts})."
+        )
+    raise ReleaseError(
+        f"GitHub keeps creating the release with tag {last_tag!r} instead of {tag!r}. "
+        "The drafts were discarded; re-run the publication once the tag resolves."
+    )
+
+
 def refresh_release(github: GitHub, release: dict[str, Any] | None) -> dict[str, Any] | None:
     """Re-read a release by id.
 
@@ -1203,25 +1244,14 @@ def publish_command(args: argparse.Namespace) -> int:
     notes_with_identity = with_identity(notes, candidate, ROOT / IDENTITY_NOTES)
 
     if plan.action == ACTION_CREATE:
-        github.ensure_tag(config["VERSION_TAG"], args.commit)
-        release = create_draft_release(
+        release = stage_draft_with_tag(
             github,
             config["VERSION_TAG"],
             commit=args.commit,
             title=config["RELEASE_NAME"],
             notes_file=notes_with_identity,
+            settle=args.tag_settle_seconds,
         )
-        if release.get("tag_name") != config["VERSION_TAG"]:
-            # GitHub fell back to untagged-<sha>; that release can never be
-            # published under the immutable version tag, so discard it and let
-            # the next run start clean instead of leaving a broken draft behind.
-            created_tag = release.get("tag_name")
-            delete_draft(github, release, config["VERSION_TAG"])
-            raise ReleaseError(
-                f"GitHub created the release with tag {created_tag!r} instead of "
-                f"{config['VERSION_TAG']!r}; the draft was discarded. Re-run the "
-                "publication once the tag is available again."
-            )
         release = refresh_release(github, release)
         if release is None:
             raise ReleaseError(f"Draft release {config['VERSION_TAG']} was not created")
@@ -1508,6 +1538,12 @@ def _shared_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--repository", default=os.environ.get("GITHUB_REPOSITORY", TRUSTED_REPOSITORY))
     parser.add_argument("--token", default=os.environ.get("GH_TOKEN", ""))
     parser.add_argument("--api-url", default=os.environ.get("GITHUB_API_URL", "https://api.github.com"))
+    parser.add_argument(
+        "--tag-settle-seconds", type=float, default=90.0,
+        help="how long to let a release tag that was just created or moved settle "
+             "before the release is created (GitHub rewrites the tag to "
+             "untagged-<sha> when it cannot resolve it)",
+    )
 
 
 def build_parser() -> argparse.ArgumentParser:
