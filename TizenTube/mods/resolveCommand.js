@@ -8,9 +8,10 @@ import { t } from 'i18next';
 import { requestNextAndNavigateChannel, getFeedbackPanelTokens, sendFeedbackToken } from './utils/innerTubeCalls.js';
 import qrcode from 'qrcode-npm';
 import showGuideSettings from './ui/sidebarModification.js';
-import { applyPreset, undoLastPreset, setQuickQuality, updateThemeStylesheet, PRESETS } from './features/tvControls.js';
 import { handleYtarkAction } from './ui/ytarkActions.js';
-import { resetUserAgentProfile } from './features/userAgentSpoofing.js';
+import {
+  GUIDE_SETTINGS_ACTION, activationFromCommand, noteResolverCommand,
+} from './ui/guideEntryActivation.js';
 
 export default function resolveCommand(cmd, _) {
     // resolveCommand function is pretty OP, it can do from opening modals, changing client settings and way more.
@@ -69,6 +70,9 @@ export function patchResolveCommand() {
 
             const ogResolve = window._yttv[key].instance.resolveCommand;
             window._yttv[key].instance.resolveCommand = function (cmd, _) {
+                // An activation spent on any other command (a modal Back button,
+                // a browse endpoint, …) must not leak into the guide entry.
+                noteResolverCommand(cmd);
                 if (cmd.setClientSettingEndpoint) {
                     // Command to change client settings. YTArk keys (no underscore)
                     // are written to the YTArk configuration and stay on the TV:
@@ -268,6 +272,12 @@ function customAction(action, parameters) {
         case 'TT_SETTINGS_SHOW':
             modernUI();
             break;
+        case GUIDE_SETTINGS_ACTION:
+            // The sidebar entry: opened only by an explicit OK/Enter or click.
+            // A focus/scroll resolution reaches here too and is ignored, which
+            // is what keeps scrolling past the entry from opening the panel.
+            activationFromCommand();
+            break;
         case 'TT_SPEED_SETTINGS_SHOW':
             speedSettings();
             break;
@@ -316,10 +326,6 @@ function customAction(action, parameters) {
                     signal: 'RELOAD_PAGE'
                 }
             });
-            break;
-        case 'RESET_USER_AGENT_PROFILE':
-            resetUserAgentProfile(window.h5vcc && window.h5vcc.tizentube);
-            showToast('YTArk', 'Native Cobalt User-Agent reset requested.');
             break;
         case 'GO_TO_CHANNEL':
             requestNextAndNavigateChannel(parameters);
@@ -399,22 +405,6 @@ function customAction(action, parameters) {
                 child.style.setProperty('display', 'none', 'important');
             }
             window.screenTurnedOffAt = Date.now();
-            break;
-        case 'TV_APPLY_PRESET':
-            if (!PRESETS[parameters]) break;
-            applyPreset(parameters);
-            showToast('YTArk Quick Controls', `Applied ${PRESETS[parameters].label} preset`);
-            break;
-        case 'TV_UNDO_PRESET':
-            if (undoLastPreset()) {
-                showToast('YTArk Quick Controls', 'Undid last preset');
-            } else {
-                showToast('YTArk Quick Controls', 'Nothing to undo');
-            }
-            break;
-        case 'TV_SET_QUALITY':
-            setQuickQuality(parameters);
-            showToast('YTArk Quick Controls', `Quality set to ${parameters}`);
             break;
         default:
             if (!handleYtarkAction(action, parameters)) {

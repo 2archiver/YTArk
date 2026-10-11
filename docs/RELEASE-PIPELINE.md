@@ -138,6 +138,23 @@ history. The same file is generated into
 `TizenTube/mods/assets/changelog.generated.js`; `ci.yml` and `build-apk.yml` run
 `python3 tools/build_changelog.py --check` before building the userscript.
 
+## Embedded build metadata
+
+About YTArk and the Updates card report the **installed** version, read from the
+platform bridge (the installed package's own `versionName`). When the platform
+has not answered yet, they fall back to packaging metadata that is embedded in
+the bundle at build time, labelled as such — never to the latest GitHub release
+and never to a hardcoded label.
+
+`tools/build_buildinfo.py` generates
+`TizenTube/mods/assets/buildInfo.generated.js` from `release/version.properties`
+(`--write` regenerates, `json` prints the metadata, `--check` verifies the
+committed module). `ci.yml` and `build-apk.yml` run `--check` before building the
+userscript, so a release whose metadata is missing, stale or hand-edited fails
+packaging instead of shipping an app that cannot state its own version offline.
+Bumping `release/version.properties` therefore updates About automatically: run
+`build_buildinfo.py --write` and commit the regenerated module with the bump.
+
 The newest entry stays "Unreleased" while it is reviewed; the publication date is
 the one GitHub records when the release workflow publishes the build. Record it
 in `CHANGELOG.md` in a follow-up commit (with the next version's work), never by
@@ -155,6 +172,8 @@ byte-for-byte against the candidate.
 ```sh
 python3 -m unittest discover -s tools/tests -v      # includes test_publish_release.py
 python3 tools/check_workflow_policy.py              # trust boundary + pipeline policy
+python3 tools/build_buildinfo.py --check            # embedded About/Updates metadata
+python3 tools/build_changelog.py --check            # bundled in-app changelog
 ```
 
 `tools/tests/test_publish_release.py` covers every row of the state machine above

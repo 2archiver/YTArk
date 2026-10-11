@@ -38,8 +38,9 @@ mockLocalStorage['yt.leanback.default::recurring_actions'] = JSON.stringify({
 
 const { configRead, configWrite } = await import('../config.js');
 const { removeAdSlotRenderers } = await import('../features/adRendererPolicy.js');
-const { DEVICE_PROFILES, generateUserAgent, applyUserAgentProfile } =
-  await import('../features/userAgentSpoofing.js');
+const {
+  retirementState, retireUserAgentOverride, RETIRED_MARKER_KEY, LEGACY_APPLIED_KEY, LEGACY_UA_KEY,
+} = await import('../features/userAgentRetirement.js');
 const { restoreGuestAccountSelector, restoreLegacyAccountActions } =
   await import('../ui/disableWhosWatching.js');
 
@@ -125,41 +126,107 @@ describe('guest/sign-in renderer preservation', () => {
   });
 });
 
-describe('deterministic bounded Cobalt User-Agent profiles', () => {
-  it('generates stable, bounded strings without using them to pick APK architecture', () => {
-    for (const [name, profile] of Object.entries(DEVICE_PROFILES)) {
-      const first = generateUserAgent(profile);
-      assert.equal(first, generateUserAgent(profile), `${name} should be deterministic`);
-      assert.ok(first.length <= 512, `${name} User-Agent should remain bounded`);
-      assert.match(first, /^Mozilla\/5\.0 \(Linux (?:arm64-v8a|armeabi-v7a); Android /);
-    }
-    assert.equal(generateUserAgent(null), null);
-    assert.equal(configRead('userAgentProfile'), 'native');
-  });
-
-  it('applies one explicit profile transition once and does not loop reloads', () => {
-    const storageValues = new Map();
-    const storage = {
-      getItem(key) { return storageValues.has(key) ? storageValues.get(key) : null; },
-      setItem(key, value) { storageValues.set(key, String(value)); },
-      removeItem(key) { storageValues.delete(key); },
+describe('retirement of the removed user-agent override', () => {
+  function fakeStorage(initial = {}) {
+    const values = new Map(Object.entries(initial));
+    return {
+      values,
+      getItem(key) { return values.has(key) ? values.get(key) : null; },
+      setItem(key, value) { values.set(key, String(value)); },
+      removeItem(key) { values.delete(key); },
     };
-    let activeUserAgent = '';
+  }
+
+  it('restores the platform user agent once for an install that had chosen a profile', () => {
+    const storage = fakeStorage({
+      [LEGACY_APPLIED_KEY]: 'androidTv32:Mozilla/5.0 (Linux; Android 9) spoofed',
+      [LEGACY_UA_KEY]: 'Mozilla/5.0 (Linux; Android 9) spoofed',
+    });
+    let resetCount = 0;
     let setCount = 0;
     let reloadCount = 0;
+    let activeUserAgent = 'Mozilla/5.0 (Linux; Android 9) spoofed';
     const bridge = {
-      GetUserAgent() { return activeUserAgent; },
-      SetUserAgent(value) { activeUserAgent = value; setCount += 1; },
+      ResetUserAgent() { resetCount += 1; activeUserAgent = ''; },
+      SetUserAgent(value) { setCount += 1; activeUserAgent = String(value); },
     };
     const location = { reload() { reloadCount += 1; } };
 
-    const first = applyUserAgentProfile('androidTv32', bridge, location, storage);
-    assert.equal(first.reloaded, true);
-    const repeated = applyUserAgentProfile('androidTv32', bridge, location, storage);
-    assert.equal(repeated.reason, 'already-applied');
-    assert.equal(repeated.reloaded, false);
-    assert.equal(setCount, 1);
+    const state = retirementState({
+      meta: { retiredValues: { userAgentProfile: 'androidTv32' } },
+      storage,
+    });
+    assert.equal(state.needed, true);
+    assert.equal(state.appliedOverride, true);
+
+    const result = retireUserAgentOverride(bridge, storage, location);
+    assert.equal(result.needed, true);
+    assert.equal(result.reset, true);
+    assert.equal(result.reloaded, true, 'one reload so the restored user agent is in effect');
+    assert.equal(resetCount, 1);
+    assert.equal(setCount, 0);
     assert.equal(reloadCount, 1);
-    assert.ok(activeUserAgent.length <= 512);
+    // The platform's own user agent is back: nothing wrote a substitute string.
+    assert.equal(activeUserAgent, '');
+    assert.equal(storage.getItem(LEGACY_APPLIED_KEY), null);
+    assert.equal(storage.getItem(LEGACY_UA_KEY), null);
+    assert.equal(storage.getItem(RETIRED_MARKER_KEY), '1');
+
+    // One-shot: a second run cannot reset or reload again.
+    const again = retireUserAgentOverride(bridge, storage, location);
+    assert.equal(again.reason, 'already-retired');
+    assert.equal(again.reset, false);
+    assert.equal(resetCount, 1);
+    assert.equal(reloadCount, 1);
+  });
+
+  it('does nothing at all for an install that never chose a profile', () => {
+    const storage = fakeStorage({});
+    let resetCount = 0;
+    let setCount = 0;
+    let reloadCount = 0;
+    const bridge = {
+      ResetUserAgent() { resetCount += 1; },
+      SetUserAgent() { setCount += 1; },
+    };
+    const location = { reload() { reloadCount += 1; } };
+
+    assert.equal(retirementState({ meta: { retiredValues: {} }, storage }).needed, false);
+    const result = retireUserAgentOverride(bridge, storage, location);
+    assert.equal(result.needed, false);
+    assert.equal(result.reason, 'nothing-to-retire');
+    assert.equal(resetCount, 0);
+    assert.equal(setCount, 0);
+    assert.equal(reloadCount, 0, 'no reload for an untouched install');
+    assert.equal(storage.getItem(RETIRED_MARKER_KEY), '1');
+  });
+
+  it('uses the empty-override reset when the bridge has no ResetUserAgent', () => {
+    const storage = fakeStorage({ [LEGACY_APPLIED_KEY]: 'tclTv32:spoofed' });
+    const calls = [];
+    const bridge = { SetUserAgent(value) { calls.push(value); } };
+    const location = { reload() {} };
+    const result = retireUserAgentOverride(bridge, storage, location);
+    assert.equal(result.reset, true);
+    assert.deepEqual(calls, [''], 'the only string ever sent is the empty override');
+  });
+
+  it('records the retirement without a bridge and leaves unrelated storage alone', () => {
+    const session = JSON.stringify({ data: { data: { signed_in: { lastFired: 1 } } } });
+    const storage = fakeStorage({
+      [LEGACY_APPLIED_KEY]: 'fireTv32:spoofed',
+      'yt.leanback.default::recurring_actions': session,
+      'ytaf-configuration': JSON.stringify({ uiTheme: 'oled', enableAdBlock: false }),
+      'yt.leanback.default::some-account-key': 'account-data',
+    });
+    const result = retireUserAgentOverride(null, storage, null);
+    assert.equal(result.needed, true);
+    assert.equal(result.reset, false);
+    assert.equal(result.reloaded, false);
+    assert.equal(result.reason, 'cleared-without-bridge');
+    assert.equal(storage.getItem('yt.leanback.default::recurring_actions'), session);
+    assert.equal(storage.getItem('yt.leanback.default::some-account-key'), 'account-data');
+    assert.equal(JSON.parse(storage.getItem('ytaf-configuration')).uiTheme, 'oled');
+    assert.equal(storage.getItem(RETIRED_MARKER_KEY), '1');
   });
 });

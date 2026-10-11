@@ -49,13 +49,13 @@ describe('shared registry', () => {
   it('keeps every setting the menus exposed before 2.3, plus the new ones', () => {
     const exposed = new Set(registry.registryKeys(registry.buildSettingsTree()));
     for (const key of [
-      'enableAdBlock', 'enablePremiumLogo', 'userAgentProfile', 'enableShorts', 'enablePreviews', 'enableHideEndScreenCards',
+      'enableAdBlock', 'enablePremiumLogo', 'enableShorts', 'enablePreviews', 'enableHideEndScreenCards',
       'hideRelatedVideosPlayer', 'preferredVideoQuality', 'enableSponsorBlock', 'sponsorBlockManualSkips',
       'enableSponsorBlockSponsor', 'enableSponsorBlockIntro', 'enableSponsorBlockOutro', 'enableSponsorBlockInteraction',
       'enableSponsorBlockSelfPromo', 'enableSponsorBlockPreview', 'enableSponsorBlockFiller', 'enableSponsorBlockMusicOfftopic',
       'enableSponsorBlockHighlight', 'enableSponsorBlockToasts', 'enableDeArrow', 'enableDeArrowThumbnails',
       'enableYouThereRenderer', 'enablePaidPromotionOverlay', 'enableWhoIsWatchingMenu', 'permanentlyEnableWhoIsWatchingMenu',
-      'enableWhosWatchingMenuOnAppExit', 'enableFixedUI', 'enableHqThumbnails', 'enableLongPress', 'enableSigninReminder',
+      'enableWhosWatchingMenuOnAppExit', 'enableHqThumbnails', 'enableLongPress', 'enableSigninReminder',
       'reloadHomeOnStartup', 'enableShowUserLanguage', 'enableShowOtherLanguages', 'enablePatchingVideoPlayer',
       'enablePreviousNextButtons', 'enableSuperThanksButton', 'enableAIAskButton', 'enableSpeedControlsButton',
       'enableMPButton', 'enableSwapMPWithPIP', 'speedSettingsIncrement', 'preferredVideoCodec', 'autoFrameRate',
@@ -72,7 +72,11 @@ describe('shared registry', () => {
     const indexed = index();
     const keysInIndex = indexed.map(entry => entry.node.key).filter(Boolean);
     for (const key of ['lastSeenVersion', 'whatsNewVersion', 'whatsNewDismissedVersion', 'ytSettingsCatalog',
-      'configSchemaVersion', 'dontCheckUpdateUntil', 'tvLastPresetSnapshot', 'lastAnnouncementCheck']) {
+      'configSchemaVersion', 'dontCheckUpdateUntil', 'lastAnnouncementCheck',
+      // Retired in 2.5 (settings schema 3): removed preferences are neither
+      // stored nor reachable through search.
+      'userAgentProfile', 'enableFixedUI', 'tvActivePreset', 'tvLastPresetSnapshot', 'tvQuickQuality',
+      'videoPreferredCodec']) {
       assert.equal(keysInIndex.includes(key), false, key);
     }
     for (const query of ['token', 'password', 'cookie', 'email']) assert.deepEqual(allIds(query), [], query);
@@ -85,7 +89,7 @@ describe('matching and ranking', () => {
     for (const query of ['watermark', 'channel logo', 'corner logo']) assert.equal(topIds(query)[0], 'appearance.player.hideWatermark', query);
     // "branding" fits both the watermark and the Premium wordmark: both are offered.
     assert.ok(topIds('branding', 3).includes('appearance.player.hideWatermark'));
-    assert.ok(topIds('branding', 3).includes('quickControls.premiumLogo'));
+    assert.ok(topIds('branding', 3).includes('appearance.premiumLogo'));
     for (const query of ['scrim', 'darkening', 'player dimming']) assert.equal(topIds(query)[0], 'appearance.player.removeScrim', query);
     // "Overlay" is also in another setting's own label, which ranks first by design.
     assert.ok(topIds('overlay', 3).includes('appearance.player.removeScrim'));
@@ -99,8 +103,11 @@ describe('matching and ranking', () => {
     assert.ok(allIds('version').includes('updates'));
     assert.ok(topIds('sponsor').some(id => id.startsWith('sponsorblock')));
     assert.ok(topIds('sponsorblock').includes('sponsorblock'));
-    const quality = topIds('quality', 4);
-    assert.ok(quality.includes('player.quality') && quality.includes('quickControls.quality'));
+    // Quality is registered once: the retired quick menu's duplicate row is gone.
+    const quality = allIds('quality');
+    assert.ok(quality.includes('player.quality'));
+    assert.equal(quality.filter(id => id.endsWith('.quality') && id !== 'player.quality').length, 0,
+      'no second quality row');
     assert.ok(topIds('resolution', 4).includes('player.quality'));
     assert.equal(topIds('12 hour')[0], 'ui.clock.twelveHour');
     assert.ok(topIds('highlight').includes('sponsorblock.segments.highlight'));
@@ -108,10 +115,10 @@ describe('matching and ranking', () => {
   });
 
   it('ranks label matches above description matches', () => {
-    const results = allIds('controls');
-    assert.ok(results.indexOf('quickControls') !== -1);
-    assert.ok(results.indexOf('quickControls') < results.indexOf('appearance.player.removeScrim'),
-      'a label match outranks the description "…playback controls are visible"');
+    const results = allIds('sponsor');
+    assert.ok(results.indexOf('sponsorblock') !== -1);
+    assert.ok(results.indexOf('sponsorblock') < results.indexOf('privacy.adBlock'),
+      'a label match outranks the description "Independent of SponsorBlock and the logo"');
   });
 
   it('normalizes case, whitespace and accents and requires every word', () => {
@@ -275,15 +282,17 @@ describe('YTArk Settings menus', () => {
     const root = lastModal(recorded, 'tt-settings');
     const titles = modalItems(root).map(rowTitle);
     assert.equal(titles[0], 'Search settings');
-    for (const title of ['YTArk Quick Controls', 'Playback', 'Appearance', 'Privacy', 'Navigation', 'YTArk Updates', 'About YTArk']) {
+    for (const title of ['Playback', 'Appearance', 'Privacy', 'Navigation', 'YTArk Updates', 'About YTArk']) {
       assert.ok(titles.includes(title), title);
     }
+    assert.ok(!titles.includes('YTArk Quick Controls'), 'the retired quick menu is gone from the root');
     assert.ok(!titles.includes('Changelog'), 'no duplicate root changelog row');
     assert.ok(!titles.includes('Customize YouTube Settings'), 'layout setting moved into Navigation');
-    resolveCommand({ customAction: { action: 'YTARK_MENU_SHOW', parameters: { menuId: 'quickControls' } } });
-    const quick = lastModal(recorded, 'tt-tv-quick-controls');
-    assert.equal(rowSecondaryIcon(findRow(quick, 'Hide Shorts')), 'CHECK_BOX_OUTLINE_BLANK', 'Shorts are shown, so not hidden');
-    assert.equal(rowSecondaryIcon(findRow(quick, 'Hide Previews')), 'CHECK_BOX', 'previews are off, so hidden');
+    // The content-filtering rows the quick menu held live in Privacy now.
+    resolveCommand({ customAction: { action: 'YTARK_MENU_SHOW', parameters: { menuId: 'privacy' } } });
+    const privacy = lastModal(recorded, 'ytark-privacy');
+    assert.equal(rowSecondaryIcon(findRow(privacy, 'Hide Shorts')), 'CHECK_BOX_OUTLINE_BLANK', 'Shorts are shown, so not hidden');
+    assert.equal(rowSecondaryIcon(findRow(privacy, 'Hide video previews')), 'CHECK_BOX', 'previews are off, so hidden');
   });
 
   it('resets one section after a confirmation that lists the defaults', async () => {

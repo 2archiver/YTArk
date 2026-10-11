@@ -54,7 +54,6 @@
                             "enableWWOnExit": "退出应用时启用“谁在观看”菜单"
                         }
                     },
-                    "fixUI": "修复界面",
                     "hqThumbnails": "启用高清缩略图",
                     "longPress": "启用长按操作",
                     "shorts": "启用 Shorts",

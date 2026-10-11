@@ -91,7 +91,7 @@ ${WHAT_CHANGED}
 
 Exactly one APK is published: \`${APK_ARMV7}\` for 32-bit \`armeabi-v7a\`
 userspace. **4K does not select an APK architecture**, and neither does the
-device name, the Android version or a spoofed YouTube user-agent. A 64-bit
+device name or the Android version. A 64-bit
 CPU does not by itself establish whether the OS supports 32-bit applications:
 check \`ro.product.cpu.abilist\` (or the equivalent ABI list from a device
 diagnostic tool) and install only when \`armeabi-v7a\` is reported. On a system

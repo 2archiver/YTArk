@@ -54,7 +54,6 @@
                             "enableWWOnExit": "Habilitar menú de 'Quién está viendo' al salir de la app"
                         }
                     },
-                    "fixUI": "Arreglar interfaz de usuario",
                     "hqThumbnails": "Habilitar miniaturas de alta calidad",
                     "longPress": "Habilitar acciones de pulsación larga",
                     "shorts": "Habilitar Shorts",

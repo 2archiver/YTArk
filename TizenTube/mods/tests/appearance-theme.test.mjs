@@ -10,6 +10,7 @@ const { doc } = setupEnvironment();
 const { configRead, configWrite, configChangeEmitter } = await import('../config.js');
 const theme = await import('../ui/theme.js');
 const styles = await import('../ui/appearanceStyles.js');
+const { OLED_TOKENS } = await import('../ui/themeTokens.js');
 
 const root = doc.documentElement;
 const has = name => root.classList.contains(name);
@@ -167,5 +168,91 @@ describe('composition with the Premium wordmark', () => {
     assert.deepEqual(emblem.map(node => node.getAttribute('fill')), sourceFills, 'the red emblem is never inverted');
     assert.equal(rootObservers(), before, 'theme changes create no second Premium theme observer');
     branding.cleanup();
+  });
+});
+
+describe('OLED Black coverage and lifecycle', () => {
+  const css = () => managedStyles()[0].textContent;
+  const blocks = () => rulesFor(css(), styles.ROOT_CLASSES.oled);
+  const blockFor = fragment => blocks().find(block => block.selectors.some(selector => selector.includes(fragment)));
+
+  it('blacks the app backdrop, the browsing surfaces and the dialogs YTArk opens', () => {
+    // The root element gets its own rule (a descendant `html` would match nothing).
+    assert.match(css(), new RegExp(`html\\.${styles.ROOT_CLASSES.oled} \\{\\s*background-color: #000000 !important;`));
+    for (const selector of ['body', '#container', '.ytLrTvBrowseRendererHost',
+      '.ytLrGuideResponseContainer', '.ytLrClassicSearchPageHost', '.ytLrAccountSelectorHost',
+      '.ytLrOverlaySectionRendererOverlay', '.ytLrOverlayTwoPanelRendererActionPanel',
+      '.ytLrOverlayPanelRendererContent']) {
+      const needle = `html.${styles.ROOT_CLASSES.oled} ${selector}`;
+      const block = blocks().find(item => item.selectors.some(entry => entry.includes(needle)));
+      assert.ok(block, `${selector} is covered by the OLED rule`);
+      assert.match(block.declarations, /background-color: #000000 !important/, `${selector} is true black`);
+    }
+  });
+
+  it('keeps the focused entry visibly distinct from the black backgrounds', () => {
+    const focus = blockFor('yt-focus-container');
+    assert.ok(focus, 'the sidebar focus surface is styled under OLED');
+    assert.match(focus.declarations, new RegExp(`background-color: ${OLED_TOKENS.surfaceFocus} !important`));
+    assert.doesNotMatch(focus.declarations, /#000000/, 'focus is not painted black on black');
+    // The frontend's own focus pills are untouched, so focused controls keep
+    // their high-contrast look.
+    assert.doesNotMatch(css(), /zylon-focus[^{]*\{[^}]*background-color/);
+  });
+
+  it('publishes black theme variables and never a filter, tint or opacity change', () => {
+    assert.match(css(), /--yt-spec-general-background-a: #000000;/);
+    assert.match(css(), /--yt-spec-brand-background-solid: #000000;/);
+    assert.doesNotMatch(css(), /filter\s*:|backdrop-filter|mix-blend|opacity\s*:/i);
+  });
+
+  it('is re-applied after the DOM is rebuilt, and restores a stylesheet the frontend dropped', () => {
+    // A route change: the frontend rebuilds its content and drops injected head
+    // nodes. The classes and the stylesheet must both come back.
+    root.setAttribute('class', 'frontend-owned');
+    managedStyles()[0].detach();
+    assert.equal(managedStyles().length, 0);
+    const headObserver = FakeMutationObserver.instances.find(item => item.active && item.root === doc.head);
+    assert.ok(headObserver, 'one narrowly scoped observer watches <head>');
+    headObserver.callback([{ type: 'childList', target: doc.head }]);
+    assert.equal(managedStyles().length, 1, 'exactly one managed stylesheet again');
+    assert.match(css(), /html\.ytark-theme-oled/);
+    assert.equal(theme.themeStatus().restorations, 1);
+    // The startup step (ui/ui.js) re-applies the theme once the TV DOM exists.
+    theme.updateStyle();
+    assert.equal(managedStyles().length, 1, 're-applying never duplicates the stylesheet');
+    assert.ok(has(styles.ROOT_CLASSES.oled), 'the root class survives a frontend rewrite');
+    assert.ok(has('frontend-owned'), 'frontend classes are kept');
+  });
+
+  it('stops restoring after a bounded number of removals instead of scanning forever', () => {
+    const headObserver = FakeMutationObserver.instances.find(item => item.root === doc.head);
+    for (let index = 0; index < theme.MAX_STYLE_RESTORATIONS + 3 && headObserver.active; index += 1) {
+      const style = managedStyles()[0];
+      if (style) style.detach();
+      headObserver.callback([{ type: 'childList', target: doc.head }]);
+    }
+    assert.ok(theme.themeStatus().restorations <= theme.MAX_STYLE_RESTORATIONS,
+      `restorations are capped (${theme.themeStatus().restorations})`);
+    assert.equal(headObserver.active, false, 'the observer gave up instead of fighting the frontend');
+    // One clean re-application brings the theme back for the rest of the session.
+    theme.resetThemeForTests();
+    theme.updateStyle();
+    assert.equal(managedStyles().length, 1);
+    assert.ok(has(styles.ROOT_CLASSES.oled));
+  });
+
+  it('restores the normal theme, including the saved colours, when OLED is turned off', () => {
+    configWrite('focusContainerColor', '#0a1628');
+    configWrite('routeColor', '#0d1f3c');
+    configWrite('uiTheme', 'youtube');
+    assert.equal(has(styles.ROOT_CLASSES.oled), false);
+    assert.match(css(), /#container \{ background-color: #0d1f3c !important; \}/);
+    assert.match(css(), /yt-focus-container \{ background-color: #0a1628; \}/);
+    // The OLED rules are still in the sheet but inert: they only apply through
+    // the root class, so no original style was permanently changed.
+    assert.match(css(), /html\.ytark-theme-oled/);
+    configWrite('uiTheme', 'oled');
+    assert.ok(has(styles.ROOT_CLASSES.oled));
   });
 });

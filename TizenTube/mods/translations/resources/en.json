@@ -54,7 +54,6 @@
                             "enableWWOnExit": "Enable Who's Watching Menu on App Exit"
                         }
                     },
-                    "fixUI": "Fix UI",
                     "hqThumbnails": "Enable High Quality Thumbnails",
                     "longPress": "Enable Long Press Actions",
                     "shorts": "Enable Shorts",
@@ -290,7 +289,14 @@
     },
     "ytark": {
         "about": {
-            "changelog": "Version history: YTArk Settings › Changelog."
+            "buildDetails": "Build details",
+            "changelog": "Version history: YTArk Settings › Changelog.",
+            "rereadVersion": "Read the installed version again",
+            "rereadVersionDescription": "Asks the platform for the installed YTArk package version",
+            "versionLoading": "Reading the installed version…",
+            "versionSource": "Read from this build's packaging metadata: the platform did not report the installed package version.",
+            "ytarkVersion": "YTArk version",
+            "youtubeVersion": "YouTube version"
         },
         "categories": {
             "navigation": {
@@ -308,7 +314,7 @@
         },
         "appearance": {
             "colors": {
-                "edit": "Change them with the Midnight Blue and Classic Dark presets in YTArk Quick Controls, or in the colour panel opened with the remote's red button.",
+                "edit": "Change them in the colour panel opened with the remote's red button, or with the focus and route colour settings.",
                 "oled": "OLED Black is active and draws true black instead; your colours are kept and come back with YouTube default.",
                 "saved": "Saved colours: navigation {{focus}}, content {{route}}.",
                 "subtitle": "Your saved custom colours",
@@ -317,9 +323,15 @@
             },
             "colorsSwitched": "Theme set to YouTube default so your colours are visible.",
             "description": "Theme and player look",
+            "premiumLogo": {
+                "description": "Local wordmark only; it never grants or claims a paid YouTube subscription.",
+                "title": "Premium logo (cosmetic)"
+            },
             "player": {
                 "description": "Watermark and control-overlay dimming",
                 "hideWatermark": "Hide channel watermark",
+                "hideEndCards": "Hide end-screen cards",
+                "hideEndCardsDescription": "Removes the clickable cards shown over the last seconds of a video.",
                 "hideWatermarkDescription": "Hide the clickable channel logo over videos.",
                 "idleDimming": "Screen dimming when idle",
                 "idleDimmingDescription": "Separate setting under User Interface",
@@ -364,13 +376,15 @@
         },
         "navigation": {
             "guideEntry": {
-                "description": "Shows a YTArk Settings entry in the TV guide so settings stay reachable even with a minimal sidebar",
+                "description": "Adds a YTArk Settings entry at the bottom of the TV guide. Selecting it with OK opens the panel; scrolling past it only highlights it.",
                 "title": "YTArk entry in the guide"
             }
         },
-        "quick": {
-            "hidePreviews": "Stops video previews when a tile is focused",
-            "hideShorts": "Removes Shorts shelves and tiles from feeds"
+        "privacy": {
+            "hidePreviews": "Hide video previews",
+            "hidePreviewsDescription": "Stops video previews when a tile is focused",
+            "hideShorts": "Hide Shorts",
+            "hideShortsDescription": "Removes Shorts shelves and tiles from feeds"
         },
         "reset": {
             "cancel": "Cancel",
@@ -382,6 +396,9 @@
             "subtitle": "Restore this section's settings to their defaults",
             "title": "Reset {{section}}",
             "videoSpeed": "Playback speed"
+        },
+        "root": {
+            "subtitle": "YTArk's own playback, appearance, privacy and update settings for this YouTube TV app"
         },
         "search": {
             "backToResults": "Back to search results",
@@ -416,8 +433,7 @@
         "unavailable": {
             "frameRate": "Not available on this device: it did not provide the YTArk frame-rate bridge.",
             "generic": "Not available on this device.",
-            "pip": "Not available on this device: Android reports no picture-in-picture support.",
-            "userAgent": "Not available here: this runtime has no Cobalt user-agent bridge."
+            "pip": "Not available on this device: Android reports no picture-in-picture support."
         },
         "value": {
             "current": "Current: {{value}}",

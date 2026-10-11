@@ -55,7 +55,8 @@ const startupSteps = {
   panel: false,
   listeners: false,
   navigation: false,
-  observer: false,
+  theme: false,
+  longPress: false,
 };
 
 // One notice per session when settings cannot be saved (no toast spam).
@@ -118,17 +119,38 @@ function execute_once_dom_loaded() {
     startupSteps.css = true;
   }
 
-  // Fix UI issues.
-  const ui = configRead('enableFixedUI');
-  if (ui) {
+  // Appearance: apply the managed theme once the TV DOM exists.
+  //
+  // ui/theme.js already applies the theme at import time, but that can run
+  // before <head> exists, and the frontend rebuilds parts of the document as
+  // routes load. Re-applying here puts the managed stylesheet in <head> next to
+  // YTArk's own CSS and re-asserts the root classes, which is what makes OLED
+  // Black (and the player/watermark switches) actually paint. Later route
+  // changes are covered by theme.js's own <html class> and <head> observers.
+  if (!startupSteps.theme) {
+    startupSteps.theme = true;
     try {
-      window.tectonicConfig.featureSwitches.isLimitedMemory = false;
-      window.tectonicConfig.clientData.legacyApplicationQuality = 'full-animation';
-      window.tectonicConfig.featureSwitches.enableAnimations = true;
-      window.tectonicConfig.featureSwitches.enableOnScrollLinearAnimation = true;
-      window.tectonicConfig.featureSwitches.enableListAnimations = true;
-      window.tectonicConfig.featureSwitches.supportsLongPress = true;
-    } catch (e) { }
+      updateStyle();
+    } catch (error) {
+      console.warn('[YTArk] The appearance theme could not be applied:', error);
+    }
+  }
+
+  // Long-press menus: YTArk injects long-press actions into renderer payloads
+  // (features/adblock.js, gated by the `enableLongPress` setting). The Cobalt
+  // frontend only dispatches them when its own feature switch is on, so keep
+  // that switch in step with the user's preference. This is the one part of the
+  // removed "Fix UI" toggle that did real work; the rest only flipped
+  // animation/quality switches the frontend sets for this device itself.
+  if (!startupSteps.longPress) {
+    startupSteps.longPress = true;
+    try {
+      if (window.tectonicConfig && window.tectonicConfig.featureSwitches) {
+        window.tectonicConfig.featureSwitches.supportsLongPress = configRead('enableLongPress') === true;
+      }
+    } catch (error) {
+      console.warn('[YTArk] The long-press feature switch could not be set:', error);
+    }
   }
 
   // We handle key events ourselves.
@@ -312,21 +334,6 @@ function execute_once_dom_loaded() {
   const commandExecutor = getCommandExecutor();
   if (commandExecutor) {
     commandExecutor.executeFunction(new commandExecutor.commandFunction('reloadGuideAction'));
-  }
-
-  // Fix UI issues, again. Love, Googol.
-
-  if (configRead('enableFixedUI') && !startupSteps.observer) {
-    startupSteps.observer = true;
-    try {
-      const observer = new MutationObserver((_, _2) => {
-        const body = document.body;
-        if (body.classList.contains('app-quality-root')) {
-          body.classList.remove('app-quality-root');
-        }
-      });
-      observer.observe(document.body, { attributes: true, childList: false, subtree: false });
-    } catch (e) { }
   }
 
   // Post-update What's new: evaluated once, announced once, never over playback.

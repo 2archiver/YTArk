@@ -25,7 +25,12 @@ const STATIC_CSS = buildAppearanceCss();
 
 let managedStyle = null;
 let rootObserver = null;
+let headObserver = null;
+let styleRestorations = 0;
 let lastWrittenCss = null;
+
+/** Cap on re-creating the managed stylesheet if the frontend keeps removing it. */
+export const MAX_STYLE_RESTORATIONS = 5;
 
 function doc() {
   return typeof document !== 'undefined' ? document : null;
@@ -111,6 +116,44 @@ function watchRoot(d) {
   rootObserver.observe(d.documentElement, { attributes: true, attributeFilter: ['class'] });
 }
 
+/**
+ * Keep the one managed <style> element alive.
+ *
+ * The frontend rebuilds parts of the document as routes change and can drop
+ * injected head nodes, which silently disabled the theme (the class stayed on
+ * <html> but no rule was left to apply). This observes only <head>'s child
+ * list — never the whole document — and only acts when our own element is
+ * missing, re-creating it through updateStyle(). Restorations are capped so a
+ * frontend that insists on removing it cannot be fought in a loop; after the
+ * cap the observer stops and the theme reports honestly instead of scanning.
+ */
+function watchHead(d) {
+  if (headObserver || typeof MutationObserver === 'undefined' || !d || !d.head) return;
+  headObserver = new MutationObserver(() => {
+    if (styleRestorations >= MAX_STYLE_RESTORATIONS) {
+      if (headObserver) headObserver.disconnect();
+      headObserver = null;
+      return;
+    }
+    let present = false;
+    try {
+      present = !!d.querySelector(STYLE_SELECTOR);
+    } catch (_) {
+      present = true; // never re-create on a failed lookup
+    }
+    if (present) {
+      if (managedStyle && managedStyle.parentNode) return;
+      managedStyle = null;
+      return;
+    }
+    managedStyle = null;
+    lastWrittenCss = null;
+    styleRestorations += 1;
+    updateStyle();
+  });
+  headObserver.observe(d.head, { childList: true });
+}
+
 /** Rebuild the managed stylesheet (only when its text changes) and root classes. */
 export function updateStyle() {
   const d = doc();
@@ -126,6 +169,7 @@ export function updateStyle() {
   }
   applyRootClasses(d);
   watchRoot(d);
+  watchHead(d);
 }
 
 function onConfigChange(event) {
@@ -141,8 +185,36 @@ export function currentTheme() {
 export function resetThemeForTests() {
   if (rootObserver) rootObserver.disconnect();
   rootObserver = null;
+  if (headObserver) headObserver.disconnect();
+  headObserver = null;
+  styleRestorations = 0;
   managedStyle = null;
   lastWrittenCss = null;
+}
+
+/**
+ * Honest status of the managed theme, for tests and diagnostics: whether the
+ * stylesheet exists, what it currently holds and how often it had to be
+ * restored after the frontend removed it.
+ */
+export function themeStatus(d = doc()) {
+  let present = false;
+  let cssLength = 0;
+  try {
+    const style = d && d.querySelector ? d.querySelector(STYLE_SELECTOR) : null;
+    present = !!style;
+    cssLength = style && typeof style.textContent === 'string' ? style.textContent.length : 0;
+  } catch (_) {
+    present = false;
+  }
+  const root = d && d.documentElement;
+  return {
+    stylePresent: present,
+    cssLength,
+    restorations: styleRestorations,
+    rootClasses: root ? Object.keys(desiredRootClasses()).filter(name => hasClass(root, name)) : [],
+    theme: currentTheme(),
+  };
 }
 
 const installedFlag = '__ytarkAppearanceInstalled';

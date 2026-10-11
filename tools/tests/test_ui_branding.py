@@ -1,10 +1,14 @@
 import json
+import sys
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 MODS = ROOT / "TizenTube" / "mods"
 RESOURCES = MODS / "translations" / "resources"
+sys.path.insert(0, str(ROOT / "tools"))
+
+import validate_release  # noqa: E402
 
 
 def translation_values(value):
@@ -52,7 +56,12 @@ class YTArkUiBrandingTests(unittest.TestCase):
         self.assertIn("title: 'YTArk Settings'", settings)
         self.assertIn("title: 'YTArk Updates'", settings)
         self.assertIn("title: 'About YTArk'", settings)
-        self.assertIn("title: 'YTArk Quick Controls'", settings)
+        # The 2.5 cleanup: the retired quick menu and its duplicates are gone,
+        # and every retained behaviour has exactly one titled control.
+        self.assertNotIn("YTArk Quick Controls", settings)
+        self.assertNotIn("Undo Last Preset", settings)
+        self.assertNotIn("User-Agent profile", settings)
+        self.assertNotIn("enableFixedUI", settings)
         resolve_command = (MODS / "resolveCommand.js").read_text(encoding="utf-8")
         subtitle_mod = (MODS / "features" / "moreSubtitles.js").read_text(encoding="utf-8")
         self.assertNotIn("TizenTube:", resolve_command)
@@ -114,9 +123,64 @@ class YTArkUiBrandingTests(unittest.TestCase):
             "enableYtarkGuideEntry",        # YTArk entry in the guide toggle
             "recheck-arch",                 # re-detect device architecture action
             "Could not confirm this device",  # unknown-ABI status, never "unsupported"
+            # 2.5 features must ship in the artefact, not only in the source.
+            "YTARK_GUIDE_SETTINGS_OPEN",    # explicit activation for the entry
+            "apkAsset",                     # packaging metadata embedded at build time
+                                            # (the generated module's export name is
+                                            # renamed by the bundler, its fields are not)
+            "YTARK_VERSION_REREAD",         # About can ask the platform again
+            "ytark-user-agent-retired",     # one-shot user-agent retirement marker
         ):
             self.assertIn(needle, built)
+        # The embedded metadata is this release's, not a stale one: the bundler
+        # renames the generated export, so the values are the stable proof.
+        config = validate_release.load_config()
+        for value in (config["VERSION_NAME"], config["SCRIPT_TAG"], config["APK_ARMV7"]):
+            self.assertIn(value, built, f"the bundle lost the embedded build metadata value {value}")
         self.assertNotIn("Personal Tube TV", built, "deprecated branding in the bundle")
+        # Only identifiers the bundled history never mentions can be checked in
+        # the artefact: the changelog narrates the 2.5 removals by name, so the
+        # retired preference keys and action constants legitimately appear in
+        # the bundled release notes. The code that used them must not.
+        for retired in (
+            "quickControls",                # dissolved menu id
+            "RESET_USER_AGENT_PROFILE",     # removed user-agent reset action
+            "DEVICE_PROFILES",              # removed user-agent profile table
+        ):
+            self.assertNotIn(retired, built, f"removed in 2.5 but still packaged: {retired}")
+
+    def test_the_removed_controls_are_gone_from_the_shipped_sources(self):
+        """Presets, the user-agent override and "Fix UI" are not live code.
+
+        ``config.js`` lists the retired keys so the one-shot migration can
+        delete them, ``features/userAgentRetirement.js`` performs that
+        migration, and the bundled changelog narrates the removal; those three
+        name the retired things on purpose. Every other shipped module must not.
+        """
+        for removed in ("features/userAgentSpoofing.js", "features/tvControls.js"):
+            self.assertFalse((MODS / removed).exists(), f"{removed} was removed in 2.5")
+        shipped = [
+            path for path in sorted(MODS.rglob("*.js"))
+            if not {"node_modules", "assets", "tests", "dist"} & set(path.parts)
+            and path.name not in ("config.js", "userAgentRetirement.js")
+        ]
+        self.assertTrue(shipped, "the shipped sources were not found")
+        for retired in (
+            "YTArk Quick Controls",         # dissolved menu
+            "TV_APPLY_PRESET",              # presets
+            "TV_UNDO_PRESET",               # undo preset
+            "TV_SET_QUALITY",               # quick quality
+            "enableFixedUI",                # "Fix UI"
+            "app-quality-root",             # the observer "Fix UI" installed
+        ):
+            for path in shipped:
+                self.assertNotIn(
+                    retired, path.read_text(encoding="utf-8", errors="replace"),
+                    f"{path.relative_to(MODS)} still carries the removed {retired}")
+        # No surface may render the placeholder the About page used to show.
+        for name in ("ui/settingsRegistry.js", "ui/settings.js", "features/updater.js"):
+            self.assertNotIn("Version unknown", (MODS / name).read_text(encoding="utf-8"),
+                             f"{name} still renders the unknown-version placeholder")
 
     def test_cosmetic_logo_module_stays_local_and_never_calls_out(self):
         branding = (MODS / "features" / "premiumBranding.js").read_text(encoding="utf-8")
@@ -132,7 +196,7 @@ class YTArkUiBrandingTests(unittest.TestCase):
             self.assertIn(guard, branding)
         # The cosmetic nature has to be explained once, in Settings.
         self.assertIn("it never grants or claims a paid YouTube subscription", settings)
-        self.assertIn("title: 'Premium logo (cosmetic)'", settings)
+        self.assertIn("'Premium logo (cosmetic)'", settings)
 
 
 if __name__ == "__main__":

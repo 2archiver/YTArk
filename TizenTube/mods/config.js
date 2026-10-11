@@ -11,9 +11,42 @@
 //                player-cleanup keys introduced in 2.3 receive install-type-aware
 //                defaults exactly once (see migrateConfig) and explicit stored
 //                choices win from then on.
+//   3            YTArk 2.5.0: retired preferences are removed from the stored
+//                object (see RETIRED_KEYS). Every retained preference keeps its
+//                value, including the individual settings a removed preset had
+//                already applied; only the removed keys and their bookkeeping
+//                disappear. The values a retired key held are reported once
+//                through getConfigMeta().retiredValues so a feature can finish
+//                its own cleanup (the retired Cobalt user-agent override).
 
 const CONFIG_KEY = 'ytaf-configuration';
-export const CONFIG_SCHEMA_VERSION = 2;
+export const CONFIG_SCHEMA_VERSION = 3;
+
+/**
+ * Preferences that no longer exist, with the schema that retired them.
+ *
+ *   userAgentProfile      the user-selectable Cobalt user-agent override
+ *                         (removed with its settings rows; the platform's own
+ *                         user agent is the only one YTArk uses)
+ *   enableFixedUI         the vague "Fix UI" toggle (it only flipped YouTube's
+ *                         own animation/quality switches and defaulted to off
+ *                         on the Cobalt build)
+ *   tvActivePreset        preset bookkeeping (Presets and Undo Preset removed)
+ *   tvLastPresetSnapshot  the orphaned undo snapshot
+ *   tvQuickQuality        duplicate of `preferredVideoQuality`, which is the
+ *                         one authoritative quality preference
+ *   videoPreferredCodec   legacy duplicate of `preferredVideoCodec`; its value
+ *                         is copied to the key the player reads before it is
+ *                         dropped (see migrateConfig)
+ */
+export const RETIRED_KEYS = Object.freeze([
+  'userAgentProfile',
+  'enableFixedUI',
+  'tvActivePreset',
+  'tvLastPresetSnapshot',
+  'tvQuickQuality',
+  'videoPreferredCodec',
+]);
 /** Presence of YouTube TV's own storage means the app has run before. Only the
  * existence of the key is checked; its contents are never read. */
 const LEANBACK_HISTORY_KEY = 'yt.leanback.default::recurring_actions';
@@ -43,8 +76,6 @@ const defaultConfig = {
   enableSponsorBlock: true,
   // A local header-only visual; it never changes account or server entitlements.
   enablePremiumLogo: true,
-  // Native Cobalt is the safe default; profile spoofing is opt-in/experimental.
-  userAgentProfile: 'native',
   enableSponsorBlockToasts: true,
   sponsorBlockManualSkips: ['intro', 'outro', 'filler'],
   enableSponsorBlockSponsor: true,
@@ -62,7 +93,6 @@ const defaultConfig = {
   enableDeArrowThumbnails: false,
   focusContainerColor: '#0f0f0f',
   routeColor: '#0f0f0f',
-  enableFixedUI: (typeof window !== 'undefined' && window.h5vcc) ? false : true,
   enableHqThumbnails: false,
   enableChapters: true,
   enableLongPress: true,
@@ -92,9 +122,8 @@ const defaultConfig = {
   dimmingOpacity: 0.5,
   enablePaidPromotionOverlay: true,
   speedSettingsIncrement: 0.25,
-  // Legacy key: earlier builds declared this default while the player and the
-  // settings read `preferredVideoCodec`. It is kept so old data stays intact.
-  videoPreferredCodec: 'any',
+  // `preferredVideoCodec` is the one codec preference; the legacy
+  // `videoPreferredCodec` key is copied into it and then retired (schema 3).
   preferredVideoCodec: 'any',
   launchToOnStartup: null,
   reloadHomeOnStartup: true,
@@ -115,11 +144,6 @@ const defaultConfig = {
   disableEnlargingThumbnails: false,
   enableShrinkingThumbnails: false,
   hideRelatedVideosPlayer: false,
-
-  // YTArk Quick Controls
-  tvActivePreset: null,
-  tvLastPresetSnapshot: null,
-  tvQuickQuality: null,
 
   // YTArk 2.3: appearance and player cleanup (product defaults; installations
   // upgraded from <= 2.2 receive UPGRADE_DEFAULTS once instead).
@@ -274,6 +298,7 @@ export function migrateConfig(stored, env = {}) {
   let freshInstall = false;
   let migratedFrom = null;
   let changed = false;
+  const retiredValues = {};
 
   if (schema < CONFIG_SCHEMA_VERSION) {
     const existingInstall = hadStoredConfig || env.hasLeanbackHistory === true;
@@ -291,6 +316,16 @@ export function migrateConfig(stored, env = {}) {
         && config.videoPreferredCodec !== 'any') {
       config.preferredVideoCodec = config.videoPreferredCodec;
     }
+    // Retire removed preferences. Only these keys go; every retained
+    // preference keeps the value the user (or an applied preset) left behind,
+    // and account/session storage is never read or written here. The previous
+    // values are reported once so a feature can complete its own cleanup.
+    for (const key of RETIRED_KEYS) {
+      if (!Object.prototype.hasOwnProperty.call(config, key)) continue;
+      retiredValues[key] = cloneValue(config[key]);
+      delete config[key];
+      changed = true;
+    }
     config.configSchemaVersion = CONFIG_SCHEMA_VERSION;
     changed = true;
   }
@@ -300,7 +335,7 @@ export function migrateConfig(stored, env = {}) {
   }
   const repaired = normalizeConfig(config);
   if (repaired.length) changed = true;
-  return { config, freshInstall, migratedFrom, repaired, changed };
+  return { config, freshInstall, migratedFrom, repaired, retiredValues, changed };
 }
 
 // ---------------------------------------------------------------------------
@@ -350,6 +385,9 @@ const configMeta = Object.freeze({
   freshInstall: migration.freshInstall,
   migratedFrom: migration.migratedFrom,
   repaired: migration.repaired.slice(),
+  /** Values of preferences this schema retired, reported exactly once. */
+  retired: Object.keys(migration.retiredValues || {}),
+  retiredValues: Object.freeze({ ...(migration.retiredValues || {}) }),
   schemaVersion: CONFIG_SCHEMA_VERSION,
 });
 if (migration.repaired.length) {

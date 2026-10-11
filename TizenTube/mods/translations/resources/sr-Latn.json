@@ -54,7 +54,6 @@
                             "enableWWOnExit": "Prikaži 'Ko gleda?' meni pri izlasku"
                         }
                     },
-                    "fixUI": "Popravi korisnički interfejs (UI)",
                     "hqThumbnails": "Omogući sličice visokog kvaliteta",
                     "longPress": "Omogući radnje na dugi pritisak",
                     "shorts": "Omogući Shorts video snimke",

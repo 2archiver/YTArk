@@ -16,14 +16,25 @@
  *     .ytLrAnimatedOverlayContainer`: used by independent themes that run the
  *     real YouTube TV frontend (VacuumTube "BlackDecker" AMOLED userstyle,
  *     decktube themes).
- *   - `#container` and `ytlr-guide-response yt-focus-container`: the existing
- *     YTArk custom-colour rules (ui/theme.js) already style these.
+ *   - `.ytLrOverlayPanelRendererContent`, `.ytLrOverlayTwoPanelRenderer-
+ *     ActionPanel`, `.ytLrOverlaySectionRendererOverlay`,
+ *     `.ytLrTvSurfaceContentRendererContent`: the frontend's own naming
+ *     convention, proven by classes ui/ui.css already styles on device
+ *     (`.ytLrOverlayPanelHeaderRendererSubtitle`, `.ytLrTileHeaderRenderer-
+ *     Shorts`, `.ytLrSearchBarSearchVoice`, `.ytLrProgressBarPlayhead`).
+ *     Overlay panels are where YTArk's own modals are rendered, so this is what
+ *     makes OLED Black cover the settings screens.
+ *   - `html`, `body`, `#container` and `ytlr-guide-response yt-focus-container`:
+ *     the app backdrop and the elements the existing YTArk custom-colour rules
+ *     (ui/theme.js) already style; `#container` is the surface the saved route
+ *     colour paints.
  *   - `.ytLrWatchDefaultShadow`, `.ytLrWatchDefault2025Shadow` and the
  *     `[idomkey="shadow"]` element: the control-overlay scrim that ui/ui.css
  *     (and the TizenTube / webOS projects it follows) already target.
- *   - `ytlr-overlay-panel-renderer`: inferred from the verified renderer to
- *     element naming of the TV frontend (overlayPanelHeaderRenderer ->
- *     `.ytLrOverlayPanelHeaderRenderer*` in ui.css).
+ *
+ * A selector this build does not render matches nothing, so broadening the
+ * candidate list is safe; nothing here targets video, images, thumbnails,
+ * artwork, captions or the player scrim.
  */
 
 import { OLED_TOKENS, YOUTUBE_TOKENS } from './themeTokens.js';
@@ -36,21 +47,64 @@ export const ROOT_CLASSES = Object.freeze({
 
 export const WATERMARK_ATTRIBUTE = 'data-ytark-watermark';
 
+/**
+ * Backgrounds OLED Black paints true black. Every entry is a page/surface
+ * container: no <video>, <img>, <canvas>, thumbnail, channel art, caption or
+ * player-scrim element appears here, so artwork and video keep their own
+ * pixels. A selector that a given frontend build does not render simply
+ * matches nothing.
+ */
 export const OLED_SURFACE_SELECTORS = Object.freeze([
+  'body',
   '#container',
   '.ytLrTvBrowseRendererHost',
+  '.ytLrTvSurfaceContentRendererContent',
+  '.ytLrTvSurfaceContentRendererContentHasOffsetInlineSearchBar',
   '.ytLrGuideResponseContainer',
   '.ytLrGuideResponseCollapsed .ytLrGuideResponseContainer',
   '.ytLrClassicSearchPageHost',
   '.ytLrAccountSelectorHost',
-  '.ytLrTvSurfaceContentRendererContentHasOffsetInlineSearchBar',
+]);
+
+/**
+ * Dialog/overlay surfaces — including the panels YTArk itself opens, which the
+ * frontend renders from `openPopupAction` into overlay renderers.
+ */
+export const OLED_DIALOG_SELECTORS = Object.freeze([
+  '.ytLrAnimatedOverlaySidesheet .ytLrAnimatedOverlayContainer',
+  '.ytLrOverlaySectionRendererOverlay',
+  '.ytLrOverlayTwoPanelRendererActionPanel',
+  '.ytLrOverlayPanelRendererContent',
+  'ytlr-overlay-panel-renderer',
+]);
+
+/**
+ * Focused/selected surfaces. Under OLED these get a raised near-black instead
+ * of true black, so the focused sidebar entry and the focused row in a panel
+ * stay clearly visible against the black backgrounds. The frontend's own focus
+ * pills (`.zylon-focus`, `.ytLrButtonFocused`) are deliberately untouched.
+ */
+export const OLED_FOCUS_SELECTORS = Object.freeze([
   'ytlr-guide-response yt-focus-container',
 ]);
 
-export const OLED_DIALOG_SELECTORS = Object.freeze([
-  '.ytLrAnimatedOverlaySidesheet .ytLrAnimatedOverlayContainer',
-  'ytlr-overlay-panel-renderer',
-]);
+/**
+ * YouTube's own theme variables, set to black under OLED. Surfaces that read
+ * their colour from a variable follow the theme without being enumerated; the
+ * variables are only defined, never used to hide anything.
+ */
+export const OLED_CSS_VARIABLES = Object.freeze({
+  '--yt-spec-general-background-a': '#000000',
+  '--yt-spec-general-background-b': '#000000',
+  '--yt-spec-general-background-c': '#000000',
+  '--yt-spec-base-background': '#000000',
+  '--yt-spec-brand-background-solid': '#000000',
+  '--yt-spec-brand-background-primary': '#000000',
+  '--yt-spec-brand-background-secondary': '#000000',
+  '--yt-spec-background-solid': '#000000',
+  '--yt-spec-background-primary': '#000000',
+  '--yt-spec-background-secondary': '#000000',
+});
 
 export const SCRIM_SELECTORS = Object.freeze([
   '.ytLrWatchDefaultShadow',
@@ -128,12 +182,22 @@ ${p}.ytark-entry__hint { margin-top: 1rem; font-size: 1.125rem; color: ${tokens.
 
 /** Static feature CSS; activates only through the root classes. */
 export function buildAppearanceCss(oled = OLED_TOKENS, youtube = YOUTUBE_TOKENS) {
-  return `/* ytark-appearance v1 */
+  const variables = Object.entries(OLED_CSS_VARIABLES)
+    .map(([name, value]) => `  ${name}: ${value};`)
+    .join('\n');
+  return `/* ytark-appearance v2 */
 ${scoped(ROOT_CLASSES.oled, OLED_SURFACE_SELECTORS)} {
   background-color: ${oled.background} !important;
 }
 ${scoped(ROOT_CLASSES.oled, OLED_DIALOG_SELECTORS)} {
   background-color: ${oled.background} !important;
+}
+${scoped(ROOT_CLASSES.oled, OLED_FOCUS_SELECTORS)} {
+  background-color: ${oled.surfaceFocus} !important;
+}
+html.${ROOT_CLASSES.oled} {
+  background-color: ${oled.background} !important;
+${variables}
 }
 html.${ROOT_CLASSES.oled} .ytLrAnimatedOverlaySidesheet .ytLrAnimatedOverlayContainer {
   box-shadow: inset 0.0625rem 0 0 ${oled.divider} !important;
