@@ -12,11 +12,22 @@ native updater that always hands installation to Android for user confirmation.
 |---|---|
 | Android package | `io.github.twoarchiver.ytark` |
 | Launcher label | `YTArk` |
-| Target display version | `2.1.2` (Android versionName `2.1.2`) |
-| Target versionCode | `2010200` (above every published YTArk APK) |
-| Published APK (the only architecture) | `YTArk-v2.1.2-armv7.apk` — `armeabi-v7a` |
-| Immutable userscript revision | `s20` (previous published revision `s19` is never moved) |
-| Pinned Android base | TizenTubeCobalt `v2.0.2` |
+| Target display version | `3.0` (Android versionName `3.0.0`, release title `YTArk 3.0`) — **candidate until published** |
+| Target versionCode | `3000000` (above every published YTArk APK; 2.1.2 stays `2010200`) |
+| Candidate APK (the only architecture) | `YTArk-v3.0.0-armv7.apk` — `armeabi-v7a` |
+| Immutable userscript revision | `s21` (previously published `s20` is never moved) |
+| Pinned Android base | TizenTubeCobalt `v2.0.2` — **YTArk 3.0 is based on v2.0.2; it is not a newer Cobalt engine** |
+
+**YTArk 3.0 in one paragraph.** 3.0 keeps the working TizenTubeCobalt `v2.0.2` ARMv7
+APK and the existing repack pipeline. Its changes are: SponsorBlock segment lookups
+are bounded by a timeout and validated in a tested module; the settings Updates card
+no longer offers a reconnect control that cannot work, and offers a QR code for the
+official release page as the manual-install fallback; the release contract is moved to
+3.0.0 with the script revision `s21`. It does **not** move to a newer Cobalt
+engine, does **not** claim the latest official YouTube app, and has **no device
+acceptance recorded yet** (see the runtime checklist). Full list and what was not
+done: [`docs/FEATURE-INVENTORY.md`](docs/FEATURE-INVENTORY.md) and
+[`docs/YTARK-3.0-FEASIBILITY.md`](docs/YTARK-3.0-FEASIBILITY.md).
 
 From 2.1.2 onwards YTArk **builds, signs, verifies and publishes exactly one
 architecture**: 32-bit ARM `armeabi-v7a`. The ARM64 job, its upstream download
@@ -78,7 +89,7 @@ simply not an update target any more.
 ## Remote-friendly installation
 
 1. From the official release page, download the versioned ARMv7 APK
-   (`YTArk-v2.1.2-armv7.apk`). Download `SHA256SUMS.txt` too.
+   (`YTArk-v3.0.0-armv7.apk`, once published; 2.1.2 remains available as `YTArk-v2.1.2-armv7.apk`). Download `SHA256SUMS.txt` too.
 2. Verify the selected file on the computer, for example:
 
    ```sh
@@ -115,7 +126,7 @@ an update unless you understand that uninstalling can erase app data.
 | Cosmetic "YT Premium" header wordmark | **On by default**, bundled 2024 vector artwork, off-able local visual only — **never** a subscription or entitlement |
 | Settings → YTArk Updates | Real installed version, real stable-release check, release notes, honest errors |
 | Native updater | Verified SHA-256 + signer + ABI, manual Android installer |
-| ARMv7 (`armeabi-v7a`) APK | **The only published architecture** from 2.1.2; physical device acceptance pending per device |
+| ARMv7 (`armeabi-v7a`) APK | **The only published architecture** from 2.1.2; 3.0.0 is a candidate until device acceptance is recorded |
 | 64-bit-only Android userspace (`arm64-v8a` only) | **Not supported** by this release line; documented exclusion, no ARM64 asset |
 | Background playback, PiP, casting, downloads, system-wide ad blocking | **Not claimed** |
 

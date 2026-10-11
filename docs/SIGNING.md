@@ -8,7 +8,7 @@
 | Release signing certificate SHA-256 | `b9cb7e4b4d5179870e672e850f5d3661f02c248f943dbaf10cd78cd0c047eaae` |
 | Certificate subject | PhairPlay Community Build (Hearth community key) |
 | Latest published versionCode | `20017` (`2.0.4-ytark.17`) |
-| Target YTArk 2.1.2 versionCode | `2010200` (`2.1.2`, display version `2.1.2`) |
+| Target YTArk 3.0.0 versionCode | `3000000` (`3.0.0`, display version `3.0.0`); 2.1.2 (`2010200`) remains published |
 | Published architectures | ARMv7 (`armeabi-v7a`) only from 2.1.2; no ARM64 asset |
 | Key material location (upstream) | `2archiver/Hearth` commit `79ffcfa4d718662985e706f2425418da01e15de0`, `app/signing/phairplay.p12` (blob `1bbeb049cb87e85569fdeee9713291bd8402c579`) |
 

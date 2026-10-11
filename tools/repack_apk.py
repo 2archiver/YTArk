@@ -974,8 +974,8 @@ def main():
     ap.add_argument("--app-id", default="io.github.twoarchiver.ytark")
     ap.add_argument("--script-url", required=False,
                     help="replacement userscript URL, must end with '?v='")
-    ap.add_argument("--version-code", type=int, default=2010200)
-    ap.add_argument("--version-name", default="2.1.2")
+    ap.add_argument("--version-code", type=int, default=3000000)
+    ap.add_argument("--version-name", default="3.0.0")
     ap.add_argument("--apktool", default="apktool",
                     help="apktool command, e.g. 'java -jar apktool.jar'")
     ap.add_argument("--zipalign", default="zipalign")

@@ -23,12 +23,12 @@ import validate_release
 class Armv7OnlyReleaseContractTests(unittest.TestCase):
     def test_expected_clean_semver_version_and_asset_names(self):
         config = validate_release.load_config()
-        self.assertEqual(config["VERSION_NAME"], "2.1.2")
-        self.assertEqual(config["DISPLAY_VERSION"], "2.1.2")
-        self.assertEqual(config["VERSION_CODE"], "2010200")
-        self.assertEqual(config["VERSION_TAG"], "v2.1.2")
-        self.assertEqual(config["RELEASE_NAME"], "YTArk 2.1.2")
-        self.assertEqual(config["APK_ARMV7"], "YTArk-v2.1.2-armv7.apk")
+        self.assertEqual(config["VERSION_NAME"], "3.0.0")
+        self.assertEqual(config["DISPLAY_VERSION"], "3.0")
+        self.assertEqual(config["VERSION_CODE"], "3000000")
+        self.assertEqual(config["VERSION_TAG"], "v3.0.0")
+        self.assertEqual(config["RELEASE_NAME"], "YTArk 3.0")
+        self.assertEqual(config["APK_ARMV7"], "YTArk-v3.0.0-armv7.apk")
         self.assertEqual(validate_release.apk_filename(config["VERSION_NAME"], "armv7"), config["APK_ARMV7"])
         # Only one architecture is published from 2.1.2 onwards.
         self.assertNotIn("APK_ARM64", config)
@@ -98,11 +98,12 @@ class Armv7OnlyReleaseContractTests(unittest.TestCase):
             releases_path.write_text(json.dumps([releases[:3], releases[3:]]), encoding="utf-8")
             validate_release.check_version(str(latest_path), str(releases_path))
 
+            # A published release above the candidate (3.0.0 = 3000000) must block it.
             too_high = dict(releases[1])
-            too_high["tag_name"] = "v2.1.0-ytark.2000000"
-            too_high["body"] = "Version 2.1.0-ytark.2000000 (versionCode 2020000)"
+            too_high["tag_name"] = "v3.0.1"
+            too_high["body"] = "Version 3.0.1 (versionCode 3000100)"
             releases_path.write_text(json.dumps(releases + [too_high]), encoding="utf-8")
-            with self.assertRaisesRegex(ValueError, "versionCode must exceed every published release"):
+            with self.assertRaisesRegex(ValueError, "must exceed every published release|must be newer"):
                 validate_release.check_version(str(latest_path), str(releases_path))
 
             inconsistent = dict(releases[1])
