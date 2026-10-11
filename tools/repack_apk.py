@@ -602,9 +602,11 @@ def store_uncompressed(apk_path: str) -> None:
 # Main repack flow
 # ---------------------------------------------------------------------------
 
+# YTArk 2.1.2 and later publish exactly one architecture. The mapping is kept
+# intentionally single-entry: an ARM64 (or any other) base is rejected by
+# validate_base_architecture and by the CLI choices instead of being repacked.
 ARCHITECTURES = {
     "armv7": "armeabi-v7a",
-    "arm64": "arm64-v8a",
 }
 
 
@@ -898,13 +900,13 @@ def self_test() -> None:
     with zipfile.ZipFile(zpath, "w") as zf:
         zf.writestr("resources.arsc", b"\0" * 32,
                     compress_type=zipfile.ZIP_STORED)
-        zf.writestr("lib/arm64-v8a/libchrobalt.so", b"\0" * 64,
+        zf.writestr("lib/armeabi-v7a/libchrobalt.so", b"\0" * 64,
                     compress_type=zipfile.ZIP_DEFLATED)
         zf.writestr("classes.dex", b"\0" * 64,
                     compress_type=zipfile.ZIP_DEFLATED)
     store_uncompressed(zpath)
     with zipfile.ZipFile(zpath) as zf:
-        lib_stored = zf.getinfo("lib/arm64-v8a/libchrobalt.so").compress_type \
+        lib_stored = zf.getinfo("lib/armeabi-v7a/libchrobalt.so").compress_type \
             == zipfile.ZIP_STORED
         dex_deflated = zf.getinfo("classes.dex").compress_type \
             == zipfile.ZIP_DEFLATED
@@ -964,15 +966,16 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--self-test", action="store_true")
     ap.add_argument("--base", help="path to the official base APK")
-    ap.add_argument("--architecture", choices=("armv7", "arm64"), help="ABI of the matching upstream base")
+    ap.add_argument("--architecture", choices=tuple(ARCHITECTURES),
+                    help="ABI of the matching upstream base (ARMv7 is the only published one)")
     ap.add_argument("--out", help="output path for the repacked (unsigned) APK")
     ap.add_argument("--updater-dex", help="compiled native YTArk updater DEX")
     ap.add_argument("--app-name", default="YTArk")
     ap.add_argument("--app-id", default="io.github.twoarchiver.ytark")
     ap.add_argument("--script-url", required=False,
                     help="replacement userscript URL, must end with '?v='")
-    ap.add_argument("--version-code", type=int, default=2010100)
-    ap.add_argument("--version-name", default="2.1.1")
+    ap.add_argument("--version-code", type=int, default=2010200)
+    ap.add_argument("--version-name", default="2.1.2")
     ap.add_argument("--apktool", default="apktool",
                     help="apktool command, e.g. 'java -jar apktool.jar'")
     ap.add_argument("--zipalign", default="zipalign")

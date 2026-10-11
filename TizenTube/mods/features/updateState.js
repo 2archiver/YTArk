@@ -91,10 +91,35 @@ export function displayVersion(version) {
   return match[3] === '0' ? `${match[1]}.${match[2]}` : value;
 }
 
+/**
+ * YTArk publishes ARMv7 (`armeabi-v7a`) releases only from 2.1.2 onwards, so
+ * only that ABI maps to a release asset. A device that reports a 64-bit ABI but
+ * no 32-bit ABI cannot install these builds; `arm64-v8a` may still appear as the
+ * ABI of an installation that was updated from an older dual-ABI release, and
+ * cross-ABI updates are refused rather than silently attempted.
+ */
 export function assetSuffixForArchitecture(architecture) {
-  if (architecture === 'arm64-v8a') return 'arm64';
-  if (architecture === 'armeabi-v7a') return 'armv7';
-  return null;
+  return architecture === 'armeabi-v7a' ? 'armv7' : null;
+}
+
+export function unsupportedArchitectureMessage(architecture) {
+  const value = String(architecture || '').trim();
+  if (value === 'arm64-v8a') {
+    return 'YTArk 2.1.2 and later are published for ARMv7 (armeabi-v7a) only. This '
+      + 'installation reports arm64-v8a, and cross-ABI updates are not supported: '
+      + 'install an ARMv7 build manually on a device whose Android userspace '
+      + 'supports 32-bit native code.';
+  }
+  if (!value) {
+    return 'This device did not report an Android ABI, so the ARMv7-only YTArk '
+      + 'release cannot be matched to it. A 64-bit CPU does not by itself mean the '
+      + 'Android userspace supports 32-bit applications; check '
+      + 'ro.product.cpu.abilist on the device.';
+  }
+  return `This device reports ${value} instead of armeabi-v7a, so the ARMv7-only `
+    + 'YTArk releases cannot be installed. A 64-bit CPU does not by itself mean the '
+    + 'Android userspace supports 32-bit applications; check ro.product.cpu.abilist '
+    + 'on the device.';
 }
 
 function isPlainObject(value) {
@@ -198,7 +223,7 @@ export function validateReleasePayload(payload, { installedVersion, architecture
   }
   const suffix = assetSuffixForArchitecture(architecture);
   if (!suffix) {
-    return { error: 'This device does not report a supported ARM ABI for YTArk updates.' };
+    return { error: unsupportedArchitectureMessage(architecture) };
   }
   const assetName = `YTArk-v${version}-${suffix}.apk`;
   const assets = Array.isArray(payload.assets) ? payload.assets : [];

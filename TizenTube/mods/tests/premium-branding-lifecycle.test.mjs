@@ -21,15 +21,21 @@ const { configChangeEmitter, configRead, configWrite } = await import('../config
 const {
   cleanup,
   findLogoHosts,
+  refreshInk,
   restoreHost,
   setPremiumLogo,
 } = await import('../features/premiumBranding.js');
+const { YOUTUBE_PREMIUM_WORDMARK } = await import('../assets/youtubePremiumLogo.generated.js');
 
-function makeLeanbackHost({ background = 'url("https://i.ytimg.com/youtube_logo.png")' } = {}) {
+function makeLeanbackHost({
+  background = 'url("https://i.ytimg.com/youtube_logo.png")',
+  color = 'rgb(255, 255, 255)',
+} = {}) {
   const host = new FakeElement('ytlr-logo-entity', doc);
   host.__rectHeight = 52;
   host.__rectWidth = 168;
   host.style.setProperty('display', 'block');
+  host.style.setProperty('color', color);
   const thumbnail = new FakeElement('ytlr-thumbnail-details', doc);
   thumbnail.style.setProperty('background-image', background);
   thumbnail.style.setProperty('background-size', 'auto 100%');
@@ -55,6 +61,11 @@ function wordmarks(host) {
   return host.querySelectorAll('[data-ytark-premium-wordmark="true"]');
 }
 
+function vectorOf(host) {
+  const mark = wordmarks(host)[0];
+  return mark ? mark.querySelector('svg.ytark-premium-vector') : null;
+}
+
 function resetDom() {
   for (const child of [...doc.body.children]) doc.body.removeChild(child);
   FakeMutationObserver.reset();
@@ -73,8 +84,28 @@ describe('premium wordmark on the real Leanback logo markup', () => {
     assert.equal(marks.length, 1, 'exactly one wordmark per logo location');
     const mark = marks[0];
     assert.equal(mark.getAttribute('aria-hidden'), 'true');
-    assert.equal(mark.querySelector('.ytark-premium-text').textContent, 'YouTube Premium');
-    assert.ok(mark.querySelector('.ytark-premium-mark'), 'local red play emblem is drawn with CSS');
+    assert.equal(mark.querySelector('.ytark-premium-text'), null,
+      'the previous text approximation is not rendered any more');
+    const vector = mark.querySelector('svg.ytark-premium-vector');
+    assert.ok(vector, 'the bundled vector artwork is rendered inline');
+    assert.equal(vector.getAttribute('viewBox'), YOUTUBE_PREMIUM_WORDMARK.viewBox,
+      'the upstream viewBox is preserved');
+    assert.equal(vector.getAttribute('preserveAspectRatio'), 'xMidYMid meet');
+    assert.equal(vector.getAttribute('aria-hidden'), 'true');
+    assert.equal(vector.getAttribute('focusable'), 'false');
+    const paths = vector.querySelectorAll('path');
+    assert.equal(paths.length, YOUTUBE_PREMIUM_WORDMARK.paths.length,
+      'every source path is rendered, none is retyped or dropped');
+    assert.equal(paths[0].getAttribute('fill'), '#FF0033', 'the red emblem keeps its source paint');
+    assert.equal(paths[1].getAttribute('fill'), 'white', 'the play triangle keeps its source paint');
+    assert.equal(paths[2].getAttribute('fill'), 'currentColor',
+      'lettering follows the native header foreground');
+    assert.equal(paths[2].getAttribute('class'), 'ytark-premium-ink');
+    assert.equal(paths[0].getAttribute('class'), null);
+    assert.equal(paths[0].getAttribute('d'), YOUTUBE_PREMIUM_WORDMARK.paths[0].attributes.d,
+      'path data is copied byte for byte from the Wikimedia revision');
+    assert.equal(vector.querySelectorAll('text').length, 0,
+      'no font-rendered or retyped glyph is used');
     assert.equal(thumbnail.style.getPropertyValue('background-image'), 'none');
     assert.equal(thumbnail.style.getPropertyPriority('background-image'), 'important');
     assert.ok(thumbnail.classList.contains('ytark-premium-logo-artwork-hidden'));
@@ -240,5 +271,101 @@ describe('logo lifecycle across navigation, teardown and config changes', () => 
     windowStub.dispatch('pageshow');
     await waitFor(200);
     assert.equal(wordmarks(host).length, 1, 're-attaching the header yields exactly one wordmark');
+  });
+});
+
+describe('vector wordmark theming', () => {
+  it('paints the lettering with the native dark header foreground and keeps the emblem red', async () => {
+    resetDom();
+    const { host } = makeLeanbackHost({ color: 'rgb(241, 241, 241)' });
+    windowStub.dispatch('pageshow');
+    await waitFor(200);
+    const mark = wordmarks(host)[0];
+    assert.equal(mark.getAttribute('data-ytark-premium-theme'), 'dark');
+    assert.equal(mark.getAttribute('data-ytark-premium-ink'), '#f1f1f1');
+    assert.equal(mark.getAttribute('data-ytark-premium-ink-source'), 'header-foreground');
+    assert.equal(mark.style.getPropertyValue('color'), '#f1f1f1');
+    const vector = vectorOf(host);
+    assert.equal(vector.getAttribute('height'), '27px', 'scaled from the header box, not from a font');
+    assert.equal(vector.getAttribute('width'), '136.4px', 'the upstream aspect ratio is kept');
+    assert.equal(vector.querySelectorAll('path')[0].getAttribute('fill'), '#FF0033');
+  });
+
+  it('switches only the lettering ink on a light header', async () => {
+    resetDom();
+    const { host } = makeLeanbackHost({ color: 'rgb(15, 15, 15)' });
+    windowStub.dispatch('pageshow');
+    await waitFor(200);
+    const mark = wordmarks(host)[0];
+    assert.equal(mark.getAttribute('data-ytark-premium-theme'), 'light');
+    assert.equal(mark.getAttribute('data-ytark-premium-ink'), '#0f0f0f');
+    const paths = vectorOf(host).querySelectorAll('path');
+    assert.equal(paths[0].getAttribute('fill'), '#FF0033', 'the red emblem is never inverted');
+    assert.equal(paths[1].getAttribute('fill'), 'white', 'the triangle stays white in both themes');
+    assert.equal(paths[2].getAttribute('fill'), 'currentColor');
+  });
+
+  it('follows an app theme override before the OS colour preference', async () => {
+    resetDom();
+    windowStub.setColorScheme('light');
+    doc.documentElement.setAttribute('class', 'ytlr-dark-mode');
+    const { host } = makeLeanbackHost({ color: '' });
+    windowStub.dispatch('pageshow');
+    await waitFor(200);
+    const mark = wordmarks(host)[0];
+    assert.equal(mark.getAttribute('data-ytark-premium-ink-source'), 'app-theme');
+    assert.equal(mark.getAttribute('data-ytark-premium-theme'), 'dark');
+    assert.equal(mark.getAttribute('data-ytark-premium-ink'), '#f1f1f1');
+
+    windowStub.setColorScheme('dark');
+    doc.documentElement.setAttribute('class', 'ytlr-light-mode');
+    refreshInk(doc);
+    assert.equal(mark.getAttribute('data-ytark-premium-theme'), 'light',
+      'the app theme keeps priority over prefers-color-scheme');
+    doc.documentElement.removeAttribute('class');
+  });
+
+  it('re-arms the theme watchers after a pagehide/pageshow cycle', async () => {
+    resetDom();
+    windowStub.setColorScheme('dark');
+    const { host } = makeLeanbackHost({ color: '' });
+    windowStub.dispatch('pageshow');
+    await waitFor(200);
+    let mark = wordmarks(host)[0];
+    assert.equal(mark.getAttribute('data-ytark-premium-theme'), 'dark');
+
+    // cleanup() releases the theme watchers; the reload-free return must arm
+    // them again so a later theme switch still repaints the lettering.
+    windowStub.dispatch('pagehide');
+    assert.equal(wordmarks(host).length, 0);
+    windowStub.dispatch('pageshow');
+    await waitFor(200);
+    mark = wordmarks(host)[0];
+    assert.ok(mark, 'the wordmark is mounted again after the return');
+    assert.equal(mark.getAttribute('data-ytark-premium-theme'), 'dark');
+
+    windowStub.setColorScheme('light');
+    await waitFor(200);
+    assert.equal(mark.getAttribute('data-ytark-premium-theme'), 'light',
+      'the re-armed watcher still follows an OS theme change');
+    assert.equal(wordmarks(host).length, 1, 'without duplicating the wordmark');
+  });
+
+  it('uses prefers-color-scheme only as a fallback', async () => {
+    resetDom();
+    windowStub.setColorScheme('dark');
+    const { host } = makeLeanbackHost({ color: '' });
+    windowStub.dispatch('pageshow');
+    await waitFor(200);
+    const mark = wordmarks(host)[0];
+    assert.equal(mark.getAttribute('data-ytark-premium-ink-source'), 'prefers-color-scheme');
+    assert.equal(mark.getAttribute('data-ytark-premium-theme'), 'dark');
+
+    windowStub.setColorScheme('light');
+    await waitFor(200);
+    assert.equal(mark.getAttribute('data-ytark-premium-ink-source'), 'prefers-color-scheme');
+    assert.equal(mark.getAttribute('data-ytark-premium-theme'), 'light',
+      'an OS theme change re-applies the ink without a reload');
+    assert.equal(wordmarks(host).length, 1, 'and never duplicates the wordmark');
   });
 });

@@ -1,4 +1,4 @@
-name: Build YTArk APK candidates for Android TV
+name: Build the YTArk ARMv7 APK candidate for Android TV
 
 on:
   push:
@@ -102,6 +102,12 @@ jobs:
       - name: Load release version
         run: python3 tools/validate_release.py emit-env --file "$GITHUB_ENV"
 
+      - name: Verify the bundled Premium vector wordmark before building
+        run: |
+          set -euo pipefail
+          python3 tools/fetch_premium_logo.py --verify-only --out-dir TizenTube/mods/assets
+          python3 tools/build_logo_asset.py --check
+
       - name: Build userscript and run feature/TV-control tests
         working-directory: TizenTube/mods
         run: |
@@ -113,6 +119,11 @@ jobs:
           grep -q "YTArk Quick Controls" ../dist/userScript.js
           grep -q "YouTube Premium" ../dist/userScript.js
           grep -q "ytark://updates" ../dist/userScript.js
+          if grep -Eqi '<text|<image|href="http|url\(https?:' ../dist/userScript.js; then
+            echo "The generated userscript must not carry text/raster/external logo content" >&2
+            exit 1
+          fi
+          grep -q "ytark-premium-ink" ../dist/userScript.js
           if grep -Eqi 'Personal[[:space:]]+Tube[[:space:]]+TV' ../dist/userScript.js; then
             echo "Deprecated branding found in generated userscript" >&2
             exit 1
@@ -152,7 +163,7 @@ jobs:
           retention-days: 7
 
   build-apk-candidates:
-    name: Build, package-check both APKs
+    name: Build and package-check the ARMv7 APK
     runs-on: ubuntu-latest
     timeout-minutes: 150
     needs:
@@ -225,7 +236,7 @@ jobs:
           chmod +x tools/build_android_updater.sh
           tools/build_android_updater.sh "$RUNNER_TEMP/ytark-updater/classes.dex"
 
-      - name: Download and verify both pinned upstream Cobalt bases
+      - name: Download and verify the pinned upstream ARMv7 Cobalt base
         run: |
           set -euo pipefail
           python3 tools/fetch_base_apks.py \
@@ -247,7 +258,7 @@ jobs:
           curl -fsSL --retry 3 "$APKTOOL_URL" -o "$RUNNER_TEMP/apktool.jar"
           java -jar "$RUNNER_TEMP/apktool.jar" --version
 
-      - name: Repack matching ARMv7 and ARM64 Cobalt bases
+      - name: Repack the ARMv7 Cobalt base
         run: |
           set -euo pipefail
           mkdir -p work
@@ -260,77 +271,63 @@ jobs:
             --version-name "$VERSION_NAME" \
             --apktool "java -jar $RUNNER_TEMP/apktool.jar" \
             --zipalign "$ANDROID_HOME/build-tools/$BUILD_TOOLS/zipalign"
-          python3 tools/repack_apk.py \
-            --base base/cobalt-arm64.apk --architecture arm64 \
-            --out "work/${APK_ARM64%.apk}-unsigned.apk" \
-            --updater-dex "$RUNNER_TEMP/ytark-updater/classes.dex" \
-            --app-name "$APP_NAME" --app-id "$APP_ID" \
-            --script-url "$SCRIPT_URL" --version-code "$VERSION_CODE" \
-            --version-name "$VERSION_NAME" \
-            --apktool "java -jar $RUNNER_TEMP/apktool.jar" \
-            --zipalign "$ANDROID_HOME/build-tools/$BUILD_TOOLS/zipalign"
 
-      - name: Verify alignment, sign both APKs and validate compiled packages
+      - name: Verify alignment, sign the ARMv7 APK and validate the compiled package
         run: |
           set -euo pipefail
           zipalign -c -p 4 "work/${APK_ARMV7%.apk}-unsigned.apk"
-          zipalign -c -p 4 "work/${APK_ARM64%.apk}-unsigned.apk"
           export YTARK_EXPECTED_CERT_SHA256="$SIGNING_CERT_SHA256"
           bash tools/sign_apks.sh work
+          # Exactly one APK leaves the signing step: a second architecture would
+          # fail sign_apks.sh before this point instead of being published.
+          stray_count="$(find work -maxdepth 1 -name '*-armv7.apk' ! -name "${APK_ARMV7%.apk}.apk" | wc -l)"
+          test "$stray_count" -eq 0
           mkdir -p release-assets
           mv "work/${APK_ARMV7%.apk}.apk" "release-assets/$APK_ARMV7"
-          mv "work/${APK_ARM64%.apk}.apk" "release-assets/$APK_ARM64"
-          for architecture in armv7 arm64; do
-            if [ "$architecture" = armv7 ]; then apk="$APK_ARMV7"; else apk="$APK_ARM64"; fi
-            zipalign -c -p 4 "release-assets/$apk"
-            python3 tools/validate_release.py check-apk \
-              --apk "release-assets/$apk" --architecture "$architecture" \
-              --cert-file signing/YTArk-cert-sha256.txt \
-              --aapt "$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt" \
-              --apksigner "$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner"
-          done
+          zipalign -c -p 4 "release-assets/$APK_ARMV7"
+          python3 tools/validate_release.py check-apk \
+            --apk "release-assets/$APK_ARMV7" --architecture armv7 \
+            --cert-file signing/YTArk-cert-sha256.txt \
+            --aapt "$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt" \
+            --apksigner "$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner"
 
-      - name: Create and verify both APK checksums
+      - name: Create and verify the ARMv7 APK checksums
         run: |
           set -euo pipefail
           cp TizenTube/dist/userScript.js release-assets/userScript.js
           cp base-apk-sha256.txt release-assets/base-apk-sha256.txt
           (
             cd release-assets
-            sha256sum "$APK_ARMV7" "$APK_ARM64" userScript.js > SHA256SUMS.txt
+            sha256sum "$APK_ARMV7" userScript.js > SHA256SUMS.txt
           )
           python3 tools/validate_release.py check-checksums \
             --checksums release-assets/SHA256SUMS.txt \
             --armv7 "release-assets/$APK_ARMV7" \
-            --arm64 "release-assets/$APK_ARM64" \
             --user-script release-assets/userScript.js
           python3 tools/validate_release.py check-base-checksums \
             --checksums release-assets/base-apk-sha256.txt --base-dir base
 
-      - name: Prepare same-ABI prior-version package candidates (static only)
+      - name: Prepare the same-ABI ARMv7 prior-version package candidate (static only)
         run: |
           set -euo pipefail
           mkdir -p update-smoke
           : > update-smoke/eligibility.properties
-          for architecture in armv7 arm64; do
-            python3 tools/prepare_update_smoke.py \
-              --latest-json "$RUNNER_TEMP/ytark-validation/latest-release.json" \
-              --architecture "$architecture" \
-              --artifact-dir update-smoke \
-              --output update-smoke/eligibility.properties \
-              --cert-file signing/YTArk-cert-sha256.txt \
-              --aapt "$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt" \
-              --apksigner "$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner"
-          done
+          python3 tools/prepare_update_smoke.py \
+            --latest-json "$RUNNER_TEMP/ytark-validation/latest-release.json" \
+            --architecture armv7 \
+            --artifact-dir update-smoke \
+            --output update-smoke/eligibility.properties \
+            --cert-file signing/YTArk-cert-sha256.txt \
+            --aapt "$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt" \
+            --apksigner "$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner"
           cp "release-assets/$APK_ARMV7" update-smoke/current-ytark-armv7.apk
-          cp "release-assets/$APK_ARM64" update-smoke/current-ytark-arm64.apk
           cat update-smoke/eligibility.properties
           echo "These checks compare package metadata and signer only; they do not run adb install or launch an emulator."
 
-      - name: Upload candidate APKs and validation metadata
+      - name: Upload the ARMv7 candidate and validation metadata
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ytark-dual-abi-candidates
+          name: ytark-armv7-candidate
           path: |
             release-assets/*
             update-smoke/*.apk
@@ -359,10 +356,10 @@ jobs:
           set -euo pipefail
           python3 tools/validate_release.py emit-env --file "$GITHUB_ENV"
 
-      - name: Download candidate APKs and validation metadata
+      - name: Download the ARMv7 candidate and validation metadata
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
-          name: ytark-dual-abi-candidates
+          name: ytark-armv7-candidate
           path: staging
 
       - name: Create draft release and validate its asset contract
@@ -393,7 +390,7 @@ jobs:
         run: |
           {
             echo "## YTArk runtime validation status"
-            echo "- ARMv7 and ARM64 packaging/manifest/signature checks ran in CI."
+            echo "- The ARMv7 packaging/manifest/signature checks ran in CI (the only published architecture)."
             echo "- No physical Google TV / Android device was attached to this workflow."
             echo "- Installation, launch, D-pad interaction, sign-in/guest flow, playback, 2160p streams, captions, and in-place PackageInstaller updates remain unverified."
             if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.publish }}" != "true" ]; then
@@ -465,10 +462,10 @@ jobs:
           sdkmanager "build-tools;${BUILD_TOOLS}" >/dev/null
           echo "$ANDROID_HOME/build-tools/$BUILD_TOOLS" >> "$GITHUB_PATH"
 
-      - name: Download the validated candidate artifacts
+      - name: Download the validated ARMv7 candidate artifacts
         uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
         with:
-          name: ytark-dual-abi-candidates
+          name: ytark-armv7-candidate
           path: candidate
 
       - name: Verify published metadata, latest resolution, bytes, checksums and signer
@@ -486,7 +483,7 @@ jobs:
             --latest-json "$RUNNER_TEMP/latest-release.json"
 
           mkdir -p published
-          for asset in "$APK_ARMV7" "$APK_ARM64" userScript.js SHA256SUMS.txt \
+          for asset in "$APK_ARMV7" userScript.js SHA256SUMS.txt \
                        base-apk-sha256.txt NOTICE.md; do
             curl -fsSL --retry 3 \
               "https://github.com/$GITHUB_REPOSITORY/releases/download/$VERSION_TAG/$asset" \
@@ -494,29 +491,25 @@ jobs:
           done
 
           # The promoted bytes must be exactly the bytes the candidate job validated.
-          for architecture in armv7 arm64; do
-            if [ "$architecture" = armv7 ]; then apk="$APK_ARMV7"; else apk="$APK_ARM64"; fi
-            cmp "candidate/release-assets/$apk" "published/$apk"
-            python3 tools/validate_release.py check-apk \
-              --apk "published/$apk" --architecture "$architecture" \
-              --cert-file signing/YTArk-cert-sha256.txt \
-              --aapt "$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt" \
-              --apksigner "$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner"
-          done
+          cmp "candidate/release-assets/$APK_ARMV7" "published/$APK_ARMV7"
+          python3 tools/validate_release.py check-apk \
+            --apk "published/$APK_ARMV7" --architecture armv7 \
+            --cert-file signing/YTArk-cert-sha256.txt \
+            --aapt "$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt" \
+            --apksigner "$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner"
           for asset in userScript.js SHA256SUMS.txt base-apk-sha256.txt; do
             cmp "candidate/release-assets/$asset" "published/$asset"
           done
           python3 tools/validate_release.py check-checksums \
             --checksums published/SHA256SUMS.txt \
             --armv7 "published/$APK_ARMV7" \
-            --arm64 "published/$APK_ARM64" \
             --user-script published/userScript.js
           grep -Fq "TizenTubeCobalt $BASE_TAG" published/NOTICE.md
           grep -Fq "GPL-3.0-only" published/NOTICE.md
           {
             echo "## YTArk stable release published"
             echo "- \`$VERSION_TAG\` is published, non-draft, non-prerelease and resolves as GitHub latest."
-            echo "- Both APK assets re-downloaded from their official URLs and verified byte-identical to the validated candidates."
-            echo "- Compiled manifest, native ABI, alignment, SHA-256 and signing-certificate checks re-ran against the published APKs."
+            echo "- The ARMv7 APK asset was re-downloaded from its official URL and verified byte-identical to the validated candidate."
+            echo "- Compiled manifest, native ABI, alignment, SHA-256 and signing-certificate checks re-ran against the published APK."
             echo "- Physical TV installation, playback and sign-in persistence were not exercised by this workflow."
           } >> "$GITHUB_STEP_SUMMARY"

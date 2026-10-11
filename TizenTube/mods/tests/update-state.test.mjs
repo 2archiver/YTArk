@@ -19,20 +19,25 @@ import {
   versionCodeForVersion,
 } from '../features/updateState.js';
 
-const ARM64_ASSET = 'YTArk-v2.1.1-arm64.apk';
-const ARM64_URL = `https://github.com/2archiver/YTArk/releases/download/v2.1.1/${ARM64_ASSET}`;
+// The published release is ARMv7-only from 2.1.2 onwards, so the fixture is
+// the ARMv7 asset: an arm64-v8a APK is not a selectable YTArk update any more.
+const ARMV7_ASSET = 'YTArk-v2.1.2-armv7.apk';
+const ARMV7_URL = `https://github.com/2archiver/YTArk/releases/download/v2.1.2/${ARMV7_ASSET}`;
+const LEGACY_ARM64_ASSET = 'YTArk-v2.1.1-arm64.apk';
+const LEGACY_ARM64_URL =
+  `https://github.com/2archiver/YTArk/releases/download/v2.1.1/${LEGACY_ARM64_ASSET}`;
 
 function releaseFixture(overrides = {}) {
   return {
-    tag_name: 'v2.1.1',
+    tag_name: 'v2.1.2',
     draft: false,
     prerelease: false,
-    body: 'YTArk 2.1.1\n\n- Premium wordmark fix\n\nAndroid versionCode: 2010100\n',
+    body: 'YTArk 2.1.2\n\n- Vector Premium wordmark\n\nAndroid versionCode: 2010200\n',
     assets: [
       {
-        name: ARM64_ASSET,
-        size: 168316114,
-        browser_download_url: ARM64_URL,
+        name: ARMV7_ASSET,
+        size: 97195140,
+        browser_download_url: ARMV7_URL,
         digest: `sha256:${'ab'.repeat(32)}`,
       },
     ],
@@ -88,42 +93,40 @@ describe('version ordering', () => {
 });
 
 describe('stable release validation', () => {
-  const context = { installedVersion: '2.1.0', architecture: 'arm64-v8a' };
+  const context = { installedVersion: '2.1.1', architecture: 'armeabi-v7a' };
 
-  test('accepts a matching published stable release for the device ABI', () => {
+  test('accepts a matching published stable release for an ARMv7 device', () => {
     const { release, error } = validateReleasePayload(releaseFixture(), context);
     assert.equal(error, undefined);
-    assert.equal(release.version, '2.1.1');
-    assert.equal(release.display, '2.1.1');
-    assert.equal(release.versionCode, 2010100);
-    assert.equal(release.assetName, ARM64_ASSET);
-    assert.equal(release.abi, 'arm64-v8a');
+    assert.equal(release.version, '2.1.2');
+    assert.equal(release.display, '2.1.2');
+    assert.equal(release.versionCode, 2010200);
+    assert.equal(release.assetName, ARMV7_ASSET);
+    assert.equal(release.abi, 'armeabi-v7a');
     assert.equal(release.newer, true);
     assert.equal(release.sha256Published, 'ab'.repeat(32));
-    assert.match(release.notes, /Premium wordmark fix/);
+    assert.match(release.notes, /Vector Premium wordmark/);
     assert.doesNotMatch(release.notes, /versionCode/i);
   });
 
-  test('selects the armv7 asset on 32-bit devices and never mixes them up', () => {
+  test('selects the ARMv7 asset by metadata instead of asset order', () => {
     const fixture = releaseFixture({
       assets: [
         {
-          name: ARM64_ASSET,
-          size: 1,
-          browser_download_url: ARM64_URL,
+          name: ARMV7_ASSET,
+          size: 2,
+          browser_download_url: ARMV7_URL,
         },
         {
-          name: 'YTArk-v2.1.1-armv7.apk',
-          size: 2,
-          browser_download_url: 'https://github.com/2archiver/YTArk/releases/download/v2.1.1/YTArk-v2.1.1-armv7.apk',
+          name: 'userScript.js',
+          size: 3,
+          browser_download_url: 'https://github.com/2archiver/YTArk/releases/download/v2.1.2/userScript.js',
         },
       ],
     });
-    const { release, error } = validateReleasePayload(fixture, {
-      installedVersion: '2.1.0', architecture: 'armeabi-v7a',
-    });
+    const { release, error } = validateReleasePayload(fixture, context);
     assert.equal(error, undefined);
-    assert.equal(release.assetName, 'YTArk-v2.1.1-armv7.apk');
+    assert.equal(release.assetName, ARMV7_ASSET);
     assert.equal(release.abi, 'armeabi-v7a');
   });
 
@@ -149,8 +152,8 @@ describe('stable release validation', () => {
     const foreign = validateReleasePayload(
       releaseFixture({
         assets: [{
-          name: 'YTArk-v2.1.1-arm64.apk',
-          browser_download_url: 'https://evil.example.com/YTArk-v2.1.1-arm64.apk',
+          name: ARMV7_ASSET,
+          browser_download_url: 'https://evil.example.com/' + ARMV7_ASSET,
           size: 1,
         }],
       }),
@@ -161,7 +164,7 @@ describe('stable release validation', () => {
 
   test('refuses releases whose declared versionCode disagrees with the tag', () => {
     const bad = validateReleasePayload(
-      releaseFixture({ body: 'YTArk 2.1.1\n\nAndroid versionCode: 2010000\n' }),
+      releaseFixture({ body: 'YTArk 2.1.2\n\nAndroid versionCode: 2010000\n' }),
       context,
     );
     assert.match(bad.error, /do not confirm the expected Android versionCode/);
@@ -169,10 +172,30 @@ describe('stable release validation', () => {
     assert.match(missing.error, /do not confirm the expected Android versionCode/);
   });
 
+  test('refuses a 64-bit-only device with an actionable ARMv7-only message', () => {
+    const { release, error } = validateReleasePayload(releaseFixture(), {
+      installedVersion: '2.1.1', architecture: 'arm64-v8a',
+    });
+    assert.equal(release, undefined);
+    assert.match(error, /ARMv7 \(armeabi-v7a\) only/);
+    assert.match(error, /arm64-v8a/);
+    assert.match(error, /cross-ABI updates are not supported/);
+  });
+
+  test('never selects a legacy ARM64 asset, even when it is present', () => {
+    const fixture = releaseFixture({
+      assets: [
+        { name: LEGACY_ARM64_ASSET, size: 1, browser_download_url: LEGACY_ARM64_URL },
+      ],
+    });
+    const { error } = validateReleasePayload(fixture, context);
+    assert.match(error, /assets named YTArk-v2\.1\.2-armv7\.apk/);
+  });
+
   test('refuses unsupported ABIs and malformed payloads without throwing', () => {
     assert.match(
       validateReleasePayload(releaseFixture(), { installedVersion: '2.1.0', architecture: 'x86_64' }).error,
-      /does not report a supported ARM ABI/,
+      /instead of armeabi-v7a|did not report an Android ABI/,
     );
     assert.match(validateReleasePayload(null, context).error, /was not an object/);
     assert.match(validateReleasePayload({ message: 'Not Found' }, context).error, /no stable ytark release/i);
@@ -190,11 +213,11 @@ describe('stable release validation', () => {
       tag_name: 'v2.1.0',
       body: 'Android versionCode: 2010000',
       assets: [{
-        name: 'YTArk-v2.1.0-arm64.apk',
-        size: 168316114,
-        browser_download_url: 'https://github.com/2archiver/YTArk/releases/download/v2.1.0/YTArk-v2.1.0-arm64.apk',
+        name: 'YTArk-v2.1.0-armv7.apk',
+        size: 97195140,
+        browser_download_url: 'https://github.com/2archiver/YTArk/releases/download/v2.1.0/YTArk-v2.1.0-armv7.apk',
       }],
-    }), context);
+    }), { installedVersion: '2.1.0', architecture: 'armeabi-v7a' });
     assert.equal(error, undefined);
     assert.equal(release.newer, false);
     assert.equal(release.versionCode, 2010000);

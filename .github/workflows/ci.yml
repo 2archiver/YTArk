@@ -1,4 +1,4 @@
-name: Validate YTArk source and dual-ABI release contract
+name: Validate YTArk source and ARMv7-only release contract
 
 on:
   push:
@@ -14,7 +14,7 @@ permissions:
 
 jobs:
   tests:
-    name: Userscript, ABI, repacker and updater tests
+    name: Userscript, vector asset, ABI, repacker and updater tests
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
@@ -35,6 +35,16 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      - name: Verify the bundled Premium vector wordmark and its provenance
+        run: |
+          set -euo pipefail
+          # The sanitized vector must still match the recorded Commons revision
+          # hashes and the generated module must be exactly what the committed
+          # asset produces: a drifted or hand-edited wordmark fails here.
+          python3 tools/fetch_premium_logo.py --verify-only \
+            --out-dir TizenTube/mods/assets
+          python3 tools/build_logo_asset.py --check
+
       - name: Test and build the YTArk userscript
         working-directory: TizenTube/mods
         run: |
@@ -46,6 +56,13 @@ jobs:
           grep -q "YTArk Quick Controls" ../dist/userScript.js
           grep -q "YouTube Premium" ../dist/userScript.js
           grep -q "ytark://updates" ../dist/userScript.js
+          # The bundled wordmark is real vector geometry: no <text> node, no
+          # <image>, no external href to an image host, and no runtime fetch.
+          if grep -Eqi '<text|<image|href="http|url\(https?:' ../dist/userScript.js; then
+            echo "The generated userscript must not carry text/raster/external logo content" >&2
+            exit 1
+          fi
+          grep -q "ytark-premium-ink" ../dist/userScript.js
           if grep -Eqi 'Personal[[:space:]]+Tube[[:space:]]+TV' ../dist/userScript.js; then
             echo "Deprecated product branding found in generated userscript" >&2
             exit 1
@@ -61,17 +78,33 @@ jobs:
           python3 tools/render_launcher_art.py --check
           python3 tools/check_no_secrets.py --history
           python3 tools/validate_release.py emit-env --file "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'VERSION_NAME=2.1.1' "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'DISPLAY_VERSION=2.1.1' "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'VERSION_CODE=2010100' "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'APK_ARMV7=YTArk-v2.1.1-armv7.apk' "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'APK_ARM64=YTArk-v2.1.1-arm64.apk' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'VERSION_NAME=2.1.2' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'DISPLAY_VERSION=2.1.2' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'VERSION_CODE=2010200' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'VERSION_TAG=v2.1.2' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'SCRIPT_TAG=s20' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'APK_ARMV7=YTArk-v2.1.2-armv7.apk' "$RUNNER_TEMP/ytark-release.env"
+          # ARMv7 is the only published architecture; an ARM64 asset name must
+          # not exist anywhere in the release environment or the active pipeline.
+          if grep -q 'ARM64' "$RUNNER_TEMP/ytark-release.env"; then
+            echo "The release environment still advertises an ARM64 asset" >&2
+            exit 1
+          fi
+          # tools/tests keeps the historical ARM64 asset names on purpose: they
+          # prove that the updater and the checksum contract reject them.
+          if grep -rlniE 'cobalt-arm64|APK_ARM64|ytark-dual-abi' \
+              .github/workflows/build-apk.yml .github/workflows/fetch-premium-logo.yml \
+              release README.md docs tools/*.sh tools/*.py; then
+            echo "ARM64 release plumbing is still present in the active pipeline" >&2
+            exit 1
+          fi
           actual_cert="$(openssl x509 -in signing/YTArk-release-cert.pem -outform DER | sha256sum | awk '{print $1}')"
           expected_cert="$(grep -v '^[[:space:]]*#' signing/YTArk-cert-sha256.txt | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
           test "$actual_cert" = "$expected_cert"
           grep -Fxq 'communityRepository=2archiver/Hearth' release/signing.properties
           grep -Fq 'enableAdBlock: true' TizenTube/mods/config.js
           grep -Fq "enablePremiumLogo: true" TizenTube/mods/config.js
+          grep -Fq 'baseTag=v2.0.2' release/version.properties
 
       - name: Test native updater ABI and release metadata contracts
         run: |

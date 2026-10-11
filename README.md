@@ -12,14 +12,19 @@ native updater that always hands installation to Android for user confirmation.
 |---|---|
 | Android package | `io.github.twoarchiver.ytark` |
 | Launcher label | `YTArk` |
-| Target display version | `2.1.1` (Android versionName `2.1.1`) |
-| Target versionCode | `2010100` (above every published YTArk APK) |
-| 32-bit userspace candidate | `YTArk-v2.1.1-armv7.apk` — `armeabi-v7a` |
-| 64-bit userspace candidate | `YTArk-v2.1.1-arm64.apk` — `arm64-v8a` |
-| Immutable userscript revision | `s19` (previous published revision `s18` is never moved) |
+| Target display version | `2.1.2` (Android versionName `2.1.2`) |
+| Target versionCode | `2010200` (above every published YTArk APK) |
+| Published APK (the only architecture) | `YTArk-v2.1.2-armv7.apk` — `armeabi-v7a` |
+| Immutable userscript revision | `s20` (previous published revision `s19` is never moved) |
 | Pinned Android base | TizenTubeCobalt `v2.0.2` |
 
-These filenames identify the intended candidates, not proof that an APK has
+From 2.1.2 onwards YTArk **builds, signs, verifies and publishes exactly one
+architecture**: 32-bit ARM `armeabi-v7a`. The ARM64 job, its upstream download
+and its release asset were removed from the pipeline; historical releases keep
+their published assets, and a `*-arm64.apk` file is no longer produced, offered
+or documented as an installable choice.
+
+These filenames identify the intended candidate, not proof that an APK has
 been built or installed. **No physical Google TV / Android TV acceptance is
 claimed by source-only or CI packaging checks.** Use the official
 [YTArk Releases](https://github.com/2archiver/YTArk/releases) page when the
@@ -27,13 +32,14 @@ matching draft has been reviewed and published. Releases are meant to stay in
 draft until target-device installation, guest access, navigation, playback, and
 same-ABI update tests have been recorded.
 
-## Choose the architecture — 4K is not an ABI
+## Check the ABI first — 4K is not an ABI
 
 **4K does not select an APK architecture.** Resolution, Android version, device
-marketing name, and a spoofed YouTube User-Agent do not determine which native
-APK can load. A 4K TV may run 32-bit `armeabi-v7a` userspace; some devices that
-have a 64-bit-capable CPU still run a 32-bit Android userspace. Choose by the
-ABI Android reports, not by the display resolution.
+marketing name, a 64-bit CPU and a spoofed YouTube User-Agent do not determine
+which native code the Android userspace can load. A 4K TV may run 32-bit
+`armeabi-v7a` userspace, and devices with a 64-bit-capable CPU still frequently
+run a 32-bit Android userspace. The published release is ARMv7-only, so the
+device must report `armeabi-v7a` in its own ABI list.
 
 On the TV, open **Settings → About** to note the exact model and Android / Google
 TV version. If ADB is available from a computer on the same network, collect:
@@ -52,22 +58,27 @@ adb shell getprop ro.product.cpu.abilist64
 On newer Android versions, enable **Developer options → Wireless debugging**
 and pair/connect using the address and port shown on the TV. `ro.product.cpu.abilist`
 (or the equivalent ABI list from a device diagnostic tool) describes the
-available Android userspace ABIs. Select the ARM64 candidate only when
-`arm64-v8a` is supported by the installed userspace; otherwise select the
-ARMv7 candidate when `armeabi-v7a` is listed. If neither appears, neither APK
-is a supported choice. Do not rename an APK to simulate another ABI.
+available Android userspace ABIs. Install this release when `armeabi-v7a` is
+listed. **When the list contains only 64-bit ABIs such as `arm64-v8a`, this
+ARMv7-only release is not installable on that device** — a 64-bit CPU does not by
+itself mean the userspace runs 32-bit native code. Do not rename an APK, strip
+its `lib/` directory, or install an asset from another source to work around
+that check; Android would still reject the package, or the app would fail at
+Cobalt start-up.
 
 For a YTArk installation, the updater stays on the ABI embedded in the
-currently installed APK. It reads that APK's native-library directories and
-checks them against Android's supported ABI list. It will not silently turn an
-ARMv7 installation into ARM64. Cross-ABI migration has not been validated; use
-the same-ABI release unless a migration has been explicitly tested on that
-model.
+currently installed APK. It reads that APK's native-library directories, checks
+them against Android's supported ABI list before any download, and refuses a
+release whose native ABI differs. Installations that were updated from the old
+dual-ABI line and still report `arm64-v8a` receive an explicit "cross-ABI update
+not supported" message instead of an ARMv7 download they could not install.
+ARM64 installations from 2.1.1 and earlier keep working as installed; they are
+simply not an update target any more.
 
 ## Remote-friendly installation
 
-1. From the official release page, download **one** versioned APK matching the
-   TV's reported ABI. Download `SHA256SUMS.txt` too.
+1. From the official release page, download the versioned ARMv7 APK
+   (`YTArk-v2.1.2-armv7.apk`). Download `SHA256SUMS.txt` too.
 2. Verify the selected file on the computer, for example:
 
    ```sh
@@ -101,11 +112,11 @@ an update unless you understand that uninstalling can erase app data.
 | SponsorBlock segment skipping | **On by default**, category settings preserved |
 | DeArrow titles/thumbnails | On by default (title only unless thumbnails enabled) |
 | Quality selection | Auto default, manual ceiling; no resolution promises |
-| Cosmetic "YouTube Premium" wordmark | **On by default**, off-able local visual only — **never** a subscription or entitlement |
+| Cosmetic "YT Premium" header wordmark | **On by default**, bundled 2024 vector artwork, off-able local visual only — **never** a subscription or entitlement |
 | Settings → YTArk Updates | Real installed version, real stable-release check, release notes, honest errors |
 | Native updater | Verified SHA-256 + signer + ABI, manual Android installer |
-| ARMv7 (`armeabi-v7a`) APK | Versioned candidate; physical device acceptance pending |
-| ARM64 (`arm64-v8a`) APK | Versioned candidate; physical device acceptance pending |
+| ARMv7 (`armeabi-v7a`) APK | **The only published architecture** from 2.1.2; physical device acceptance pending per device |
+| 64-bit-only Android userspace (`arm64-v8a` only) | **Not supported** by this release line; documented exclusion, no ARM64 asset |
 | Background playback, PiP, casting, downloads, system-wide ad blocking | **Not claimed** |
 
 ## What YTArk changes
@@ -123,17 +134,35 @@ on a real TV before release acceptance.
 ### Cosmetic branding and TV controls
 
 - The **Premium logo (cosmetic)** setting (on by default, including for existing
-  profiles that never stored the key) replaces the header wordmark with a
-  locally drawn YouTube-Premium-style lockup: a CSS red play emblem plus the
-  wordmark rendered with the frontend's own font and inherited colour, so no
-  image, font, SVG document, or network request is needed and light/dark
-  contrast follows the theme. Exactly one wordmark is placed in every existing
-  logo location; no header bar, duplicate, blank slot, or fullscreen overlay is
-  added. The stock artwork is hidden, never removed, and its inline styles are
-  restored byte-for-byte when the setting is turned off (or when the frontend
-  re-renders the header slot). Focus targets, the search box and the account
-  controls keep their roles, `tabindex`, D-pad order and accessible names — the
-  wordmark itself is `aria-hidden` and can never take focus.
+  profiles that never stored the key) replaces the header wordmark with the
+  **real 2024 YouTube Premium vector lockup**, bundled inside the userscript:
+  the original 101×20 `viewBox`, the red play emblem, its white triangle and all
+  seven lettering paths are used as path geometry, byte-for-byte. Nothing is
+  retyped, no font is substituted, and no raster preview is used — the previous
+  release drew the words with the frontend font, and that approximation is gone.
+  Provenance, retrieval date, the Commons revision SHA-1 and the bundled SHA-256
+  live in `TizenTube/mods/assets/youtube-premium-logo-2024.provenance.json`; the
+  geometry is regenerated and re-verified on every CI run by
+  `tools/fetch_premium_logo.py --verify-only` and `tools/build_logo_asset.py
+  --check`. **The logo is never fetched at runtime**: no device requests
+  Wikimedia or any other external image host, and the mark carries no
+  `<image>`, `<text>`, external `href` or font reference.
+- **Dark and light headers.** The emblem keeps its literal source paint in every
+  theme (the red stays red, the triangle stays white) while the lettering takes
+  the native header foreground: white / near-white lettering on the dark header,
+  the native dark lettering on the light header. The colour is resolved from the
+  header's own computed style first — so an app-level theme override wins — and
+  only then falls back to a theme marker, `prefers-color-scheme`, and finally the
+  dark token. There is no filter or inversion of the artwork, the background
+  stays transparent, and the same `viewBox` scales as vector geometry at 720p,
+  1080p and 4K.
+- Exactly one wordmark is placed in every existing logo location; no header bar,
+  duplicate, blank slot, or fullscreen overlay is added. The stock artwork is
+  hidden, never removed, and its inline styles are restored byte-for-byte when
+  the setting is turned off (or when the frontend re-renders the header slot).
+  Focus targets, the search box and the account controls keep their roles,
+  `tabindex`, D-pad order and accessible names — the wordmark itself is
+  `aria-hidden`, `role="presentation"` and can never take focus.
 - **What this is not:** cosmetic branding only. YTArk does not grant, imply, or
   activate a paid YouTube subscription or entitlement, it never touches billing
   or account state, and the toggle is independent of ad blocking and
@@ -252,8 +281,17 @@ is ever committed here; CI scans the tree and full history for secret material.
   SponsorBlock depends on community segment data at `sponsor.ajay.app`.
 - The cosmetic Premium wordmark never implies a paid subscription or any
   server-side entitlement.
-- Cross-ABI migration (ARMv7 ↔ ARM64) is untested; the updater always stays on
-  the installed ABI.
+- Only ARMv7 (`armeabi-v7a`) is published from 2.1.2. Devices whose Android
+  userspace reports no `armeabi-v7a` (for example 64-bit-only images) cannot
+  install these releases, and the updater says so instead of downloading an APK
+  that would fail. Installations that still carry `arm64-v8a` native code from
+  the dual-ABI era are not update targets; cross-ABI migration is untested and
+  the updater always stays on the installed ABI.
+- The vector header wordmark is verified as bundled geometry (hash, path data,
+  paint classification, no external reference) in CI; dark/light header
+  screenshots at 1080p and 4K on a physical TV, and the exact theme tokens of a
+  specific TV model, are recorded per device in the runtime checklist rather
+  than asserted here.
 - The repacked build cannot register a new JavaScript bridge object (Cobalt
   builds that list in its own `initializeJavaBridge()`), so the settings card
   cannot stream the native download percentage. Live download/verify progress
@@ -277,7 +315,7 @@ information above before retrying.
 
 | Symptom | What to check |
 |---|---|
-| `INSTALL_FAILED_NO_MATCHING_ABIS` | The APK's native ABI does not match the TV's Android userspace. Re-check `ro.product.cpu.abilist`, download the corresponding ARMv7 or ARM64 asset, and keep its filename. Resolution is unrelated. |
+| `INSTALL_FAILED_NO_MATCHING_ABIS` | The APK's native ABI does not match the TV's Android userspace. Re-check `ro.product.cpu.abilist`: this release needs `armeabi-v7a`. Keep the official filename — renaming or stripping `lib/` does not change which native code Android can load. Resolution is unrelated. |
 | `INSTALL_FAILED_UPDATE_INCOMPATIBLE` or signature conflict | Android has an installed package with a different signer. YTArk uses the pinned public Hearth community certificate; verify that the asset is from the official release. Do not uninstall until app-data loss is acceptable. |
 | Version downgrade | Compare the installed versionCode with the release metadata and use a newer release. Do not rename the APK or bypass Android's version check. |
 | Unknown-app / install blocked prompt | In Android Settings, manually allow the file manager used for the install, then return to the installer. This is distinct from an ABI error. |
@@ -292,13 +330,14 @@ renamed APK from another architecture.
 
 ## Build and test
 
-The intended release build downloads the pinned `cobalt-arm.apk` and
-`cobalt-arm64.apk` assets from TizenTubeCobalt `v2.0.2`, verifies their GitHub
-metadata and native contents, repacks each matching base, and checks the
-compiled manifest, DEX/native payloads, alignment, signer, checksums, and draft
-release asset contract. Static packaging checks are not ARM hardware or TV
-runtime tests. No release should be published until both architectures have
-passed the documented target acceptance plan.
+The intended release build downloads the pinned `cobalt-arm.apk` asset from
+TizenTubeCobalt `v2.0.2`, verifies its GitHub metadata and native contents,
+repacks that single base, and checks the compiled manifest, the single
+`armeabi-v7a` `lib/` payload, DEX payloads, alignment, signer, checksums, and the
+draft release asset contract. A stray second architecture fails the pipeline
+rather than being published. Static packaging checks are not ARM hardware or TV
+runtime tests: no release should be published before the intended device passes
+[`docs/RUNTIME-CHECKLIST.md`](docs/RUNTIME-CHECKLIST.md).
 
 Local userscript checks:
 
@@ -317,6 +356,8 @@ python3 -m unittest discover -s tools/tests -v
 python3 tools/repack_apk.py --self-test
 python3 tools/render_launcher_art.py --check   # branding artifacts match the geometry source
 python3 tools/check_no_secrets.py --history    # no key material in tree or history
+python3 tools/fetch_premium_logo.py --verify-only --out-dir TizenTube/mods/assets
+python3 tools/build_logo_asset.py --check      # bundled wordmark matches its verified source
 ```
 
 A complete APK build additionally needs Java 17, Android SDK platform/build
@@ -330,8 +371,8 @@ refuses any candidate that is not above every published installable build.
 
 Release runs are triggered by pushes to `main`, or manually from the Actions
 tab. A manual run defaults to **candidate only** (`publish: false`): it builds
-and validates both APKs, publishes the immutable userscript tag, and leaves the
-release as a **draft** so it can be installed and exercised on a device without
+and validates the ARMv7 APK, publishes the immutable userscript tag, and leaves
+the release as a **draft** so it can be installed and exercised on a device without
 being offered to other users. Promote it by running the workflow again with
 `publish: true`, or by merging to `main`. Record the device results in
 [`docs/RUNTIME-CHECKLIST.md`](docs/RUNTIME-CHECKLIST.md) before promoting; the

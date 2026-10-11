@@ -7,7 +7,9 @@ the wordmark, keeps remote-control focus, or installs an update.
 Copy this file per release, fill the header, and record the result of every row.
 A row that has not been executed on a device is **NOT RUN** — never mark it
 PASS from source inspection, a screenshot of a different build, or an emulator
-that cannot run ARM playback.
+that cannot run ARM playback. The wordmark rows can be judged from device
+screenshots at their native resolution, but the screenshot must come from the
+build under test.
 
 ## Build under test
 
@@ -19,7 +21,7 @@ that cannot run ARM playback.
 | Userscript revision (`s…`) | |
 | Device model | e.g. Chromecast with Google TV HD |
 | Android / Google TV version + API level | |
-| Device ABI (`ro.product.cpu.abilist`) | |
+| Device ABI (`ro.product.cpu.abilist`, must list `armeabi-v7a`) | |
 | Installed version before the test | |
 | Result of the in-place update (final installed version) | |
 | Tester / date | |
@@ -49,10 +51,30 @@ that cannot run ARM playback.
 | 19 | Cancel the Android installer | Returning to the app shows the verified update still ready to install, without re-downloading | |
 | 20 | Relaunch after the update | App starts with the new version, app data and session preserved (no re-login required) | |
 
-## ARM64 device run
+## Wordmark evidence (1080p and 4K)
 
-Run rows 1–20 again on an `arm64-v8a` device and record the results separately.
-Do not infer ARM64 behaviour from the ARMv7 run (or the reverse).
+Capture both theme states from the build under test, at the display's native
+resolution, with the cosmetic toggle on.
+
+| # | Check | Expected | Result |
+|---|---|---|---|
+| W1 | Dark header, 1080p screenshot | Bundled red emblem, white triangle and near-white lettering; transparent background; no white rectangle, stretch, crop or baseline shift | |
+| W2 | Light header, 1080p screenshot | Same shapes, native dark lettering; the emblem colour is unchanged | |
+| W3 | Dark + light header, 4K screenshot | Identical geometry and proportions, scaled as vector artwork; no pixelation | |
+| W4 | In-place comparison against the 2.1.1 screenshot | The lettering is the real 2024 artwork, not the previous font approximation; exactly one logo in the header | |
+| W5 | Theme switch while the app is running | Lettering follows the header without a reload, flash of the wrong colour, or duplicated mark | |
+| W6 | Toggle off → on after W1–W5 | Stock artwork returns byte-for-byte, then the vector wordmark mounts again with the correct theme on the first frame | |
+
+## 64-bit-only userspace check (expected exclusion)
+
+On a device or emulator image whose `ro.product.cpu.abilist` contains only
+64-bit ABIs, record that **no** install is attempted and that the TV/updater
+reports the ARMv7-only limitation (row 21). Do not rename or strip an APK to
+force the installation.
+
+| # | Check | Expected | Result |
+|---|---|---|---|
+| 21 | Install the release on an `arm64-v8a`-only userspace | Android rejects the package (or the updater refuses with the documented message); no workaround is applied | |
 
 ## Recording failures
 

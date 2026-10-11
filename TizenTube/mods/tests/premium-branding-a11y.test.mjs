@@ -76,6 +76,28 @@ describe('focus and accessibility guards', () => {
     assert.equal(wordmark.getAttribute('tabindex'), null, 'the wordmark can never take remote focus');
   });
 
+  it('renders one decorative vector, never a font approximation or a focus stop', () => {
+    const { host } = makeFocusableLogoHost();
+    setPremiumLogo(host, true, doc);
+    const wordmark = wordmarkOf(host);
+    const vectors = host.querySelectorAll('svg.ytark-premium-vector');
+    assert.equal(vectors.length, 1, 'exactly one inline vector per logo location');
+    const vector = vectors[0];
+    assert.equal(vector.getAttribute('aria-hidden'), 'true');
+    assert.equal(vector.getAttribute('focusable'), 'false');
+    assert.equal(vector.getAttribute('role'), 'presentation');
+    assert.equal(vector.getAttribute('tabindex'), null);
+    assert.equal(vector.querySelectorAll('text').length, 0,
+      'the lettering is path geometry, not a rendered font');
+    assert.equal(vector.querySelectorAll('image').length, 0,
+      'no raster fallback is bundled');
+    assert.equal(wordmark.getAttribute('tabindex'), null);
+    assert.equal(wordmark.getAttribute('role'), null);
+    const paths = vector.querySelectorAll('path');
+    assert.ok(paths.length > 2, 'the whole wordmark is drawn, not only the emblem');
+    for (const path of paths) assert.equal(path.getAttribute('font-family'), null);
+  });
+
   it('re-attaches the accessible name that the hidden artwork carried', () => {
     const { host } = makeFocusableLogoHost();
     assert.equal(host.getAttribute('aria-label'), null);

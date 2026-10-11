@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Prepare a same-ABI prior-release candidate for static install/update checks."""
+"""Prepare the ARMv7 prior-release candidate for static install/update checks.
+
+The ARM64 entry was removed together with the ARM64 release: YTArk 2.1.2 and
+later only publish and update 32-bit ARM (`armeabi-v7a`) builds. Historical
+ARM64 releases keep their assets, but they are no longer an update source.
+"""
 
 from __future__ import annotations
 
@@ -19,7 +24,6 @@ import validate_release
 RELEASE_PREFIX = "https://github.com/2archiver/YTArk/releases/download/"
 ARCHITECTURES = {
     "armv7": {"abi": "armeabi-v7a", "suffix": "armv7"},
-    "arm64": {"abi": "arm64-v8a", "suffix": "arm64"},
 }
 
 
