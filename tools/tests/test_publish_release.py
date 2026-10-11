@@ -339,6 +339,13 @@ class Scenario:
             return Response(
                 200, {"ref": f"refs/tags/{name}", "object": {"type": "commit", "sha": body["sha"]}}
             )
+        if method == "DELETE" and "/releases/assets/" in url:
+            asset_id = int(url.rsplit("/", 1)[-1])
+            self.calls.append(["delete-asset", str(asset_id)])
+            self.release["assets"] = [
+                asset for asset in self.release["assets"] if asset["id"] != asset_id
+            ]
+            return Response(204, b"")
         if method == "DELETE" and "/releases/" in url:
             self.calls.append(["delete", url.rsplit("/", 1)[-1]])
             # GitHub removes a tag that the deleted release had created.
@@ -612,15 +619,22 @@ class PublicationTests(PublishReleaseTestCase):
         with self.assertRaises(publish_release.ReleaseConflict):
             self.run_publish(published)
 
-    def test_stale_draft_is_replaced_and_the_replacement_is_recorded(self):
+    def test_stale_draft_is_restaged_and_the_restaging_is_recorded(self):
         stale = identity_body(self.candidate).replace(COMMIT, "b" * 40)
         draft = release_payload(draft=True, body=stale)
         result, scenario = self.run_publish(draft)
         self.assertEqual(result, 0)
-        self.assertTrue(scenario.called_with("delete"))
-        self.assertTrue(scenario.called_with(f"create {CONFIG['VERSION_TAG']}"))
+        self.assertFalse(scenario.release["draft"])
+        # The release and its tag survive; only the staged bytes are replaced.
+        self.assertFalse([call for call in scenario.calls if call[0] == "delete"])
+        self.assertEqual(len([call for call in scenario.calls if call[0] == "delete-asset"]), 5)
+        self.assertEqual(
+            sorted(call[1] for call in scenario.calls if call[0] == "upload"),
+            sorted(ALL_ASSETS),
+        )
         summary = (self.root / "summary.md").read_text(encoding="utf-8")
-        self.assertIn("Replacing an unpublished draft", summary)
+        self.assertIn("Restaging an unpublished draft", summary)
+        self.assertIn(COMMIT, scenario.release["body"])
 
     def test_published_release_with_foreign_notes_is_not_rewritten(self):
         published = release_payload(draft=False, body="stale body without identity")
@@ -692,6 +706,24 @@ class PublicationTests(PublishReleaseTestCase):
         self.assertIn("untagged-7b746ba5cc9cc9db7e5e", str(raised.exception))
         # The unusable draft is deleted so the next run starts from scratch.
         self.assertIsNone(scenario.release)
+
+    def test_a_stale_draft_is_restaged_instead_of_deleted(self):
+        """Deleting a draft deletes its tag; restaging avoids the tag churn."""
+        stale = release_payload(draft=True, digests={CONFIG["APK_ARMV7"]: "0" * 64})
+        result, scenario = self.run_publish(stale)
+        self.assertEqual(result, 0)
+        self.assertFalse(scenario.release["draft"])
+        self.assertEqual(scenario.release["tag_name"], CONFIG["VERSION_TAG"])
+        self.assertFalse(
+            [call for call in scenario.calls if call[0] == "delete"],
+            "the release itself must not be deleted",
+        )
+        self.assertTrue([call for call in scenario.calls if call[0] == "delete-asset"])
+        # Every required asset was staged again from the verified candidate.
+        self.assertEqual(
+            sorted(call[1] for call in scenario.calls if call[0] == "upload"),
+            sorted(ALL_ASSETS),
+        )
 
     def test_a_stray_untagged_draft_is_recovered_and_replaced(self):
         """A draft no tag lookup can find must still be replaced, not duplicated."""
