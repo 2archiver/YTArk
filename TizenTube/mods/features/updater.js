@@ -8,7 +8,10 @@
 // fabricated status.
 
 import { settleWithin } from './settlementDeadline.js';
-import { showModal, showToast, buttonItem, overlayPanelItemListRenderer, overlayMessageRenderer, QrCodeRenderer } from '../ui/ytUI.js';
+import {
+  showModal, showToast, buttonItem, overlayPanelItemListRenderer, overlayMessageRenderer,
+  scrollPaneRenderer, QrCodeRenderer,
+} from '../ui/ytUI.js';
 import qrcode from 'qrcode-npm';
 import {
   BRIDGE_NAME,
@@ -24,12 +27,19 @@ import {
   formatTimestamp,
   parseNativeState,
   validateReleasePayload,
+  unknownArchitectureMessage,
+  incompatibleArchitectureMessage,
 } from './updateState.js';
+import { deriveAbiEvidence, VERDICTS } from './abiEvidence.js';
 
 const POLL_INTERVAL_MS = 1500;
 const POLL_DEADLINE_MS = 15 * 60 * 1000;
 const MAX_POLLS = 600;
 const CHECK_TIMEOUT_MS = 12_000;
+// The Cobalt bridge can bind shortly after the page script runs, so the first
+// architecture read may legitimately come back empty. Bounded retries turn
+// "bridge not ready yet" into a real value instead of an unknown verdict.
+const ARCH_RETRY_DELAYS_MS = [0, 1500, 4000];
 const SETTLED_STATES = ['idle', 'current', 'available', 'check_error',
   'ready_to_install', 'permission_required', 'installed', 'installation_cancelled',
   'install_error', 'download_error'];
@@ -92,6 +102,63 @@ export function nativeArchitecture() {
     console.warn('[YTArk Updates] Could not read the device architecture:', error);
   }
   return '';
+}
+
+function delay(milliseconds) {
+  return new Promise(resolve => { setTimeout(resolve, milliseconds); });
+}
+
+/**
+ * Read the device architecture with bounded retries so a delayed bridge
+ * binding does not produce a spurious "unknown" verdict. Never throws; an
+ * empty string means "still nothing to report".
+ */
+export async function queryArchitectureWithRetry(readArchitecture, {
+  delaysMs = ARCH_RETRY_DELAYS_MS,
+} = {}) {
+  const read = typeof readArchitecture === 'function' ? readArchitecture : () => '';
+  for (let attempt = 0; attempt < delaysMs.length; attempt += 1) {
+    if (attempt > 0) await delay(delaysMs[attempt]);
+    let value = '';
+    try {
+      value = String(read() || '');
+    } catch (_) {
+      value = '';
+    }
+    if (value.trim()) return { raw: value, attempts: attempt + 1 };
+  }
+  return { raw: '', attempts: delaysMs.length };
+}
+
+/** Build the structured evidence, total and exception-free. */
+export function buildAbiEvidence(readArchitecture, readInstalledVersion, { delaysMs } = {}) {
+  return queryArchitectureWithRetry(readArchitecture, { delaysMs })
+    .then(async (architecture) => {
+      let installed = '';
+      try {
+        installed = String(readInstalledVersion() || '');
+      } catch (_) {
+        installed = '';
+      }
+      let evidence;
+      try {
+        evidence = deriveAbiEvidence({
+          bridgeRaw: architecture.raw,
+          installedVersionRaw: installed,
+        });
+      } catch (error) {
+        evidence = {
+          schemaVersion: 1,
+          verdict: VERDICTS.unknown,
+          reason: 'evidence-error',
+          architecture: null,
+          bridge: { status: 'error', detail: String(error).slice(0, 200) },
+          installedBuild: { status: 'unknown', version: 'unknown' },
+          details: ['The architecture evidence could not be computed; treating it as unknown.'],
+        };
+      }
+      return { evidence, architectureQuery: architecture };
+    });
 }
 
 const qrCache = new Map();
@@ -187,17 +254,24 @@ export function createUpdateController(overrides = {}) {
   const readArchitecture = overrides.architecture || nativeArchitecture;
   const now = overrides.now || (() => Date.now());
   const checkTimeoutMs = overrides.checkTimeoutMs || CHECK_TIMEOUT_MS;
+  const archRetryDelaysMs = overrides.archRetryDelaysMs || ARCH_RETRY_DELAYS_MS;
 
   const state = {
     model: null,
     fallback: null,
     fallbackError: '',
+    evidence: null,
     checking: false,
     lastSuccessAt: 0,
     renderSignature: '',
     pollTimer: null,
     pollStartedAt: 0,
     pollCount: 0,
+    // Set when the user closed the dialog (Back or Close). While dismissed the
+    // controller never re-renders the modal and no polling is scheduled; the
+    // next explicit open() clears it. This is what keeps repeated Settings
+    // opens from stacking stale or duplicate update panels.
+    dismissed: false,
   };
 
   function clearPolling() {
@@ -283,50 +357,126 @@ export function createUpdateController(overrides = {}) {
   }
 
   function statusLabel(model) {
-    switch (model.state) {
-      case 'checking': return 'Checking the official YTArk release…';
-      case 'current': return 'Up to date';
-      case 'available': return 'Update available';
-      case 'check_error': return `Couldn't check: ${model.error || 'unknown error'}`;
-      default: return 'Not checked yet';
+    const evidence = state.evidence;
+    const release = model.available || state.fallback;
+    if (state.checking) return 'Checking the official YTArk release…';
+    if (model.state === 'check_error') return `Couldn't check: ${model.error || 'unknown error'}`;
+    if (evidence) {
+      if (evidence.verdict === VERDICTS.unknown) {
+        return 'Could not confirm this device\'s app architecture';
+      }
+      if (evidence.verdict === VERDICTS.incompatible) {
+        return 'This device is not compatible with the YTArk ARMv7 releases';
+      }
     }
+    if (model.state === 'available') {
+      return release
+        ? `YTArk ${release.display} is available for this device (ARMv7)`
+        : 'Update available';
+    }
+    if (model.state === 'current') return 'Up to date';
+    return 'Not checked yet';
   }
 
-  // Manual-install card. The repacked build cannot connect the native engine
-  // to this surface, so the card only reports a verified release check and
-  // links to the official page. It offers no download or install control.
+  /** One short, wrap-safe line per fact; the panel never carries long text. */
+  function factLines(model) {
+    const evidence = state.evidence;
+    const release = model.available || state.fallback;
+    const installed = model.installed.display || model.installed.version || 'unknown';
+    const lines = [`Installed: ${installed}`];
+    if (release && release.display) {
+      const abiNote = release.abi ? ` (${release.abi})` : '';
+      lines.push(`Latest stable: ${release.display}${abiNote}`);
+      if (release.size) lines.push(`Download size: ${formatBytes(release.size)}`);
+    } else {
+      lines.push('Latest stable: not checked yet');
+    }
+    const lastSuccess = formatTimestamp(model.lastSuccessAt) || 'none yet';
+    lines.push(`Last successful check: ${lastSuccess}`);
+    if (evidence && evidence.verdict === VERDICTS.compatible) {
+      lines.push('Device architecture: armeabi-v7a (confirmed)');
+    }
+    if (state.fallbackError && model.state !== 'check_error') lines.push(state.fallbackError);
+    return lines;
+  }
+
+  /** Evidence detail lines, shown only when the verdict is not compatible. */
+  function evidenceDetailLines() {
+    const evidence = state.evidence;
+    if (!evidence || evidence.verdict === VERDICTS.compatible) return [];
+    if (evidence.verdict === VERDICTS.unknown) return [unknownArchitectureMessage(evidence)];
+    if (evidence.verdict === VERDICTS.incompatible) {
+      return [incompatibleArchitectureMessage(evidence)].concat(evidence.details || []);
+    }
+    return [];
+  }
+
+  function notesButton(release) {
+    if (!release || !release.notes) return null;
+    return ui.buttonItem(
+      { title: 'Release notes', subtitle: 'Full "What changed" text, scrollable' },
+      { icon: 'BOOKMARK_BORDER' },
+      [{ customAction: { action: 'YTARK_UPDATE_COMMAND', parameters: 'notes' } }],
+    );
+  }
+
+  /**
+   * The manual-install card. The repacked build cannot connect the native
+   * engine to this surface, so the card only reports a verified release check
+   * and offers the manual route (official page + QR). It offers no download
+   * or install control and never claims an installation happened.
+   *
+   * Layout contract: one short status line, a few short fact lines, at most
+   * one evidence explanation, the manual route, then the action buttons.
+   * Long release notes live in their own scrollable panel (see 'notes'), so
+   * nothing can overflow the dialog or be clipped behind another pane.
+   */
   function renderManual(model) {
+    if (state.dismissed) return;
     const signature = signatureOf(model);
     const release = model.available || state.fallback;
     const pageUrl = officialReleasePageUrl(release ? release.tag : '');
-    const installed = model.installed.display || model.installed.version || 'unknown';
-    const latest = release && release.display
-      ? (release.abi ? `${release.display} (${release.abi})` : release.display)
-      : 'not checked yet';
-    const lastSuccess = formatTimestamp(model.lastSuccessAt) || 'none yet';
-    const lines = [
-      `Installed: ${installed}`,
-      `Latest stable: ${latest}`,
-      `Status: ${statusLabel(model)}`,
-      `Last successful check: ${lastSuccess}`,
-      'Check here, then download the ARMv7 APK from the official page.',
-      `Official page: ${pageUrl}`,
-      'Manual install: this screen does not download or install. Android asks you to confirm any install.',
-    ];
-    if (state.fallbackError && model.state !== 'check_error') lines.push(state.fallbackError);
-    if (release && release.size) lines.push(`Download size: ${formatBytes(release.size)}`);
+    const items = [];
+    let checkButtonIndex = -1;
 
-    const items = [ui.overlayMessageRenderer(lines.join('\n'))];
-    if (release && release.notes) {
-      items.push(ui.overlayMessageRenderer(`Release notes\n${release.notes}`));
+    items.push(ui.overlayMessageRenderer(statusLabel(model)));
+    items.push(ui.overlayMessageRenderer(factLines(model).join('\n')));
+    for (const line of evidenceDetailLines()) {
+      items.push(ui.overlayMessageRenderer(line));
     }
-    const qr = qrCodeDataUrl(pageUrl);
-    if (qr) items.push(ui.QrCodeRenderer(qr));
+
+    const notesRow = notesButton(release);
+    if (notesRow) items.push(notesRow);
+
+    // Manual route: only when a release is known and the device is not
+    // categorically incompatible.
+    if (release && state.evidence && state.evidence.verdict !== VERDICTS.incompatible) {
+      const route = [
+        'To install, open the official page (or scan the QR code with your phone) and download the ARMv7 APK.',
+        `Official page: ${pageUrl}`,
+        'This screen does not download or install anything; Android asks you to confirm any install.',
+      ];
+      if (state.evidence && state.evidence.verdict === VERDICTS.unknown) {
+        route.unshift('Until the architecture is confirmed, use this manual route:');
+      }
+      items.push(ui.overlayMessageRenderer(route.join('\n')));
+      const qr = qrCodeDataUrl(pageUrl);
+      if (qr) items.push(ui.QrCodeRenderer(qr));
+    } else if (state.evidence && state.evidence.verdict === VERDICTS.incompatible) {
+      items.push(ui.overlayMessageRenderer(`Official release page (reference): ${pageUrl}`));
+    }
+
+    items.push(ui.buttonItem(
+      { title: 'Re-detect device architecture', subtitle: 'Re-read the device architecture, waiting for the bridge if needed' },
+      { icon: 'REFRESH' },
+      [{ customAction: { action: 'YTARK_UPDATE_COMMAND', parameters: 'recheck-arch' } }],
+    ));
     items.push(ui.buttonItem(
       { title: state.checking ? 'Checking…' : 'Check again' },
       { icon: 'SYSTEM_UPDATE' },
       [{ customAction: { action: 'YTARK_UPDATE_COMMAND', parameters: 'check' } }],
     ));
+    checkButtonIndex = items.length - 1;
     items.push(changelogButton());
     items.push(ui.buttonItem(
       { title: 'Close' },
@@ -337,10 +487,17 @@ export function createUpdateController(overrides = {}) {
     state.renderSignature = signature;
     try {
       ui.showModal(
-        { title: 'YTArk Updates', subtitle: 'Manual update check · official release page' },
-        ui.overlayPanelItemListRenderer(items, 0),
+        { title: 'YTArk Updates', subtitle: 'Verified updates from the official YTArk stable release' },
+        // Focus starts on the first meaningful action (Check again), not on a
+        // passive status message.
+        ui.overlayPanelItemListRenderer(items, Math.max(0, checkButtonIndex)),
         'ytark-updates',
         true,
+        {
+          onDismiss: [
+            { customAction: { action: 'YTARK_UPDATE_COMMAND', parameters: 'dismiss' } },
+          ],
+        },
       );
     } catch (error) {
       console.warn('[YTArk Updates] The update panel could not be rendered:', error);
@@ -353,6 +510,7 @@ export function createUpdateController(overrides = {}) {
       renderManual(model);
       return;
     }
+    if (state.dismissed) return;
     const signature = signatureOf(model);
     const status = describeState(model);
     const lines = noteLines(model);
@@ -360,13 +518,20 @@ export function createUpdateController(overrides = {}) {
     const notes = model.available && model.available.notes
       ? model.available.notes
       : state.fallback && state.fallback.notes ? state.fallback.notes : '';
-    if (notes) lines.push('', 'Release notes', notes);
 
     const actions = actionsForState(model);
     const items = [
       ui.overlayMessageRenderer(status),
       ui.overlayMessageRenderer(lines.join('\n')),
     ];
+    if (notes) {
+      items.push(ui.buttonItem(
+        { title: 'Release notes', subtitle: 'Full "What changed" text, scrollable' },
+        { icon: 'BOOKMARK_BORDER' },
+        [{ customAction: { action: 'YTARK_UPDATE_COMMAND', parameters: 'notes' } }],
+      ));
+    }
+    let firstActionIndex = items.length;
     for (const action of actions) {
       items.push(ui.buttonItem(
         { title: action.label },
@@ -386,14 +551,41 @@ export function createUpdateController(overrides = {}) {
           title: 'YTArk Updates',
           subtitle: 'Verified updates from the official YTArk stable release',
         },
-        ui.overlayPanelItemListRenderer(items, 0),
+        ui.overlayPanelItemListRenderer(items, Math.max(0, firstActionIndex)),
         'ytark-updates',
         true,
+        {
+          onDismiss: [
+            { customAction: { action: 'YTARK_UPDATE_COMMAND', parameters: 'dismiss' } },
+          ],
+        },
       );
     } catch (error) {
       // A renderer failure must never break navigation or leave a stale spinner.
       console.warn('[YTArk Updates] The update panel could not be rendered:', error);
       state.renderSignature = '';
+    }
+  }
+
+  /** The release notes in their own scrollable panel (D-pad up/down scrolls). */
+  function renderNotes() {
+    if (state.dismissed) return;
+    const release = state.model && state.model.available
+      ? state.model.available
+      : (state.fallback || null);
+    if (!release || !release.notes) {
+      ui.showToast('YTArk Updates', 'No release notes were published with this release.');
+      return;
+    }
+    try {
+      ui.showModal(
+        { title: 'Release notes', subtitle: `YTArk ${release.display} · ${release.tag}` },
+        ui.scrollPaneRenderer([ui.overlayMessageRenderer(release.notes)]),
+        'ytark-update-notes',
+        false,
+      );
+    } catch (error) {
+      console.warn('[YTArk Updates] The release notes panel could not be rendered:', error);
     }
   }
 
@@ -414,17 +606,24 @@ export function createUpdateController(overrides = {}) {
   async function runFallbackCheck() {
     if (state.checking) return state.model;
     state.checking = true;
+    state.dismissed = false;
     state.fallbackError = '';
     const pending = currentModel();
     pending.state = 'checking';
     state.model = pending;
     render(state.model);
     try {
-      const installedVersion = readInstalledVersion();
+      // Evidence first: the architecture verdict decides how the release is
+      // matched, and a delayed bridge must not turn into a device verdict.
+      const { evidence } = await buildAbiEvidence(readArchitecture, readInstalledVersion,
+        { delaysMs: archRetryDelaysMs });
+      state.evidence = evidence;
+      const installedVersion = String(readInstalledVersion() || 'unknown');
       const payload = await fetchReleasePayload(checkTimeoutMs);
       const result = validateReleasePayload(payload, {
         installedVersion,
-        architecture: readArchitecture(),
+        architecture: evidence.architecture || '',
+        abiVerdict: evidence.verdict,
       });
       if (result.error) {
         state.fallback = null;
@@ -438,6 +637,9 @@ export function createUpdateController(overrides = {}) {
         state.lastSuccessAt = now();
         const model = baseModel();
         model.lastSuccessAt = state.lastSuccessAt;
+        // "available"/"current" describe the version comparison; the verdict
+        // (carried on the evidence and the release) decides what the UI may
+        // claim about this device.
         if (result.release.newer) {
           model.state = 'available';
           model.available = {
@@ -465,8 +667,49 @@ export function createUpdateController(overrides = {}) {
     } finally {
       state.checking = false;
       render(state.model);
-      ui.showToast('YTArk Updates', describeState(state.model));
+      ui.showToast('YTArk Updates', statusLabel(state.model));
     }
+  }
+
+  /** Recovery action: re-read the architecture (with retries) and re-match. */
+  async function runArchitectureRecheck() {
+    if (state.checking) return state.model;
+    state.checking = true;
+    state.dismissed = false;
+    const pending = currentModel();
+    pending.state = 'checking';
+    state.model = pending;
+    render(state.model);
+    let evidence;
+    try {
+      ({ evidence } = await buildAbiEvidence(readArchitecture, readInstalledVersion,
+        { delaysMs: archRetryDelaysMs }));
+    } finally {
+      state.checking = false;
+    }
+    state.evidence = evidence;
+    // No usable release yet (or the last check failed): run the full check,
+    // which refreshes both the evidence and the release metadata.
+    if (!state.fallback || state.fallbackError) return runFallbackCheck();
+    // Otherwise re-match the cached release with the fresh verdict.
+    const release = state.fallback;
+    state.fallbackError = '';
+    const model = baseModel();
+    model.lastSuccessAt = state.lastSuccessAt;
+    model.state = release.newer ? 'available' : 'current';
+    if (release.newer) {
+      model.available = {
+        version: release.version,
+        display: release.display,
+        tag: release.tag,
+        abi: release.abi,
+        size: release.size,
+        notes: release.notes,
+      };
+    }
+    state.model = model;
+    render(state.model);
+    return state.model;
   }
 
   async function runNativeCommand(command, payload) {
@@ -512,6 +755,20 @@ export function createUpdateController(overrides = {}) {
       case 'check':
         if (bridge) return runNativeCommand('check');
         return runFallbackCheck();
+      case 'recheck-arch':
+        if (bridge) {
+          ui.showToast('YTArk Updates', 'The native updater checks the architecture on its own screen.');
+          return null;
+        }
+        return runArchitectureRecheck();
+      case 'notes':
+        renderNotes();
+        return null;
+      case 'dismiss':
+        // The dialog was closed (Back or Close): stop owned work so nothing
+        // re-renders the panel or keeps a timer running in the background.
+        dismiss();
+        return null;
       case 'download':
         if (bridge) return runNativeCommand('download');
         return null;
@@ -534,8 +791,16 @@ export function createUpdateController(overrides = {}) {
     }
   }
 
+  /** Stop all owned work after the dialog closes; idempotent. */
+  function dismiss() {
+    clearPolling();
+    state.dismissed = true;
+    state.renderSignature = '';
+  }
+
   function open() {
     state.renderSignature = '';
+    state.dismissed = false;
     if (bridge) {
       const model = bridge.read();
       if (model) {
@@ -559,14 +824,17 @@ export function createUpdateController(overrides = {}) {
     clearPolling();
     state.model = null;
     state.renderSignature = '';
+    state.dismissed = true;
   }
 
   return {
     open,
     refresh,
     handleAction,
+    dismiss,
     dispose,
     runFallbackCheck,
+    runArchitectureRecheck,
     runNativeCommand,
     state,
   };

@@ -47,6 +47,8 @@ function makeLeanbackHost({
 
 function makeImageHost() {
   const host = new FakeElement('ytlr-logo', doc);
+  host.__rectHeight = 48;
+  host.__rectWidth = 150;
   host.style.setProperty('display', 'flex', 'important');
   host.style.setProperty('gap', '6px');
   const artwork = new FakeElement('img', doc);
@@ -367,5 +369,95 @@ describe('vector wordmark theming', () => {
     assert.equal(mark.getAttribute('data-ytark-premium-theme'), 'light',
       'an OS theme change re-applies the ink without a reload');
     assert.equal(wordmarks(host).length, 1, 'and never duplicates the wordmark');
+  });
+});
+
+describe('rendered-host guard (no stray top-left wordmark)', () => {
+  function makeHostWithBox(height) {
+    const host = new FakeElement('ytlr-logo-entity', doc);
+    host.__rectHeight = height;
+    host.__rectWidth = 168;
+    host.style.setProperty('display', 'block');
+    host.style.setProperty('color', 'rgb(255, 255, 255)');
+    const thumbnail = new FakeElement('ytlr-thumbnail-details', doc);
+    thumbnail.style.setProperty('background-image', 'url("https://i.ytimg.com/youtube_logo.png")');
+    host.appendChild(thumbnail);
+    doc.body.appendChild(host);
+    return { host, thumbnail };
+  }
+
+  it('never patches a host that has no rendered box', () => {
+    resetDom();
+    const { host, thumbnail } = makeHostWithBox(0);
+    assert.equal(setPremiumLogo(host, true, doc), false,
+      'a zero-box (detached or hidden) slot is not an active header');
+    assert.equal(wordmarks(host).length, 0);
+    assert.equal(thumbnail.style.getPropertyValue('background-image'),
+      'url("https://i.ytimg.com/youtube_logo.png")',
+      'the stock artwork is left untouched');
+    // No wordmark may exist anywhere in the document (in particular not a
+    // stray copy rendered at the top-left of the document flow).
+    assert.equal(doc.querySelectorAll('[data-ytark-premium-wordmark="true"]').length, 0);
+  });
+
+  it('patches the host once it gets a box, and removes it when the box goes away', async () => {
+    resetDom();
+    const { host, thumbnail } = makeHostWithBox(0);
+    assert.equal(setPremiumLogo(host, true, doc), false);
+    assert.equal(wordmarks(host).length, 0);
+
+    // The frontend lays the header out; the next navigation cycle sees the
+    // rendered box and patches it in place.
+    host.__rectHeight = 52;
+    host.__rectWidth = 168;
+    windowStub.dispatch('pageshow');
+    await waitFor(200);
+    assert.equal(wordmarks(host).length, 1, 'the active header is patched once it is rendered');
+    assert.equal(thumbnail.style.getPropertyValue('background-image'), 'none',
+      'only the intended header artwork is replaced');
+
+    // A route change hides the slot again: the wordmark goes with it and the
+    // stock artwork is restored so nothing can reappear off-header later.
+    host.__rectHeight = 0;
+    host.__rectWidth = 0;
+    windowStub.dispatch('pageshow');
+    await waitFor(200);
+    assert.equal(wordmarks(host).length, 0, 'no wordmark outside a rendered header');
+    assert.equal(thumbnail.style.getPropertyValue('background-image'),
+      'url("https://i.ytimg.com/youtube_logo.png")', 'the stock artwork is restored');
+  });
+
+  it('drops a detached host and never leaves its wordmark behind', async () => {
+    resetDom();
+    const { host } = makeHostWithBox(52);
+    assert.equal(setPremiumLogo(host, true, doc), true);
+    assert.equal(wordmarks(host).length, 1);
+    const observers = FakeMutationObserver.activeCount;
+
+    // Route change: Polymer removes the whole header subtree.
+    doc.body.removeChild(host);
+    windowStub.dispatch('pageshow');
+    await waitFor(200);
+    assert.equal(wordmarks(host).length, 0, 'the wordmark follows the host out of the document');
+    assert.equal(doc.querySelectorAll('[data-ytark-premium-wordmark="true"]').length, 0);
+    const afterFirst = FakeMutationObserver.activeCount;
+    // A second navigation must not multiply observers: the detached host's
+    // observer was disconnected and only the bounded search cycle re-arms.
+    windowStub.dispatch('pageshow');
+    await waitFor(200);
+    assert.ok(FakeMutationObserver.activeCount <= afterFirst,
+      'no stale per-host observer is left observing a detached tree');
+  });
+
+  it('keeps exactly one wordmark per rendered header when several headers exist', async () => {
+    resetDom();
+    const first = makeHostWithBox(52);
+    const second = makeHostWithBox(40);
+    windowStub.dispatch('pageshow');
+    await waitFor(200);
+    assert.equal(wordmarks(first.host).length, 1);
+    assert.equal(wordmarks(second.host).length, 1);
+    assert.equal(first.host.querySelectorAll('svg.ytark-premium-vector').length, 1,
+      'the replacement is in place inside its own container, not a detached overlay');
   });
 });

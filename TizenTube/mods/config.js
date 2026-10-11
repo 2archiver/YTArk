@@ -101,6 +101,8 @@ const defaultConfig = {
   disabledSidebarContents: [],
   sidebarContentsOrder: [],
   disableChannelsOnSidebar: false,
+  // The guide entry keeps YTArk Settings reachable when the sidebar is minimal.
+  enableYtarkGuideEntry: true,
   enableUpdater: true,
   autoFrameRate: false,
   autoFrameRatePauseVideoFor: 0,

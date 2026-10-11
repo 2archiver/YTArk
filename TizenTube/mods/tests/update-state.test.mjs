@@ -116,6 +116,7 @@ describe('stable release validation', () => {
           name: ARMV7_ASSET,
           size: 2,
           browser_download_url: ARMV7_URL,
+          digest: `sha256:${'cd'.repeat(32)}`,
         },
         {
           name: 'userScript.js',
@@ -128,6 +129,13 @@ describe('stable release validation', () => {
     assert.equal(error, undefined);
     assert.equal(release.assetName, ARMV7_ASSET);
     assert.equal(release.abi, 'armeabi-v7a');
+  });
+
+  test('requires a valid published digest when matching the ARMv7 asset', () => {
+    const noDigest = validateReleasePayload(releaseFixture({
+      assets: [{ name: ARMV7_ASSET, size: 1, browser_download_url: ARMV7_URL }],
+    }), context);
+    assert.match(noDigest.error, /no valid published SHA-256 digest/);
   });
 
   test('refuses drafts, prereleases and non-stable tags', () => {
@@ -172,14 +180,25 @@ describe('stable release validation', () => {
     assert.match(missing.error, /do not confirm the expected Android versionCode/);
   });
 
-  test('refuses a 64-bit-only device with an actionable ARMv7-only message', () => {
+  test('treats a 64-bit-only report as unknown, not unsupported: no asset is selected', () => {
     const { release, error } = validateReleasePayload(releaseFixture(), {
-      installedVersion: '2.1.1', architecture: 'arm64-v8a',
+      installedVersion: '2.1.1', architecture: 'arm64-v8a', abiVerdict: 'unknown',
     });
-    assert.equal(release, undefined);
-    assert.match(error, /ARMv7 \(armeabi-v7a\) only/);
-    assert.match(error, /arm64-v8a/);
-    assert.match(error, /cross-ABI updates are not supported/);
+    assert.equal(error, undefined);
+    assert.ok(release, 'the release metadata stays available for the manual route');
+    assert.equal(release.assetName, undefined, 'no asset is selected without compatible evidence');
+    assert.equal(release.abi, null);
+    assert.equal(release.abiVerdict, 'unknown');
+  });
+
+  test('explicit incompatible verdict also skips asset selection', () => {
+    const { release, error } = validateReleasePayload(releaseFixture(), {
+      installedVersion: '2.1.1', architecture: '', abiVerdict: 'incompatible',
+    });
+    assert.equal(error, undefined);
+    assert.ok(release);
+    assert.equal(release.assetName, undefined);
+    assert.equal(release.abiVerdict, 'incompatible');
   });
 
   test('never selects a legacy ARM64 asset, even when it is present', () => {
@@ -192,11 +211,10 @@ describe('stable release validation', () => {
     assert.match(error, /assets named YTArk-v2\.1\.2-armv7\.apk/);
   });
 
-  test('refuses unsupported ABIs and malformed payloads without throwing', () => {
-    assert.match(
-      validateReleasePayload(releaseFixture(), { installedVersion: '2.1.0', architecture: 'x86_64' }).error,
-      /instead of armeabi-v7a|did not report an Android ABI/,
-    );
+  test('treats an x86 report without a verdict as unknown and malformed payloads as errors', () => {
+    const x86 = validateReleasePayload(releaseFixture(), { installedVersion: '2.1.0', architecture: 'x86_64' });
+    assert.equal(x86.error, undefined, 'architecture alone is missing information, not a verdict');
+    assert.equal(x86.release.abiVerdict, 'unknown');
     assert.match(validateReleasePayload(null, context).error, /was not an object/);
     assert.match(validateReleasePayload({ message: 'Not Found' }, context).error, /no stable ytark release/i);
     assert.match(
@@ -204,7 +222,7 @@ describe('stable release validation', () => {
         releaseFixture({ assets: [{ ...releaseFixture().assets[0], digest: 'sha256:zz' }] }),
         context,
       ).error,
-      /digest is malformed/,
+      /no valid published SHA-256 digest/,
     );
   });
 
@@ -216,11 +234,28 @@ describe('stable release validation', () => {
         name: 'YTArk-v2.1.0-armv7.apk',
         size: 97195140,
         browser_download_url: 'https://github.com/2archiver/YTArk/releases/download/v2.1.0/YTArk-v2.1.0-armv7.apk',
+        digest: `sha256:${'ef'.repeat(32)}`,
       }],
     }), { installedVersion: '2.1.0', architecture: 'armeabi-v7a' });
     assert.equal(error, undefined);
     assert.equal(release.newer, false);
     assert.equal(release.versionCode, 2010000);
+  });
+});
+
+describe('architecture verdict messages', () => {
+  test('unknown verdict never says the device is unsupported', async () => {
+    const { unknownArchitectureMessage, incompatibleArchitectureMessage } =
+      await import('../features/updateState.js');
+    const unknown = unknownArchitectureMessage({
+      details: ['The device architecture query returned no value (the bridge may not be ready yet).'],
+    });
+    assert.match(unknown, /Could not confirm this device.s app architecture/);
+    assert.doesNotMatch(unknown, /cannot be installed|not supported device/i);
+    assert.match(unknown, /retrying detection still work/);
+    const incompatible = incompatibleArchitectureMessage({ bridge: { abi: 'x86_64' } });
+    assert.match(incompatible, /x86_64/);
+    assert.match(incompatible, /ARMv7 \(armeabi-v7a\) builds only/);
   });
 });
 

@@ -151,6 +151,8 @@ describe('focus and accessibility guards', () => {
     const host = new FakeElement('ytlr-logo-entity', doc);
     host.setAttribute('role', 'button');
     host.setAttribute('tabindex', '0');
+    host.__rectHeight = 52;
+    host.__rectWidth = 168;
     host.style.setProperty('background-image', 'url("https://i.ytimg.com/youtube_logo.png")');
     doc.body.appendChild(host);
 

@@ -124,8 +124,9 @@ describe('YTArk Updates card with the native engine connected', () => {
     assert.match(text, /Android versionCode: 2010000/);
     assert.match(text, /Download size: 160\.5 MB/);
     assert.match(text, /Last successful check:/);
-    assert.match(text, /Fixes the wordmark/);
-    assert.deepEqual(actionIds(modal), ['check', 'download', 'skip', 'later', 'open']);
+    assert.match(text, /Release notes/, 'long notes live in their own scrollable panel');
+    assert.doesNotMatch(text, /Fixes the wordmark/, 'no long note text inline in the dialog');
+    assert.deepEqual(actionIds(modal), ['notes', 'check', 'download', 'skip', 'later', 'open']);
 
     controller.handleAction('download');
     assert.deepEqual(log, [{ contract: 1, command: 'download' }]);
@@ -190,24 +191,31 @@ describe('YTArk Updates card without a connected native engine', () => {
     const modal = ui.modals.at(-1);
     const text = flatText(modal);
     assert.equal(modal.header.title, 'YTArk Updates');
+    assert.match(text, /YTArk 2\.1\.2 is available for this device \(ARMv7\)/);
+    assert.match(text, /Installed: 2\.1/);
     assert.match(text, /Latest stable: 2\.1\.2 \(armeabi-v7a\)/);
-    assert.match(text, /Status: Update available/);
-    assert.match(text, /Check here, then download the ARMv7 APK from the official page\./);
+    assert.match(text, /Device architecture: armeabi-v7a \(confirmed\)/);
+    assert.match(text, /To install, open the official page \(or scan the QR code with your phone\) and download the ARMv7 APK\./);
     assert.match(text, /Official page: https:\/\/github\.com\/2archiver\/YTArk\/releases\/tag\/v2\.1\.2/);
     assert.match(text, /Release notes/);
-    assert.match(text, /Vector Premium wordmark/);
+    assert.doesNotMatch(text, /Vector Premium wordmark/, 'no long note text inline in the dialog');
     assert.doesNotMatch(text, /Reload the app|reconnect|Open YTArk Updates screen/i,
       'no reconnect or native-screen promise in this build');
-    // Only a real check and a real close are offered; no download or install.
-    assert.deepEqual(actionIds(modal), ['check']);
+    // No download or install control; the recovery and check actions are real.
+    assert.deepEqual(actionIds(modal), ['notes', 'recheck-arch', 'check']);
     const closes = modal.content.items.filter(item => item.commands
       && item.commands[0].signalAction && item.commands[0].signalAction.signal === 'POPUP_BACK');
     assert.equal(closes.length, 1, 'a Close action dismisses the modal');
+    // Focus starts on the first meaningful action, not a passive status line.
+    const statusCount = modal.content.items.filter(item => item.text).length;
+    assert.ok(modal.content.selectedIndex >= statusCount,
+      'initial focus is on an action, after the status/fact lines');
 
     // Without the native engine a download request must not pretend to start.
     await controller.handleAction('download');
     assert.match(ui.toasts.at(-1).subtitle, /native YTArk updater/);
-    assert.deepEqual(actionIds(ui.modals.at(-1)), ['check'], 'still no download control');
+    assert.deepEqual(actionIds(ui.modals.at(-1)), ['notes', 'recheck-arch', 'check'],
+      'still no download control');
 
     const qrItem = ui.modals.at(-1).content.items.find(item => item.qrCodeRenderer);
     assert.ok(qrItem, 'a QR code item is rendered in the fallback');
@@ -298,30 +306,95 @@ describe('YTArk Updates card without a connected native engine', () => {
     }
   });
 
-  it('selects the asset for the reported ABI and refuses unsupported ones', async () => {
+  it('selects the asset only for confirmed armeabi-v7a, never for arm64', async () => {
     const { controller, ui } = makeController({
       architecture: () => 'armeabi-v7a',
       fetchRelease: async () => releasePayload({
         assets: [
           // A legacy ARM64 asset must never be selected, even when published.
           { name: LEGACY_ARM64_ASSET, size: 2, browser_download_url: LEGACY_ARM64_URL },
-          { name: ARMV7_ASSET, size: 97_195_140, browser_download_url: ARMV7_URL },
+          { name: ARMV7_ASSET, size: 97_195_140, browser_download_url: ARMV7_URL, digest: `sha256:${'ab'.repeat(32)}` },
         ],
       }),
     });
     await controller.open();
+    assert.equal(controller.state.model.state, 'available');
+    assert.equal(controller.state.fallback.assetName, ARMV7_ASSET,
+      'the ARMv7 asset is selected by name on confirmed evidence');
     assert.match(flatText(ui.modals.at(-1)), /2\.1\.2 \(armeabi-v7a\)/);
     controller.dispose();
 
+    // A 64-bit report alone is missing information: the release stays
+    // available for the manual route, but no asset is selected and the UI
+    // says "could not confirm" instead of "unsupported".
+    const arm64 = makeController({
+      architecture: () => 'arm64-v8a',
+      installedVersion: () => '2.1.0',
+      fetchRelease: async () => releasePayload(),
+      archRetryDelaysMs: [0],
+    });
+    await arm64.controller.open();
+    assert.equal(arm64.controller.state.model.state, 'available',
+      'the check still completes and reports the available release');
+    assert.equal(arm64.controller.state.evidence.verdict, 'unknown');
+    assert.equal(arm64.controller.state.fallback.assetName, undefined,
+      'no asset is silently selected without compatible evidence');
+    const arm64Text = flatText(arm64.ui.modals.at(-1));
+    assert.match(arm64Text, /Could not confirm this device.s app architecture/);
+    assert.doesNotMatch(arm64Text, /cannot be installed|ro\.product\.cpu\.abilist/i,
+      'missing information is not a categorical unsupported message');
+    assert.match(arm64Text, /Re-detect device architecture/);
+    arm64.controller.dispose();
+  });
+
+  it('treats an empty (delayed) bridge result as unknown with a recovery action', async () => {
+    const { controller, ui } = makeController({
+      architecture: () => '',
+      installedVersion: () => '2.0.4-ytark.17', // predates ARMv7-only packaging
+      fetchRelease: async () => releasePayload(),
+      archRetryDelaysMs: [0],
+    });
+    await controller.open();
+    assert.equal(controller.state.evidence.verdict, 'unknown');
+    assert.equal(controller.state.evidence.reason, 'bridge-unavailable');
+    assert.equal(controller.state.model.state, 'available',
+      'unknown still allows the check, notes and retry');
+    const text = flatText(ui.modals.at(-1));
+    assert.match(text, /Could not confirm this device.s app architecture/);
+    assert.match(text, /bridge may not be ready yet/i);
+    assert.match(text, /Re-detect device architecture/);
+    assert.match(text, /Release notes/);
+    controller.dispose();
+  });
+
+  it('keeps the categorical message for an explicit non-ARM device', async () => {
     const unsupported = makeController({
       architecture: () => 'x86_64',
       fetchRelease: async () => releasePayload(),
     });
     await unsupported.controller.open();
-    assert.equal(unsupported.controller.state.model.state, 'check_error');
-    assert.match(flatText(unsupported.ui.modals.at(-1)), /instead of armeabi-v7a/);
-    assert.match(flatText(unsupported.ui.modals.at(-1)), /ro\.product\.cpu\.abilist/);
+    assert.equal(unsupported.controller.state.evidence.verdict, 'incompatible');
+    const text = flatText(unsupported.ui.modals.at(-1));
+    assert.match(text, /x86_64/);
+    assert.match(text, /no YTArk release is compatible with this device/);
+    assert.doesNotMatch(text, /Could not confirm this device/,
+      'an explicit non-ARM report is not phrased as missing information');
     unsupported.controller.dispose();
+  });
+
+  it('accepts a verified running ARMv7-only build even when the bridge is empty', async () => {
+    const { controller, ui } = makeController({
+      architecture: () => '',
+      installedVersion: () => '2.3.0', // pipeline-verified ARMv7-only packaging
+      fetchRelease: async () => releasePayload(),
+      archRetryDelaysMs: [0],
+    });
+    await controller.open();
+    assert.equal(controller.state.evidence.verdict, 'compatible');
+    assert.equal(controller.state.evidence.reason, 'installed-build-evidence');
+    assert.equal(controller.state.fallback.assetName, ARMV7_ASSET);
+    assert.match(flatText(ui.modals.at(-1)), /Device architecture: armeabi-v7a \(confirmed\)/);
+    controller.dispose();
   });
 
   it('reports network, rate-limit and timeout failures honestly and keeps the last success', async () => {
@@ -390,8 +463,9 @@ describe('state model hand-off', () => {
     });
     await controller.open();
     assert.equal(controller.state.model.state, 'current');
-    assert.match(flatText(ui.modals.at(-1)), /Status: Up to date/);
-    assert.deepEqual(actionIds(ui.modals.at(-1)), ['check']);
+    assert.match(flatText(ui.modals.at(-1)), /Up to date/);
+    assert.doesNotMatch(flatText(ui.modals.at(-1)), /is available for this device/);
+    assert.deepEqual(actionIds(ui.modals.at(-1)), ['notes', 'recheck-arch', 'check']);
     controller.dispose();
   });
 

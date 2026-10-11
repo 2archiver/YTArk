@@ -1,6 +1,39 @@
 import { configChangeEmitter, configRead, configWrite } from "../config.js";
 import getCommandExecutor from "./customCommandExecution.js";
 import { GuideEntryRenderer } from "./ytUI.js";
+import { t } from "i18next";
+
+const YTARK_GUIDE_ENTRY_MARKER = "__ytarkGuideEntry";
+
+function ytarkGuideEntry() {
+    const entry = GuideEntryRenderer(
+        t('settings.ttSettings.title'),
+        { customAction: { action: 'TT_SETTINGS_SHOW', parameters: [] } },
+        'SETTINGS'
+    );
+    entry[YTARK_GUIDE_ENTRY_MARKER] = true;
+    return entry;
+}
+
+/**
+ * Quick access to YTArk Settings straight from the TV guide.
+ *
+ * The entry is added after the reordering and hiding passes so that hiding
+ * sidebar items can never make the settings unreachable, and it is placed
+ * near the top (right after Home). Toggling it off removes it on the next
+ * guide load. The entry carries a marker so repeated guide loads stay
+ * idempotent and so the move/hide guide-entry UI (which works from
+ * `originalItems`, captured before this pass) never offers to relocate it.
+ */
+function applyYtarkGuideEntry(r) {
+    const section = r.items?.[0]?.guideSectionRenderer;
+    if (!section || !Array.isArray(section.items)) return;
+    for (let i = section.items.length - 1; i >= 0; i--) {
+        if (section.items[i]?.[YTARK_GUIDE_ENTRY_MARKER]) section.items.splice(i, 1);
+    }
+    if (configRead('enableYtarkGuideEntry') === false) return;
+    section.items.splice(1, 0, ytarkGuideEntry());
+}
 
 const origParse = JSON.parse;
 JSON.parse = function () {
@@ -24,7 +57,7 @@ JSON.parse = function () {
     }
     if (configRead('sidebarContentsOrder')?.length === 0) {
        // Add all of the items in the sidebar to the sidebarContentsOrder
-        if (r.items && Array.isArray(r.items) && r.items[0].guideSectionRenderer) {
+        if (r.items?.[0]?.guideSectionRenderer) {
             const order = [];
             for (const item of r.items[0].guideSectionRenderer.items) {
                 const browseId = item.guideEntryRenderer?.navigationEndpoint?.browseEndpoint?.browseId;
@@ -39,7 +72,7 @@ JSON.parse = function () {
     } else {
         // Reorder the items based on the sidebarContentsOrder config key
 
-        if (r.items && Array.isArray(r.items) && r.items[0].guideSectionRenderer) {
+        if (r.items?.[0]?.guideSectionRenderer) {
             const order = configRead('sidebarContentsOrder');
             const items = r.items[0].guideSectionRenderer.items;
             const copiedItems = JSON.parse(JSON.stringify(items));
@@ -87,7 +120,7 @@ JSON.parse = function () {
 
     const disabledSidebarContents = configRead('disabledSidebarContents');
     const disableChannelsOnSidebar = configRead('disableChannelsOnSidebar');
-    if (r.items && Array.isArray(r.items) && r.items[0].guideSectionRenderer) {
+    if (r.items?.[0]?.guideSectionRenderer) {
         for (let i = 0; i < r.items.length; i++) {
             const section = r.items[i].guideSectionRenderer;
             section.originalItems = section.items.slice();
@@ -106,11 +139,15 @@ JSON.parse = function () {
         }
     }
 
+    // Last, so the entry is immune to the reordering and hiding passes above.
+    applyYtarkGuideEntry(r);
+
     return r;
 }
 
 configChangeEmitter.addEventListener('configChange', (e) => {
-    if (e.detail.key === 'disabledSidebarContents' || e.detail.key === 'disableChannelsOnSidebar' || e.detail.key === 'sidebarContentsOrder') {
+    if (e.detail.key === 'disabledSidebarContents' || e.detail.key === 'disableChannelsOnSidebar' ||
+        e.detail.key === 'sidebarContentsOrder' || e.detail.key === 'enableYtarkGuideEntry') {
         const commandExecutor = getCommandExecutor();
         if (commandExecutor) {
             commandExecutor.executeFunction(new commandExecutor.commandFunction('reloadGuideAction'));
