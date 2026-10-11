@@ -37,7 +37,6 @@ mockLocalStorage['yt.leanback.default::recurring_actions'] = JSON.stringify({
 });
 
 const { configRead, configWrite } = await import('../config.js');
-const { setPremiumLogo } = await import('../features/premiumBranding.js');
 const { removeAdSlotRenderers } = await import('../features/adRendererPolicy.js');
 const { DEVICE_PROFILES, generateUserAgent, applyUserAgentProfile } =
   await import('../features/userAgentSpoofing.js');
@@ -89,84 +88,6 @@ class FakeElement {
     return null;
   }
 }
-
-const fakeDocument = {
-  createElement(tagName) { return new FakeElement(tagName); },
-  createElementNS(_namespace, tagName) { return new FakeElement(tagName); },
-};
-
-function makeLogoHost() {
-  const host = new FakeElement('ytlr-logo');
-  host.style.setProperty('display', 'flex', 'important');
-  host.style.setProperty('align-items', 'center');
-  host.style.setProperty('gap', '6px');
-  const artwork = new FakeElement('svg');
-  artwork.style.setProperty('display', 'inline-block');
-  host.appendChild(artwork);
-  return { host, artwork };
-}
-
-describe('cosmetic YouTube-style logo', () => {
-  it('toggles locally, restores the original artwork/styles, and is idempotent', () => {
-    assert.equal(configRead('enablePremiumLogo'), true);
-    const { host, artwork } = makeLogoHost();
-    assert.equal(setPremiumLogo(host, true, fakeDocument), true);
-    const mark = host.querySelector('[data-ytark-premium-wordmark="true"]');
-    assert.ok(mark);
-    assert.equal(host.children.length, 2);
-    assert.equal(artwork.style.getPropertyValue('display'), 'none');
-    assert.equal(artwork.style.getPropertyPriority('display'), 'important');
-    assert.equal(mark.getAttribute('aria-hidden'), 'true');
-    assert.equal(mark.children[1].textContent, 'YouTube Premium');
-
-    assert.equal(setPremiumLogo(host, true, fakeDocument), true);
-    assert.equal(host.children.length, 2);
-    assert.equal(host.querySelector('[data-ytark-premium-wordmark="true"]'), mark);
-
-    configWrite('enablePremiumLogo', false);
-    assert.equal(configRead('enablePremiumLogo'), false);
-    assert.equal(setPremiumLogo(host, configRead('enablePremiumLogo'), fakeDocument), true);
-    assert.equal(host.children.length, 1);
-    assert.equal(artwork.style.getPropertyValue('display'), 'inline-block');
-    assert.equal(artwork.style.getPropertyPriority('display'), '');
-    assert.equal(host.style.getPropertyValue('display'), 'flex');
-    assert.equal(host.style.getPropertyPriority('display'), 'important');
-    assert.equal(host.style.getPropertyValue('gap'), '6px');
-  });
-
-  it('does not replace focusable logo artwork or a focusable logo host', () => {
-    const { host, artwork } = makeLogoHost();
-    artwork.setAttribute('tabindex', '0');
-    assert.equal(setPremiumLogo(host, true, fakeDocument), false);
-    assert.equal(host.children.length, 1);
-    assert.equal(artwork.style.getPropertyValue('display'), 'inline-block');
-
-    artwork.attributes.delete('tabindex');
-    host.setAttribute('tabindex', '0');
-    assert.equal(setPremiumLogo(host, true, fakeDocument), false);
-    assert.equal(host.children.length, 1);
-    assert.equal(artwork.style.getPropertyValue('display'), 'inline-block');
-
-    host.attributes.delete('tabindex');
-    host.setAttribute('role', 'button');
-    assert.equal(setPremiumLogo(host, true, fakeDocument), false);
-    host.attributes.delete('role');
-    host.closest = () => host;
-    assert.equal(setPremiumLogo(host, true, fakeDocument), false);
-    host.closest = () => null;
-    artwork.setAttribute('focusable', 'true');
-    assert.equal(setPremiumLogo(host, true, fakeDocument), false);
-    artwork.attributes.delete('focusable');
-    artwork.setAttribute('aria-label', 'YouTube');
-    assert.equal(setPremiumLogo(host, true, fakeDocument), false);
-
-    const { host: imageHost, artwork: imageArtwork } = makeLogoHost();
-    imageArtwork.tagName = 'IMG';
-    imageArtwork.setAttribute('alt', 'YouTube logo');
-    assert.equal(setPremiumLogo(imageHost, true, fakeDocument), false);
-    assert.equal(imageHost.children.length, 1);
-  });
-});
 
 describe('guest/sign-in renderer preservation', () => {
   it('removes ad slots without removing YouTube guest or account actions', () => {

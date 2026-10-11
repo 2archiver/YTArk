@@ -69,19 +69,49 @@ class YTArkUiBrandingTests(unittest.TestCase):
         self.assertNotIn("github.com/sponsors/reisxd", settings)
         self.assertNotIn("tizentubeofficial", settings)
 
-    def test_cosmetic_header_patch_is_bounded_restorable_and_lifecycle_aware(self):
+    def test_logo_and_updater_features_are_delivered_in_the_built_userscript(self):
+        """Bundle-delivery gate.
+
+        The cosmetic logo and the YTArk Updates surface are only useful if they
+        are actually part of the artifact that ships to the device, so this test
+        inspects the built userscript instead of the module sources. Behaviour is
+        covered by the DOM-fixture suite in
+        ``TizenTube/mods/tests/premium-branding-*.test.mjs`` and
+        ``updates-settings.test.mjs``, which ci.yml runs before this job.
+        """
+        bundle = MODS.parent / "dist" / "userScript.js"
+        if not bundle.exists():
+            self.skipTest("userscript bundle not built yet; ci.yml builds it before this job")
+        built = bundle.read_text(encoding="utf-8", errors="replace")
+        for needle in (
+            "ytlr-logo-entity",             # the real Leanback logo host
+            "ytark-premium-wordmark",       # the injected local wordmark
+            "ytlr-thumbnail-details",       # where the stock wordmark is painted
+            "enablePremiumLogo",
+            # default-on for fresh/missing config; minified in the bundle
+            "enablePremiumLogo:!0",
+            "YTARK_UPDATE_COMMAND",         # settings card -> update engine actions
+            "api.github.com/repos/2archiver/YTArk/releases/latest",
+            "ytark://updates",              # native updater screen hand-off
+        ):
+            self.assertIn(needle, built)
+        self.assertNotIn("Personal Tube TV", built, "deprecated branding in the bundle")
+
+    def test_cosmetic_logo_module_stays_local_and_never_calls_out(self):
         branding = (MODS / "features" / "premiumBranding.js").read_text(encoding="utf-8")
-        self.assertIn("OBSERVATION_WINDOW_MS = 25_000", branding)
-        self.assertIn("MAX_MUTATION_BATCHES = 48", branding)
-        self.assertIn("observer.disconnect()", branding)
-        self.assertIn("window.addEventListener('pagehide', cleanup, true)", branding)
-        self.assertIn("window.addEventListener('pageshow', onNavigation, true)", branding)
-        self.assertIn("PLAYER_OVERLAY_SELECTOR", branding)
-        self.assertIn("return ['button', 'link', 'menuitem'", branding)
-        self.assertIn("function restoreHost(host)", branding)
-        self.assertIn("aria-hidden", branding)
-        self.assertNotIn("fetch(", branding)
-        self.assertIn("YouTube Premium wordmark is a local visual only", (MODS / "ui" / "settings.js").read_text(encoding="utf-8"))
+        settings = (MODS / "ui" / "settings.js").read_text(encoding="utf-8")
+        self.assertNotIn("fetch(", branding, "the cosmetic wordmark must never use the network")
+        self.assertNotIn("innerHTML", branding)
+        for guard in (
+            "function restoreHost(host)",
+            "aria-hidden",
+            "PLAYER_OVERLAY_SELECTOR",
+            "isFocusTarget",
+        ):
+            self.assertIn(guard, branding)
+        # The cosmetic nature has to be explained once, in Settings.
+        self.assertIn("it never grants or claims a paid YouTube subscription", settings)
+        self.assertIn("name: 'Premium logo (cosmetic)'", settings)
 
 
 if __name__ == "__main__":

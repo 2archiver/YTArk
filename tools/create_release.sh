@@ -59,6 +59,36 @@ separately recorded on a named device.
 | ARM64 APK | \`${APK_ARM64}\` (arm64-v8a) |
 | Upstream base | TizenTubeCobalt \`${BASE_TAG}\` |
 
+## What changed in this release
+
+- **Premium logo (cosmetic) fixed.** The wordmark now patches the real Leanback
+  header markup (`ytlr-logo-entity` / `ytlr-redux-connect-ytlr-logo-entity` and
+  the `ytlr-thumbnail-details` artwork inside it) instead of the selector that
+  never matched, so the wordmark appears on cold launch and after navigation.
+  Exactly one wordmark is placed per logo location, the stock artwork is hidden
+  and restored byte-for-byte, focus/`tabindex`/accessible names are preserved,
+  and the setting is on by default while an explicit opt-out keeps winning after
+  relaunch. It is cosmetic only: never a subscription, entitlement or billing
+  state.
+- **Settings -> YTArk Updates is real.** The card shows the installed version,
+  performs a validated check of the official stable release, lists the available
+  version, size and release notes, shows the last *successful* check, and reports
+  failures honestly. Download/verify/install progress is shown on the native
+  YTArk Updates screen, which is where the transfer and the Android installer
+  hand-off happen.
+- **Updater hardening.** Draft/prerelease releases, mismatched versionCode
+  metadata, wrong-ABI or ambiguous assets, downgrades and unreadable responses
+  are refused with actionable messages; a failed check is never displayed as
+  "up to date".
+
+## Runtime acceptance status
+
+The 20-point device checklist (cold launch, wordmark placement, both themes,
+navigation returns, focus order, toggle off/on, ad blocking, SponsorBlock,
+offline check, download/verify/install, installer cancellation, relaunch with
+data preserved) is recorded per device in `docs/RUNTIME-CHECKLIST.md`. Rows that
+have not been executed on a physical ARM TV remain **NOT RUN**.
+
 ## Choose and install the APK
 
 Use the APK matching the Android userspace ABI reported by the device: use the

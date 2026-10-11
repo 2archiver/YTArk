@@ -5,6 +5,13 @@ on:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      publish:
+        description: >-
+          Promote the validated candidate to a stable, non-prerelease release
+          (device acceptance in docs/RUNTIME-CHECKLIST.md must be recorded first).
+        type: boolean
+        default: false
 
 # Least privilege by default; only the publishing jobs get contents: write.
 permissions:
@@ -335,7 +342,11 @@ jobs:
             echo "- ARMv7 and ARM64 packaging/manifest/signature checks ran in CI."
             echo "- No physical Google TV / Android device was attached to this workflow."
             echo "- Installation, launch, D-pad interaction, sign-in/guest flow, playback, 2160p streams, captions, and in-place PackageInstaller updates remain unverified."
-            echo "- The promotion job publishes this draft once the packaging, checksum and metadata gates pass; it does not add device acceptance evidence."
+            if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.publish }}" != "true" ]; then
+              echo "- Manual candidate run: the promotion job is skipped, so this release stays a draft until it is requested explicitly."
+            else
+              echo "- The promotion job publishes this draft once the packaging, checksum and metadata gates pass; it does not add device acceptance evidence."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
   promote-stable-release:
@@ -343,7 +354,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 45
     needs: publish-draft-release
-    if: github.repository == '2archiver/YTArk'
+    # A manual candidate run keeps the validated draft unpublished unless
+    # `publish: true` is requested; pushes to main promote as before.
+    if: >-
+      github.repository == '2archiver/YTArk'
+      && (github.event_name == 'push' || inputs.publish)
+
     permissions:
       contents: write
     steps:

@@ -12,10 +12,11 @@ native updater that always hands installation to Android for user confirmation.
 |---|---|
 | Android package | `io.github.twoarchiver.ytark` |
 | Launcher label | `YTArk` |
-| Target display version | `2.1` (Android versionName `2.1.0`) |
-| Target versionCode | `2010000` (above every published YTArk APK) |
-| 32-bit userspace candidate | `YTArk-v2.1.0-armv7.apk` — `armeabi-v7a` |
-| 64-bit userspace candidate | `YTArk-v2.1.0-arm64.apk` — `arm64-v8a` |
+| Target display version | `2.1.1` (Android versionName `2.1.1`) |
+| Target versionCode | `2010100` (above every published YTArk APK) |
+| 32-bit userspace candidate | `YTArk-v2.1.1-armv7.apk` — `armeabi-v7a` |
+| 64-bit userspace candidate | `YTArk-v2.1.1-arm64.apk` — `arm64-v8a` |
+| Immutable userscript revision | `s19` (previous published revision `s18` is never moved) |
 | Pinned Android base | TizenTubeCobalt `v2.0.2` |
 
 These filenames identify the intended candidates, not proof that an APK has
@@ -100,7 +101,8 @@ an update unless you understand that uninstalling can erase app data.
 | SponsorBlock segment skipping | **On by default**, category settings preserved |
 | DeArrow titles/thumbnails | On by default (title only unless thumbnails enabled) |
 | Quality selection | Auto default, manual ceiling; no resolution promises |
-| Cosmetic "YouTube Premium" wordmark | Off-able local visual only — **never** a subscription or entitlement |
+| Cosmetic "YouTube Premium" wordmark | **On by default**, off-able local visual only — **never** a subscription or entitlement |
+| Settings → YTArk Updates | Real installed version, real stable-release check, release notes, honest errors |
 | Native updater | Verified SHA-256 + signer + ABI, manual Android installer |
 | ARMv7 (`armeabi-v7a`) APK | Versioned candidate; physical device acceptance pending |
 | ARM64 (`arm64-v8a`) APK | Versioned candidate; physical device acceptance pending |
@@ -120,9 +122,24 @@ on a real TV before release acceptance.
 
 ### Cosmetic branding and TV controls
 
-- A locally rendered YouTube-style Premium wordmark can be toggled independently
-  in **YTArk Quick Controls**. It is cosmetic only: it does not grant, imply, or
-  activate a paid YouTube subscription or entitlement.
+- The **Premium logo (cosmetic)** setting (on by default, including for existing
+  profiles that never stored the key) replaces the header wordmark with a
+  locally drawn YouTube-Premium-style lockup: a CSS red play emblem plus the
+  wordmark rendered with the frontend's own font and inherited colour, so no
+  image, font, SVG document, or network request is needed and light/dark
+  contrast follows the theme. Exactly one wordmark is placed in every existing
+  logo location; no header bar, duplicate, blank slot, or fullscreen overlay is
+  added. The stock artwork is hidden, never removed, and its inline styles are
+  restored byte-for-byte when the setting is turned off (or when the frontend
+  re-renders the header slot). Focus targets, the search box and the account
+  controls keep their roles, `tabindex`, D-pad order and accessible names — the
+  wordmark itself is `aria-hidden` and can never take focus.
+- **What this is not:** cosmetic branding only. YTArk does not grant, imply, or
+  activate a paid YouTube subscription or entitlement, it never touches billing
+  or account state, and the toggle is independent of ad blocking and
+  SponsorBlock. Because the frontend wordmark lives in the standard header
+  location, this is the only place it is shown; YTArk adds no recurring playback
+  warnings about it.
 - The Android TV launcher label is `YTArk`. Its **Alternative 2** icon is a
   light rounded-square tile with a red video play emblem and a red orbital
   swoosh (master artwork and rights notes in `branding/`). The build checks the
@@ -149,17 +166,46 @@ to YouTube, Cobalt, the device, and the supplied stream.
 
 ### Native updates and release integrity
 
-The updater checks the official GitHub stable release **at app start and every
-six hours** (clearly disclosed on the update screen; the **Later** action
-snoozes notifications for 24 hours; all checks use HTTPS to `api.github.com`).
-It selects an APK matching the **installed** native ABI, validates its exact
-versioned filename and official URL, verifies the published SHA-256,
-package/version metadata, native library ABI, and pinned signer, and then uses
-Android's `PackageInstaller`. The user must choose **Install Update** and
-approve Android's confirmation; YTArk never installs silently and does not
-grant the unknown-app permission automatically. Interrupted downloads can
-resume only when their saved URL, asset name, ABI, size, and digest still
-match.
+**Where the updater lives.** Release discovery, download, verification,
+progress and the installer hand-off run in the injected native updater and are
+shown on the native **YTArk Updates** screen (reachable from YTArk Settings →
+YTArk Updates, from the update notification, and from the app's own check
+schedule). That screen renders the real state machine: `idle → checking →
+current|available|check_error`, `available → downloading → verifying →
+ready_to_install`, `ready_to_install → permission_required|awaiting_installer`,
+and `awaiting_installer → installed|installation_cancelled|install_error`.
+Bytes shown are the bytes actually transferred; when the server sends no
+`Content-Length` the progress bar is honestly indeterminate instead of being
+filled with an invented percentage.
+
+**What YTArk Settings → YTArk Updates shows.** The settings card reports the
+installed version (read from the running app), performs a real read-only check
+against the official stable release, shows the available version, download
+size, release notes and the timestamp of the last *successful* check, and never
+reports a failure as "up to date". The full download/install progress stays on
+the native screen, because that is where the transfer actually happens; the
+card's **Open YTArk Updates screen** action requests that screen and reports
+honestly when the platform refuses the hand-off. This is a deliberate
+limitation of the current Cobalt build, described under
+[Known limitations](#known-limitations).
+
+**Release rules.** The updater checks the official GitHub stable release **at
+app start and every six hours** (clearly disclosed on the update screen; the
+**Later** action snoozes notifications for 24 hours; all checks use HTTPS to
+`api.github.com`). It ignores draft and prerelease entries, requires the
+published release body to confirm the same Android versionCode as the tag, and
+selects an APK matching the **installed** native ABI (4K branding is not an
+ABI; ARMv7 devices keep their 32-bit path). It validates the exact versioned
+filename and official URL, verifies the published SHA-256, package/version
+metadata, native library ABI, and pinned signer, and then uses Android's
+`PackageInstaller`. The user must choose **Install Update** and approve
+Android's confirmation; YTArk never installs silently and does not grant the
+unknown-app permission automatically. Cancelling the installer is recoverable —
+the verified package stays ready to install without re-downloading. Interrupted
+downloads resume only when their saved URL, asset name, ABI, size, and digest
+still match. Opening the installer is never reported as a successful install:
+the version Android reports afterwards is compared with the running version
+first.
 
 The release certificate is Hearth's intentionally public **community** key.
 Its SHA-256 fingerprint is pinned in `signing/YTArk-cert-sha256.txt`. A matching
@@ -208,6 +254,15 @@ is ever committed here; CI scans the tree and full history for secret material.
   server-side entitlement.
 - Cross-ABI migration (ARMv7 ↔ ARM64) is untested; the updater always stays on
   the installed ABI.
+- The repacked build cannot register a new JavaScript bridge object (Cobalt
+  builds that list in its own `initializeJavaBridge()`), so the settings card
+  cannot stream the native download percentage. Live download/verify progress
+  and the installer hand-off stay on the native **YTArk Updates** screen; the
+  settings card is honest about that instead of faking a progress bar.
+- The physical-device acceptance run (install, launch, guest/sign-in, playback,
+  D-pad, toggling the cosmetic logo in both themes, same-ABI in-place update) is
+  recorded per device in the release notes. Until it is recorded for a build,
+  that build stays a candidate and the checklist is marked **NOT RUN**.
 
 ## Troubleshooting
 
@@ -261,8 +316,22 @@ python3 tools/check_no_secrets.py --history    # no key material in tree or hist
 
 A complete APK build additionally needs Java 17, Android SDK platform/build
 tools, Apktool, OpenSSL, GitHub access, and the pinned public community
-keystore. Update `release/version.properties` for each release; the serial
-increases monotonically and determines `versionCode` as `20000 + serial`.
+keystore. Update `release/version.properties` for the next release: it is the
+only place that defines `versionName`, `displayVersion`, `versionCode`,
+`versionTag` and the immutable userscript `scriptTag` (a new revision is needed
+whenever the bundle bytes change; published tags are never moved). The
+`versionCode` follows `major * 1_000_000 + minor * 10_000 + patch * 100`, and CI
+refuses any candidate that is not above every published installable build.
+
+Release runs are triggered by pushes to `main`, or manually from the Actions
+tab. A manual run defaults to **candidate only** (`publish: false`): it builds
+and validates both APKs, publishes the immutable userscript tag, and leaves the
+release as a **draft** so it can be installed and exercised on a device without
+being offered to other users. Promote it by running the workflow again with
+`publish: true`, or by merging to `main`. Record the device results in
+[`docs/RUNTIME-CHECKLIST.md`](docs/RUNTIME-CHECKLIST.md) before promoting; the
+updater ignores drafts and prereleases, so a candidate draft is never offered as
+an update.
 
 ## Support and upstream attribution
 

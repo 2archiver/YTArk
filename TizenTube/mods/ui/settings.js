@@ -11,12 +11,20 @@ function ytarkDisplayVersion() {
     try {
         const getVersion = window.h5vcc?.tizentube?.GetVersion;
         const version = typeof getVersion === 'function' ? String(getVersion()) : '';
-        const match = version.match(/^(\d+)\.(\d+)\.(\d+)(?:-ytark\.[1-9]\d*)?$/);
+        const match = version.match(/^(\d+)\.(\d+)\.(\d+)(?:-(?:ytark|personal)\.[1-9]\d*)?$/);
         if (match) return match[3] === '0' ? `${match[1]}.${match[2]}` : `${match[1]}.${match[2]}.${match[3]}`;
     } catch (error) {
         console.warn('[YTArk] Could not read display version for About YTArk:', error);
     }
     return 'unknown';
+}
+
+function ytarkUpdateSubtitle() {
+    const version = ytarkDisplayVersion();
+    if (version === 'unknown') {
+        return 'Installed version: unknown · stable release checks run in the YTArk app';
+    }
+    return 'Installed version: ' + version + ' · check the official stable release';
 }
 
 export default function modernUI(update, parameters) {
@@ -91,8 +99,8 @@ export default function modernUI(update, parameters) {
                     value: 'enableAdBlock'
                 },
                 {
-                    name: 'YouTube Premium logo — cosmetic',
-                    subtitle: 'Visual only; it does not enable or claim a paid subscription.',
+                    name: 'Premium logo (cosmetic)',
+                    subtitle: 'Local wordmark only; it never grants or claims a paid YouTube subscription.',
                     icon: 'VIDEO_YOUTUBE',
                     value: 'enablePremiumLogo'
                 },
@@ -866,30 +874,29 @@ export default function modernUI(update, parameters) {
                 }
             ]
         },
-        window.h5vcc && window.h5vcc.tizentube ?
-            {
-                name: 'YTArk Updates',
-                icon: 'SYSTEM_UPDATE',
-                value: null,
-                menuHeader: {
-                    title: 'YTArk Updates',
-                    subtitle: 'Stable releases and installation'
-                },
-                subtitle: 'Installed version: ' + window.h5vcc.tizentube.GetVersion(),
-                options: [
-                    buttonItem(
-                        { title: 'Check for Updates', subtitle: 'Check the official YTArk stable release' },
-                        { icon: 'SYSTEM_UPDATE' },
-                        [
-                            {
-                                customAction: {
-                                    action: 'CHECK_FOR_UPDATES',
-                                }
+        {
+            name: 'YTArk Updates',
+            icon: 'SYSTEM_UPDATE',
+            value: null,
+            menuHeader: {
+                title: 'YTArk Updates',
+                subtitle: ytarkUpdateSubtitle()
+            },
+            subtitle: ytarkUpdateSubtitle(),
+            options: [
+                buttonItem(
+                    { title: 'Open YTArk Updates', subtitle: 'Installed version, stable release and verified installation' },
+                    { icon: 'SYSTEM_UPDATE' },
+                    [
+                        {
+                            customAction: {
+                                action: 'CHECK_FOR_UPDATES',
                             }
-                        ]
-                    )
-                ]
-            } : null
+                        }
+                    ]
+                )
+            ]
+        }
     ];
 
     const buttons = [];
