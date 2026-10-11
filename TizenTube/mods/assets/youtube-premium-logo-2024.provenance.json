@@ -1,0 +1,91 @@
+{
+  "title": "YouTube Premium logo 2024",
+  "author": "Google, Inc.",
+  "source_page": "https://commons.wikimedia.org/wiki/File:YouTube_Premium_logo_2024.svg",
+  "source_metadata_api": "https://commons.wikimedia.org/w/api.php?action=query&format=json&prop=imageinfo&iiprop=url%7Csize%7Csha1%7Cmime&titles=File:YouTube_Premium_logo_2024.svg",
+  "source_url": "https://upload.wikimedia.org/wikipedia/commons/8/88/YouTube_Premium_logo_2024.svg",
+  "retrieved_utc": "2026-10-11T05:04:55Z",
+  "retrieved_sha1": "9ec3ad62f293d10e98cb637d0303a7e7e4188947",
+  "retrieved_sha256": "62fa5625b90e8ed328748d4c5579189e3b7224e35e894352ea6ba351e6604ba0",
+  "retrieved_bytes": 3561,
+  "sanitized_sha256": "e2ba301c01340c2cc0163447a388d9f578c7ae1e8b434c1ebcfe8ad263c00ecf",
+  "sanitized_bytes": 3365,
+  "viewBox": "0 0 101 20",
+  "nominal_width": 101,
+  "nominal_height": 20,
+  "license": "Public domain on Wikimedia Commons (PD-simple / PD-text: simple geometry and non-copyrightable lettering). Trademark rights remain with Google LLC; the mark is rendered locally as a cosmetic header preference only.",
+  "trademark_notice": "YouTube and YouTube Premium are trademarks of Google LLC. YTArk renders the mark locally as a cosmetic header preference and is not affiliated with, endorsed by, or entitled by Google or YouTube.",
+  "sanitization": [
+    "rejected DTD/entity declarations, scripts and active content",
+    "resolved embedded <style> class rules into explicit paint attributes",
+    "flattened group transforms onto their drawable children",
+    "dropped id/class hooks that are not needed for painting",
+    "kept viewBox, path data, transforms and paint rules verbatim",
+    "kept no external references, scripts, raster fallbacks or fonts"
+  ],
+  "elements": [
+    {
+      "tag": "path",
+      "fill": "#FF0033",
+      "transform": "",
+      "subpaths": 1,
+      "removed_hooks": []
+    },
+    {
+      "tag": "path",
+      "fill": "white",
+      "transform": "",
+      "subpaths": 1,
+      "removed_hooks": []
+    },
+    {
+      "tag": "path",
+      "fill": "",
+      "transform": "",
+      "subpaths": 2,
+      "removed_hooks": []
+    },
+    {
+      "tag": "path",
+      "fill": "",
+      "transform": "",
+      "subpaths": 1,
+      "removed_hooks": []
+    },
+    {
+      "tag": "path",
+      "fill": "",
+      "transform": "",
+      "subpaths": 2,
+      "removed_hooks": []
+    },
+    {
+      "tag": "path",
+      "fill": "",
+      "transform": "",
+      "subpaths": 1,
+      "removed_hooks": []
+    },
+    {
+      "tag": "path",
+      "fill": "",
+      "transform": "",
+      "subpaths": 2,
+      "removed_hooks": []
+    },
+    {
+      "tag": "path",
+      "fill": "",
+      "transform": "",
+      "subpaths": 1,
+      "removed_hooks": []
+    },
+    {
+      "tag": "path",
+      "fill": "",
+      "transform": "",
+      "subpaths": 1,
+      "removed_hooks": []
+    }
+  ]
+}
