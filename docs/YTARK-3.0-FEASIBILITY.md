@@ -93,3 +93,16 @@ behaviour.
 - Or agree a narrower interim milestone that stays on the existing TizenTubeCobalt v2.0.2
   base (for example, reproducible rebuild of the 2.1.2 userscript and updater), and
   label it honestly as not the 3.0 runtime.
+
+## Interim milestone run (v2.0.2 base, not 3.0)
+
+Run after the user chose the interim option. No version, tag or release changed.
+
+- `TizenTube/mods`: `npm run build` run twice produced the same bytes.
+  `dist/userScript.js` SHA-256 `b408d31fd60d2800e3b95b07f6fe2a284dfa1dea89851f93f1bc33aba0454fc6`
+  (deterministic here; not compared with the published `s20` bytes).
+- Native updater Java contract tests (`tools/build_android_updater.sh`) were **not run**:
+  no JDK is available (`javac` absent; `default-jdk-headless` and every `openjdk-*-jdk-headless`
+  name are missing from the apt index). These tests remain unverified here.
+- Still not done: any 27.lts runtime work, the storage migration, the updater state-machine
+  rework, and every device acceptance row.
