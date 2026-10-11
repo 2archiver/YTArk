@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate YTArk's dual-ABI APKs, updater metadata, and GitHub release contract."""
+"""Validate YTArk's ARMv7 APK, updater metadata, and GitHub release contract."""
 
 from __future__ import annotations
 
@@ -30,11 +30,14 @@ APK_DESCRIPTORS = (
     b"io/github/twoarchiver/ytark/updater/UpdateActivity",
 )
 ANDROID_14_API = 34
+# YTArk publishes exactly one architecture: 32-bit ARM (armeabi-v7a). The
+# ARM64 jobs, assets and documentation were removed in 2.1.2; a 64-bit CPU does
+# not by itself mean the Android userspace can run 32-bit native code, so the
+# updater checks Android's own ABI list before offering a download.
 ARCHITECTURES = {
     "armv7": {"abi": "armeabi-v7a", "key": "APK_ARMV7", "upstream": "cobalt-arm.apk"},
-    "arm64": {"abi": "arm64-v8a", "key": "APK_ARM64", "upstream": "cobalt-arm64.apk"},
 }
-REQUIRED_BASE_APKS = ("cobalt-arm.apk", "cobalt-arm64.apk")
+REQUIRED_BASE_APKS = ("cobalt-arm.apk",)
 OPTIONAL_TV_FEATURES = {
     "android.hardware.camera", "android.hardware.camera.any", "android.hardware.camera.front",
     "android.hardware.camera.autofocus", "android.hardware.camera.flash",
@@ -129,7 +132,6 @@ def load_config() -> dict[str, str]:
         "VERSION_TAG": tag,
         "RELEASE_NAME": f"YTArk {display_version}",
         "APK_ARMV7": apk_filename(version, "armv7"),
-        "APK_ARM64": apk_filename(version, "arm64"),
         "SCRIPT_TAG": script_tag,
         "BASE_TAG": base_tag,
         "APP_ID": APP_ID,
@@ -437,10 +439,13 @@ def validate_apk(path: str, architecture: str, expected_cert_file: str,
             raise ValueError(f"APK is missing the required native library for {abi}")
         native_abis = {
             name.split("/")[1] for name in names
-            if name.startswith("lib/") and name.endswith(".so") and len(name.split("/")) >= 3
+            if name.startswith("lib/") and len(name.split("/")) >= 3
         }
         if native_abis != {abi}:
-            raise ValueError(f"APK contains native libraries for unexpected ABIs: {sorted(native_abis)}")
+            raise ValueError(
+                f"APK contains native libraries for unexpected ABIs: {sorted(native_abis)}; "
+                f"this release is {abi} only"
+            )
         for native_path in (name for name in names if name.startswith("lib/") and name.endswith(".so")):
             if archive.getinfo(native_path).compress_type != zipfile.ZIP_STORED:
                 raise ValueError(f"Native library is compressed instead of directly loadable: {native_path}")
@@ -526,10 +531,9 @@ def parse_checksum_file(checksum_file: str) -> dict[str, str]:
     return expected
 
 
-def check_checksums(checksum_file: str, armv7_apk: str, arm64_apk: str,
-                    user_script: str | None = None) -> None:
+def check_checksums(checksum_file: str, apk: str, user_script: str | None = None) -> None:
     expected = parse_checksum_file(checksum_file)
-    files = [Path(armv7_apk), Path(arm64_apk)]
+    files = [Path(apk)]
     if user_script:
         files.append(Path(user_script))
     for path in files:
@@ -538,7 +542,11 @@ def check_checksums(checksum_file: str, armv7_apk: str, arm64_apk: str,
         actual = file_sha256(path)
         if actual != expected[path.name]:
             raise ValueError(f"SHA-256 mismatch for {path.name}")
-    print("SHA256SUMS.txt matches both ARMv7 and ARM64 APKs" + (" and the userscript." if user_script else "."))
+    unexpected = sorted(set(expected) - {path.name for path in files})
+    if unexpected:
+        raise ValueError("SHA256SUMS.txt lists files that are not part of this release: "
+                         + ", ".join(unexpected))
+    print("SHA256SUMS.txt matches the ARMv7 APK" + (" and the userscript." if user_script else "."))
 
 
 def check_base_checksums(checksum_file: str, base_dir: str) -> None:
@@ -550,7 +558,7 @@ def check_base_checksums(checksum_file: str, base_dir: str) -> None:
             raise ValueError(f"Pinned upstream base checksum or APK is missing: {name}")
         if file_sha256(path) != expected[name]:
             raise ValueError(f"Pinned upstream base checksum does not match: {name}")
-    print("Both pinned TizenTubeCobalt base APK checksums verified.")
+    print("The pinned TizenTubeCobalt ARMv7 base APK checksum verified.")
 
 
 def verify_release(release_path: str, state: str, latest_path: str | None) -> None:
@@ -572,8 +580,9 @@ def verify_release(release_path: str, state: str, latest_path: str | None) -> No
         raise ValueError("Release notes contain deprecated product branding")
     for required in (
         APP_ID, config["DISPLAY_VERSION"], config["VERSION_NAME"], config["VERSION_CODE"],
-        "TizenTubeCobalt", config["APK_ARMV7"], config["APK_ARM64"],
+        "TizenTubeCobalt", config["APK_ARMV7"],
         "4K does not select an APK architecture", "arm64-v8a", "armeabi-v7a",
+        "ARMv7", "64-bit",
     ):
         if required not in body:
             raise ValueError(f"Release notes are missing required metadata/guidance: {required}")
@@ -582,7 +591,7 @@ def verify_release(release_path: str, state: str, latest_path: str | None) -> No
         raise ValueError("Release notes versionCode is missing or does not match the APK versionCode")
 
     expected_names = {
-        config["APK_ARMV7"], config["APK_ARM64"], "SHA256SUMS.txt",
+        config["APK_ARMV7"], "SHA256SUMS.txt",
         "base-apk-sha256.txt", "NOTICE.md", "userScript.js",
     }
     assets = release.get("assets", [])
@@ -593,7 +602,7 @@ def verify_release(release_path: str, state: str, latest_path: str | None) -> No
     missing = expected_names - actual_name_set
     if missing:
         raise ValueError("Release is missing assets: " + ", ".join(sorted(missing)))
-    expected_apks = {config["APK_ARMV7"], config["APK_ARM64"]}
+    expected_apks = {config["APK_ARMV7"]}
     for name in actual_name_set:
         if name.lower().endswith(".apk") and name not in expected_apks:
             raise ValueError(f"Release contains an unexpected APK asset: {name}")
@@ -656,7 +665,6 @@ def main() -> None:
     checksum_parser = commands.add_parser("check-checksums")
     checksum_parser.add_argument("--checksums", required=True)
     checksum_parser.add_argument("--armv7", required=True)
-    checksum_parser.add_argument("--arm64", required=True)
     checksum_parser.add_argument("--user-script")
 
     base_checksum_parser = commands.add_parser("check-base-checksums")
@@ -677,7 +685,7 @@ def main() -> None:
         elif args.command == "check-apk":
             validate_apk(args.apk, args.architecture, args.cert_file, args.aapt, args.apksigner)
         elif args.command == "check-checksums":
-            check_checksums(args.checksums, args.armv7, args.arm64, args.user_script)
+            check_checksums(args.checksums, args.armv7, args.user_script)
         elif args.command == "check-base-checksums":
             check_base_checksums(args.checksums, args.base_dir)
         elif args.command == "verify-release":

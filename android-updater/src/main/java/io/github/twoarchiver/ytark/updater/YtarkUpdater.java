@@ -1026,7 +1026,7 @@ final class YtarkUpdater {
             File updates = new File(context.getFilesDir(), "ytark_updates").getCanonicalFile();
             File canonical = file.getCanonicalFile();
             return updates.equals(canonical.getParentFile())
-                    && canonical.getName().matches("YTArk-v(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)-(?:arm64|armv7)\\.apk");
+                    && canonical.getName().matches("YTArk-v(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)-armv7\\.apk");
         } catch (IOException invalid) {
             return false;
         }

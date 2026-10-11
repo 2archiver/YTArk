@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
-# Sign the aligned YTArk APK with the pinned Hearth community certificate.
+# Sign the aligned YTArk ARMv7 APK with the pinned Hearth community certificate.
+# Exactly one APK architecture is expected: a stray ARM64 (or any other) APK in
+# the work directory aborts the release instead of being signed and shipped.
 set -euo pipefail
 
 WORK="${1:?usage: sign_apks.sh <directory-with-unsigned-apks>}"
@@ -26,21 +28,19 @@ EXPECTED_CERT="$(printf '%s' "$YTARK_EXPECTED_CERT_SHA256" | tr -d '[:space:]:' 
 
 shopt -s nullglob
 unsigned_apks=("$WORK"/*-unsigned.apk)
-[ "${#unsigned_apks[@]}" -eq 2 ] || {
-  echo "expected exactly two unsigned YTArk ARMv7/ARM64 APKs, found ${#unsigned_apks[@]}" >&2
+[ "${#unsigned_apks[@]}" -eq 1 ] || {
+  echo "expected exactly one unsigned YTArk ARMv7 APK, found ${#unsigned_apks[@]}" >&2
   exit 1
 }
 armv7_count=0
-arm64_count=0
 for candidate in "${unsigned_apks[@]}"; do
   case "$(basename "$candidate")" in
     *-armv7-unsigned.apk) armv7_count=$((armv7_count + 1)) ;;
-    *-arm64-unsigned.apk) arm64_count=$((arm64_count + 1)) ;;
-    *) echo "unexpected unsigned YTArk APK name: $candidate" >&2; exit 1 ;;
+    *) echo "unexpected unsigned YTArk APK (this release is ARMv7 only): $candidate" >&2; exit 1 ;;
   esac
 done
-[ "$armv7_count" -eq 1 ] && [ "$arm64_count" -eq 1 ] || {
-  echo "expected one ARMv7 and one ARM64 unsigned APK" >&2
+[ "$armv7_count" -eq 1 ] || {
+  echo "expected one ARMv7 unsigned APK; this release publishes no other architecture" >&2
   exit 1
 }
 
@@ -73,4 +73,4 @@ print(re.sub(r"[^0-9a-fA-F]", "", m.group(1)).lower())
   rm -f "$unsigned"
 done
 
-echo "Both YTArk ARMv7 and ARM64 APKs were signed and verified with the pinned Hearth community certificate."
+echo "The YTArk ARMv7 APK was signed and verified with the pinned Hearth community certificate."

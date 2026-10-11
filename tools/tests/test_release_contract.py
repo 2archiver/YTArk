@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -18,18 +20,22 @@ import repack_apk
 import validate_release
 
 
-class DualAbiReleaseContractTests(unittest.TestCase):
+class Armv7OnlyReleaseContractTests(unittest.TestCase):
     def test_expected_clean_semver_version_and_asset_names(self):
         config = validate_release.load_config()
-        self.assertEqual(config["VERSION_NAME"], "2.1.1")
-        self.assertEqual(config["DISPLAY_VERSION"], "2.1.1")
-        self.assertEqual(config["VERSION_CODE"], "2010100")
-        self.assertEqual(config["VERSION_TAG"], "v2.1.1")
-        self.assertEqual(config["RELEASE_NAME"], "YTArk 2.1.1")
-        self.assertEqual(config["APK_ARMV7"], "YTArk-v2.1.1-armv7.apk")
-        self.assertEqual(config["APK_ARM64"], "YTArk-v2.1.1-arm64.apk")
+        self.assertEqual(config["VERSION_NAME"], "2.1.2")
+        self.assertEqual(config["DISPLAY_VERSION"], "2.1.2")
+        self.assertEqual(config["VERSION_CODE"], "2010200")
+        self.assertEqual(config["VERSION_TAG"], "v2.1.2")
+        self.assertEqual(config["RELEASE_NAME"], "YTArk 2.1.2")
+        self.assertEqual(config["APK_ARMV7"], "YTArk-v2.1.2-armv7.apk")
         self.assertEqual(validate_release.apk_filename(config["VERSION_NAME"], "armv7"), config["APK_ARMV7"])
-        self.assertEqual(validate_release.apk_filename(config["VERSION_NAME"], "arm64"), config["APK_ARM64"])
+        # Only one architecture is published from 2.1.2 onwards.
+        self.assertNotIn("APK_ARM64", config)
+        self.assertEqual(list(validate_release.ARCHITECTURES), ["armv7"])
+        self.assertEqual(validate_release.REQUIRED_BASE_APKS, ("cobalt-arm.apk",))
+        with self.assertRaises(ValueError):
+            validate_release.apk_filename(config["VERSION_NAME"], "arm64")
         self.assertEqual(validate_release.version_code_for_release("2.0.4"), 2000400)
         self.assertEqual(validate_release.version_code_for_release("2.0.4-ytark.17"), 20017)
         self.assertEqual(validate_release.version_code_for_release("2.0.2-personal.14"), 20014)
@@ -126,15 +132,12 @@ class DualAbiReleaseContractTests(unittest.TestCase):
             ],
         }
         armv7 = fetch_base_apks.validate_release_asset(release, "v2.0.2", "armv7")
-        arm64 = fetch_base_apks.validate_release_asset(release, "v2.0.2", "arm64")
         self.assertEqual(armv7["abi"], "armeabi-v7a")
         self.assertEqual(armv7["library"], "lib/armeabi-v7a/libchrobalt.so")
-        self.assertEqual(arm64["abi"], "arm64-v8a")
-        self.assertEqual(arm64["library"], "lib/arm64-v8a/libchrobalt.so")
-        self.assertEqual(
-            arm64["expected_digest"],
-            "0e8a9cffc77a08cd116d38e262c3e9d7f261ba2093b5b2d2ef905f509c99133c",
-        )
+        self.assertEqual(list(fetch_base_apks.BASE_ASSETS), ["armv7"])
+        # The upstream ARM64 asset still exists, but it is not packageable.
+        with self.assertRaises(ValueError):
+            fetch_base_apks.validate_release_asset(release, "v2.0.2", "arm64")
 
         bad = json.loads(json.dumps(release))
         bad["assets"][0]["browser_download_url"] = "https://example.invalid/cobalt-arm.apk"
@@ -151,9 +154,9 @@ class DualAbiReleaseContractTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             fetch_base_apks.validate_release_asset(missing_digest, "v2.0.2", "armv7")
         changed_size = json.loads(json.dumps(release))
-        changed_size["assets"][1]["size"] += 1
+        changed_size["assets"][0]["size"] += 1
         with self.assertRaises(ValueError):
-            fetch_base_apks.validate_release_asset(changed_size, "v2.0.2", "arm64")
+            fetch_base_apks.validate_release_asset(changed_size, "v2.0.2", "armv7")
         duplicate = json.loads(json.dumps(release))
         duplicate["assets"].append(dict(duplicate["assets"][0]))
         with self.assertRaises(ValueError):
@@ -174,6 +177,14 @@ class DualAbiReleaseContractTests(unittest.TestCase):
                 fetch_base_apks.verify_base_native_abi(good, "arm64")
             with self.assertRaises(SystemExit):
                 repack_apk.validate_base_architecture(str(good), "arm64")
+
+            mixed = root / "mixed.apk"
+            with zipfile.ZipFile(mixed, "w") as apk:
+                apk.writestr("lib/armeabi-v7a/libchrobalt.so", b"native-armv7")
+                apk.writestr("lib/arm64-v8a/libchrobalt.so", b"native-arm64")
+                apk.writestr("classes.dex", b"dex")
+            with self.assertRaises(ValueError):
+                fetch_base_apks.verify_base_native_abi(mixed, "armv7")
 
             no_dex = root / "no-dex.apk"
             with zipfile.ZipFile(no_dex, "w") as apk:
@@ -209,24 +220,35 @@ class DualAbiReleaseContractTests(unittest.TestCase):
             with self.assertRaises(SystemExit):
                 repack_apk.verify_preserved_native_and_dex(str(base), str(corrupted), "armv7", script_url)
 
-    def test_both_release_checksums_are_exact_and_mandatory(self):
+    def test_release_checksums_are_exact_and_cover_only_published_files(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             armv7 = root / "candidate-armv7.apk"
-            arm64 = root / "candidate-arm64.apk"
             script = root / "userScript.js"
             armv7.write_bytes(b"armv7 apk")
-            arm64.write_bytes(b"arm64 apk")
             script.write_bytes(b"exact script bytes")
             checksum_file = root / "SHA256SUMS.txt"
             entries = []
-            for path in (armv7, arm64, script):
+            for path in (armv7, script):
                 entries.append(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}")
             checksum_file.write_text("\n".join(entries) + "\n", encoding="utf-8")
-            validate_release.check_checksums(str(checksum_file), str(armv7), str(arm64), str(script))
+            validate_release.check_checksums(str(checksum_file), str(armv7), str(script))
             armv7.write_bytes(b"changed")
             with self.assertRaises(ValueError):
-                validate_release.check_checksums(str(checksum_file), str(armv7), str(arm64), str(script))
+                validate_release.check_checksums(str(checksum_file), str(armv7), str(script))
+
+            armv7.write_bytes(b"armv7 apk")
+            extra = root / "YTArk-v2.1.2-arm64.apk"
+            extra.write_bytes(b"legacy arm64 apk")
+            with_legacy = root / "SHA256SUMS-with-legacy.txt"
+            with_legacy.write_text(
+                "\n".join(entries + [
+                    f"{hashlib.sha256(extra.read_bytes()).hexdigest()}  {extra.name}",
+                ]) + "\n",
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(ValueError, "not part of this release"):
+                validate_release.check_checksums(str(with_legacy), str(armv7), str(script))
 
             duplicate = root / "duplicate.txt"
             duplicate.write_text(entries[0] + "\n" + entries[0] + "\n", encoding="utf-8")
@@ -266,13 +288,13 @@ class DualAbiReleaseContractTests(unittest.TestCase):
             self.assertEqual(second.count('android.intent.category.LEANBACK_LAUNCHER'), 1)
             self.assertEqual(second.count('android.hardware.touchscreen'), 1)
 
-    def test_base_checksum_manifest_requires_both_upstream_apks(self):
+    def test_base_checksum_manifest_requires_the_armv7_upstream_apk(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
             base_dir = root / "base"
             base_dir.mkdir()
             checksums = []
-            for name, payload in (("cobalt-arm.apk", b"v7"), ("cobalt-arm64.apk", b"v8")):
+            for name, payload in (("cobalt-arm.apk", b"v7"),):
                 path = base_dir / name
                 path.write_bytes(payload)
                 checksums.append(f"{hashlib.sha256(payload).hexdigest()}  {name}")
@@ -318,18 +340,19 @@ resource 0x7f080003 io.github.twoarchiver.ytark:drawable/ytark_launcher_monochro
             with self.assertRaises(ValueError):
                 validate_release.validate_compiled_manifest(Path("candidate.apk"), "aapt")
 
-    def test_release_contract_requires_both_assets_and_truthful_architecture_guidance(self):
+    def test_release_contract_requires_the_armv7_asset_and_truthful_guidance(self):
         config = validate_release.load_config()
         body = f"""# YTArk {config['DISPLAY_VERSION']}
 Android package `{validate_release.APP_ID}`
 Version {config['DISPLAY_VERSION']} ({config['VERSION_NAME']}; versionCode {config['VERSION_CODE']})
 TizenTubeCobalt v2.0.2
 {config['APK_ARMV7']} armeabi-v7a
-{config['APK_ARM64']} arm64-v8a
+Only ARMv7 is published; an Android userspace whose abilist contains only
+arm64-v8a (a 64-bit-only system) cannot install this release.
 4K does not select an APK architecture.
 """
         assets = []
-        for name in (config["APK_ARMV7"], config["APK_ARM64"], "SHA256SUMS.txt",
+        for name in (config["APK_ARMV7"], "SHA256SUMS.txt",
                      "base-apk-sha256.txt", "NOTICE.md", "userScript.js"):
             assets.append({
                 "name": name,
@@ -361,6 +384,44 @@ TizenTubeCobalt v2.0.2
             path.write_text(json.dumps(broken), encoding="utf-8")
             with self.assertRaises(ValueError):
                 validate_release.verify_release(str(path), "draft", None)
+
+    def test_rendered_release_notes_satisfy_the_verify_release_contract(self):
+        """Render the notes exactly as the workflow does and check every gate."""
+        template = (ROOT / "tools" / "create_release.sh").read_text(encoding="utf-8")
+        for forbidden in ("APK_ARM64", "cobalt-arm64.apk", "ytark-dual-abi"):
+            self.assertNotIn(forbidden, template,
+                             "the release script still advertises a second architecture")
+        body = template.split("cat > release-notes.md <<EOF", 1)[1].split("\nEOF\n", 1)[0]
+        config = validate_release.load_config()
+        environment = dict(os.environ, **{
+            "GH_TOKEN": "test-token",
+            "GITHUB_REPOSITORY": "2archiver/YTArk",
+            "GITHUB_SHA": "0" * 40,
+            "APP_ID": validate_release.APP_ID,
+            "APP_NAME": validate_release.APP_NAME,
+            **{key: config[key] for key in (
+                "VERSION_NAME", "DISPLAY_VERSION", "VERSION_CODE", "VERSION_TAG",
+                "SCRIPT_TAG", "BASE_TAG", "APK_ARMV7")},
+            "SIGNING_CERT_SHA256": "b9cb7e4b4d5179870e672e850f5d3661f02c248f943dbaf10cd78cd0c047eaae",
+        })
+        script = "cat <<YTARK_NOTES_EOF\n" + body + "\nYTARK_NOTES_EOF\n"
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "render-notes.sh"
+            path.write_text(script, encoding="utf-8")
+            rendered = subprocess.run(
+                ["bash", str(path)], check=True, capture_output=True,
+                text=True, env=environment).stdout
+        for required in (
+            validate_release.APP_ID, config["DISPLAY_VERSION"], config["VERSION_NAME"],
+            config["VERSION_CODE"], "TizenTubeCobalt", config["APK_ARMV7"],
+            "4K does not select an APK architecture", "arm64-v8a", "armeabi-v7a",
+            "ARMv7", "64-bit", config["VERSION_TAG"],
+        ):
+            self.assertIn(required, rendered,
+                          f"the rendered release notes lost required guidance: {required}")
+        self.assertEqual(validate_release.parse_release_version_code(rendered),
+                         int(config["VERSION_CODE"]))
+        self.assertNotRegex(rendered, r"personal\s+tube\s+tv")
 
     def test_previous_update_smoke_rejects_nonofficial_urls(self):
         name = "YTArk-v2.0.3-ytark.15-armv7.apk"

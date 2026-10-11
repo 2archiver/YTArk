@@ -22,19 +22,23 @@ installGlobals({ doc, windowStub, localStorage });
 const { createUpdateController } = await import('../features/updater.js');
 const { parseNativeState } = await import('../features/updateState.js');
 
-const ARM64_ASSET = 'YTArk-v2.1.1-arm64.apk';
-const ARM64_URL = `https://github.com/2archiver/YTArk/releases/download/v2.1.1/${ARM64_ASSET}`;
+// YTArk publishes ARMv7-only releases from 2.1.2 onwards.
+const ARMV7_ASSET = 'YTArk-v2.1.2-armv7.apk';
+const ARMV7_URL = `https://github.com/2archiver/YTArk/releases/download/v2.1.2/${ARMV7_ASSET}`;
+const LEGACY_ARM64_ASSET = 'YTArk-v2.1.1-arm64.apk';
+const LEGACY_ARM64_URL =
+  `https://github.com/2archiver/YTArk/releases/download/v2.1.1/${LEGACY_ARM64_ASSET}`;
 
 function releasePayload(overrides = {}) {
   return {
-    tag_name: 'v2.1.1',
+    tag_name: 'v2.1.2',
     draft: false,
     prerelease: false,
-    body: 'YTArk 2.1.1\n\n- Premium wordmark fix\n\nAndroid versionCode: 2010100\n',
+    body: 'YTArk 2.1.2\n\n- Vector Premium wordmark\n\nAndroid versionCode: 2010200\n',
     assets: [{
-      name: ARM64_ASSET,
-      size: 168316114,
-      browser_download_url: ARM64_URL,
+      name: ARMV7_ASSET,
+      size: 97195140,
+      browser_download_url: ARMV7_URL,
       digest: `sha256:${'ab'.repeat(32)}`,
     }],
     ...overrides,
@@ -76,7 +80,7 @@ function makeController(options = {}) {
     ui,
     bridge,
     installedVersion: options.installedVersion || (() => '2.1.0'),
-    architecture: options.architecture || (() => 'arm64-v8a'),
+    architecture: options.architecture || (() => 'armeabi-v7a'),
     fetchRelease: options.fetchRelease || (async () => releasePayload()),
     deepLink: () => { deepLinks.push('ytark://updates'); return true; },
     now: options.now || (() => Date.now()),
@@ -185,10 +189,10 @@ describe('YTArk Updates card without a connected native engine', () => {
     const { controller, ui, deepLinks } = makeController({});
     await controller.open();
     const text = flatText(ui.modals.at(-1));
-    assert.match(text, /YTArk 2\.1\.1 is available for this device/);
-    assert.match(text, /Available stable version: 2\.1\.1/);
+    assert.match(text, /YTArk 2\.1\.2 is available for this device/);
+    assert.match(text, /Available stable version: 2\.1\.2/);
     assert.match(text, /Release notes/);
-    assert.match(text, /Premium wordmark fix/);
+    assert.match(text, /Vector Premium wordmark/);
     assert.match(text, /Read-only release check/);
     assert.match(text, /Download and installation run in the native YTArk updater/);
     assert.deepEqual(actionIds(ui.modals.at(-1)), ['check', 'later', 'open']);
@@ -231,17 +235,14 @@ describe('YTArk Updates card without a connected native engine', () => {
       architecture: () => 'armeabi-v7a',
       fetchRelease: async () => releasePayload({
         assets: [
-          { name: ARM64_ASSET, size: 2, browser_download_url: ARM64_URL },
-          {
-            name: 'YTArk-v2.1.1-armv7.apk',
-            size: 97_352_918,
-            browser_download_url: 'https://github.com/2archiver/YTArk/releases/download/v2.1.1/YTArk-v2.1.1-armv7.apk',
-          },
+          // A legacy ARM64 asset must never be selected, even when published.
+          { name: LEGACY_ARM64_ASSET, size: 2, browser_download_url: LEGACY_ARM64_URL },
+          { name: ARMV7_ASSET, size: 97_195_140, browser_download_url: ARMV7_URL },
         ],
       }),
     });
     await controller.open();
-    assert.match(flatText(ui.modals.at(-1)), /2\.1\.1 \(armeabi-v7a\)/);
+    assert.match(flatText(ui.modals.at(-1)), /2\.1\.2 \(armeabi-v7a\)/);
     controller.dispose();
 
     const unsupported = makeController({
@@ -250,7 +251,8 @@ describe('YTArk Updates card without a connected native engine', () => {
     });
     await unsupported.controller.open();
     assert.equal(unsupported.controller.state.model.state, 'check_error');
-    assert.match(flatText(unsupported.ui.modals.at(-1)), /does not report a supported ARM ABI/);
+    assert.match(flatText(unsupported.ui.modals.at(-1)), /instead of armeabi-v7a/);
+    assert.match(flatText(unsupported.ui.modals.at(-1)), /ro\.product\.cpu\.abilist/);
     unsupported.controller.dispose();
   });
 
@@ -316,7 +318,7 @@ describe('YTArk Updates card without a connected native engine', () => {
 describe('state model hand-off', () => {
   it('marks an already current install as current, not as an update', async () => {
     const { controller, ui } = makeController({
-      installedVersion: () => '2.1.1',
+      installedVersion: () => '2.1.2',
       fetchRelease: async () => releasePayload(),
     });
     await controller.open();

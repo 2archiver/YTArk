@@ -73,6 +73,7 @@ final class UpdateReleaseContract {
     static String assetNameForVersion(String version, String architectureSuffix) throws IOException {
         expectedVersionCodeForVersion(version);
         // Validate against the exact ABI-to-filename mapping; do not accept path-like suffixes.
+        // Since 2.1.2 that mapping accepts the ARMv7 suffix only.
         NativeAbiContract.nativeAbiForSuffix(architectureSuffix);
         return "YTArk-v" + version + "-" + architectureSuffix + ".apk";
     }
@@ -85,8 +86,10 @@ final class UpdateReleaseContract {
         String version = tag.substring(1);
         expectedVersionCodeForVersion(version);
         if (assetName == null || !(assetName.matches(
-                "YTArk-v(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)-(?:arm64|armv7)\\.apk")
+                "YTArk-v(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)-armv7\\.apk")
                 || "SHA256SUMS.txt".equals(assetName))) {
+            // Legacy arm64 assets from the dual-ABI era are deliberately not
+            // installable update sources any more.
             throw new IOException("A release asset has an invalid YTArk filename.");
         }
         if (assetName.startsWith("YTArk-v") && !assetName.startsWith("YTArk-" + tag + "-")) {

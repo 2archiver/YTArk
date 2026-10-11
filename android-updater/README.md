@@ -11,14 +11,19 @@ replaced.
 The updater requests GitHub's canonical
 `https://api.github.com/repos/2archiver/YTArk/releases/latest` endpoint and
 accepts only releases with explicit `draft=false` and `prerelease=false` flags.
-For YTArk 2.1.1, the stable tag is `v2.1.1`, the release title is `YTArk 2.1.1`,
-the display version is `2.1.1`, and Android uses versionName `2.1.1` with
-versionCode `2010100`. The version code is checked against every published
-stable release, including historical tags. Release assets are named
-`YTArk-v2.1.1-armv7.apk` and `YTArk-v2.1.1-arm64.apk`.
+For YTArk 2.1.2, the stable tag is `v2.1.2`, the release title is `YTArk 2.1.2`,
+the display version is `2.1.2`, and Android uses versionName `2.1.2` with
+versionCode `2010200`. The version code is checked against every published
+stable release, including historical tags. The release asset is named
+`YTArk-v2.1.2-armv7.apk`; ARM64 assets were published up to 2.1.1 and are never
+selected as an update any more.
 
 The updater selects only the APK matching the ABI embedded in the installed
-YTArk APK. It verifies the exact official asset URL, release flags, tag and
+YTArk APK, and only after Android's own ABI list confirms that the userspace can
+still load it. A device that does not report `armeabi-v7a` gets one clear message
+(check `ro.product.cpu.abilist`) instead of a download it cannot install, and an
+installation that still carries `arm64-v8a` native code is told that cross-ABI
+updates are not supported. It verifies the exact official asset URL, release flags, tag and
 version, versionCode, asset size, SHA-256, package ID, native library ABI, and
 signer before exposing Android's PackageInstaller. GitHub's asset digest is
 used when available; otherwise a required entry in `SHA256SUMS.txt` is used.
@@ -65,7 +70,9 @@ coordinated migration options.
 ## Contract tests
 
 Host-JRE tests exercise SemVer ordering, historical versionCode comparison,
-ABI selection (including armv7), stable release flags, official URLs, SHA-256
+ARMv7-only ABI selection (a legacy `arm64-v8a` installation, a 64-bit-only ABI
+list and an unknown suffix are all rejected with actionable messages), stable
+release flags, official URLs, SHA-256
 fallback, interrupted-download resume metadata, and persisted retry/rate-limit
 scheduling. These tests do not replace a signed APK build, Android Package
 Installer exercise, physical-TV navigation, or a login-preserving in-place

@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Download and validate the pinned ARMv7 and ARM64 TizenTubeCobalt APK bases."""
+"""Download and validate the pinned ARMv7 TizenTubeCobalt APK base.
+
+YTArk builds and publishes exactly one architecture: 32-bit ARM
+(`armeabi-v7a`). The upstream ARM64 asset is deliberately not downloaded and
+cannot be packaged, so no ARM64 libraries can leak into a release.
+"""
 
 from __future__ import annotations
 
@@ -22,13 +27,6 @@ BASE_ASSETS = {
         "library": "lib/armeabi-v7a/libchrobalt.so",
         "size": 97_195_140,
         "sha256": "ff90c6e85c37246b809cca80282910509782c1384eccfbb6066da3b497dd9fd2",
-    },
-    "arm64": {
-        "filename": "cobalt-arm64.apk",
-        "abi": "arm64-v8a",
-        "library": "lib/arm64-v8a/libchrobalt.so",
-        "size": 168_173_905,
-        "sha256": "0e8a9cffc77a08cd116d38e262c3e9d7f261ba2093b5b2d2ef905f509c99133c",
     },
 }
 
@@ -79,6 +77,7 @@ def validate_release_asset(release: dict, base_tag: str, architecture: str) -> d
 
 
 def verify_base_native_abi(path: Path, architecture: str) -> None:
+    """The base APK must contain the ARMv7 Cobalt library and no other ABI."""
     spec = BASE_ASSETS.get(architecture)
     if not spec:
         raise ValueError(f"Unsupported base architecture: {architecture}")
@@ -140,7 +139,7 @@ def main() -> None:
         directory = Path(args.output_dir)
         directory.mkdir(parents=True, exist_ok=True)
         checksums = []
-        for architecture in ("armv7", "arm64"):
+        for architecture in ("armv7",):
             _path, digest = fetch_one(release, args.base_tag, architecture, directory)
             checksums.append(f"{digest}  {BASE_ASSETS[architecture]['filename']}")
         Path(args.checksums_out).write_text("\n".join(checksums) + "\n", encoding="utf-8")
