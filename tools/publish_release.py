@@ -1456,8 +1456,14 @@ def candidate_from_release(
             name=name, path=destination, sha256=digest, size=destination.stat().st_size
         )
     identity_commit = str((identity or {}).get("commit") or commit)
+    # A verify-only run has no artefact, so the release's own identity is the
+    # only record of which run and commit its bytes came from; an upload still
+    # pins the candidate to the run that was reviewed.
+    effective_run_id = (
+        str((identity or {}).get("run_id") or run_id) if verify_only else str(run_id)
+    )
     candidate = Candidate(
-        files=files, commit=identity_commit, run_id=str(run_id), config=config,
+        files=files, commit=identity_commit, run_id=effective_run_id, config=config,
         origin="release-assets" if not release.get("draft") else "draft-assets",
     )
     if identity and not candidate.identity_matches(identity):

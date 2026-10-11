@@ -602,7 +602,11 @@ class PublicationTests(PublishReleaseTestCase):
     def test_published_release_is_verified_without_the_build_artefact(self):
         """A verify-only run has no artefact: it re-checks the public bytes only."""
         published = release_payload(draft=False, body=identity_body(self.candidate))
-        result, scenario = self.run_publish(published, candidate_dir="", manifest="")
+        # A later run than the one that staged the release: the identity still
+        # has to resolve to the bytes the release actually carries.
+        result, scenario = self.run_publish(
+            published, candidate_dir="", manifest="", run_id="999999999"
+        )
         self.assertEqual(result, 0)
         self.assertEqual(
             [call for call in scenario.calls if call[0] in ("upload", "edit", "create")],
