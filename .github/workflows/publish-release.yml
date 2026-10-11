@@ -117,6 +117,12 @@ jobs:
           ref: ${{ inputs.expected_head_sha }}
           persist-credentials: false
 
+      - name: Set up Java 17 (apksigner needs a JVM to re-verify the package)
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "17"
+
       - name: Install Android build-tools to re-verify the published package
         run: |
           set -euo pipefail
@@ -156,7 +162,7 @@ jobs:
             args+=(--device-test-notes "$YTARK_DEVICE_TEST_NOTES")
           fi
           log="$RUNNER_TEMP/ytark-publish.log"
-          if ! python3 tools/publish_release.py publish "${args[@]}" \
+          if ! python3 -u tools/publish_release.py publish "${args[@]}" \
               --aapt "$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt" \
               --apksigner "$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner" \
               >"$log" 2>&1; then
@@ -164,13 +170,21 @@ jobs:
           # Surface any publication failure as a check annotation: the reason is
           # then visible on the run page without opening the raw job log.
           python3 - "$log" <<'PY'
+          import re
           import sys
 
-          text = open(sys.argv[1], encoding="utf-8", errors="replace").read().strip()
-          if text:
-              for line in text.splitlines()[-15:]:
-                  safe = line.replace("%", "%25").replace("\r", " ").replace("\n", "%0A")
-                  print(f"::error title=YTArk release publication failed::{safe[:900]}")
+          lines = [
+              line for line
+              in open(sys.argv[1], encoding="utf-8", errors="replace").read().splitlines()
+              if line.strip()
+          ]
+          interesting = [
+              line for line in lines
+              if re.search(r"(Traceback|Error|error|failed|refused|Killed)", line)
+          ]
+          for line in (interesting + lines)[-30:]:
+              safe = line.replace("%", "%25").replace("\r", " ").replace("\n", "%0A")
+              print(f"::error title=YTArk release publication failed::{safe[:900]}")
           PY
             exit 1
           fi
