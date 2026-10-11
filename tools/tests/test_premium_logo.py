@@ -9,6 +9,7 @@ could contain, plus the provenance checks on the asset that is already bundled.
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 import unittest
 import xml.etree.ElementTree as ET
@@ -129,6 +130,58 @@ class BundledAssetTests(unittest.TestCase):
                 'xmlns="http://www.w3.org/2000/svg"', ""))
         root = ET.fromstring(text)
         self.assertEqual(root.get("viewBox"), f"0 0 {logo.SOURCE_WIDTH} {logo.SOURCE_HEIGHT}")
+
+
+class GeneratedModuleTests(unittest.TestCase):
+    """The runtime module must stay the bundled vector, never a redraw."""
+
+    def setUp(self) -> None:
+        self.generated = ASSET_DIR / "youtubePremiumLogo.generated.js"
+        if not self.generated.is_file():
+            self.skipTest("the generated wordmark module has not been written yet")
+        self.text = self.generated.read_text(encoding="utf-8")
+
+    def test_module_is_current_with_the_bundled_svg(self):
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "tools" / "build_logo_asset.py"), "--check"],
+            capture_output=True, text=True, check=False)
+        self.assertEqual(result.returncode, 0,
+                         f"the bundled module is stale:\n{result.stdout}\n{result.stderr}")
+
+    def test_every_source_path_is_bundled_with_its_paint(self):
+        root = ET.fromstring((ASSET_DIR / "youtube-premium-logo-2024.svg").read_text("utf-8"))
+        source_paths = [element for element in root.iter() if element.tag.endswith("path")]
+        self.assertGreater(len(source_paths), 0)
+        for element in source_paths:
+            self.assertIn(element.get("d"), self.text,
+                          "a source path is missing from the runtime module")
+        self.assertIn('viewBox: \'0 0 101 20\'', self.text)
+        # The emblem keeps its literal paint; only the lettering is an ink path.
+        self.assertIn('paint: \'icon-red\'', self.text)
+        self.assertIn('paint: \'icon-white\'', self.text)
+        self.assertIn("'#FF0033'", self.text)
+        self.assertIn("'white'", self.text)
+        self.assertIn("paint: 'ink'", self.text)
+        self.assertEqual(self.text.count("paint: 'ink'"), len(source_paths) - 2,
+                         "exactly the lettering paths are ink-painted")
+
+    def test_module_carries_no_text_raster_or_external_reference(self):
+        # Provenance URLs live in the leading comment block only. No executable
+        # line may reference an image, a font or a remote resource: stripping the
+        # comments must leave a self-contained geometry literal.
+        code = "\n".join(
+            line for line in self.text.splitlines() if not line.lstrip().startswith("//"))
+        # The provenance object keeps the source URLs as inert documentation
+        # strings for the release/NOTICE trail; nothing may fetch them.
+        body = code.split("  provenance:", 1)[0]
+        self.assertNotIn("http", body, "the geometry itself must not carry a URL")
+        for forbidden in ("<text", "<image", "<style", "href=", "@font-face",
+                          "url(", "fetch(", "XMLHttpRequest", "new Image"):
+            self.assertNotIn(forbidden, body,
+                             "the runtime module must not carry non-vector content")
+        # The documentation still records the origin it was verified against.
+        self.assertIn("commons.wikimedia.org", self.text)
+        self.assertIn("9ec3ad62f293d10e98cb637d0303a7e7e4188947", self.text)
 
 
 if __name__ == "__main__":

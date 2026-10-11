@@ -247,9 +247,10 @@ export function installGlobals({ doc, windowStub, localStorage }) {
   }
 }
 
-export function createWindowStub({ localStorage, doc }) {
+export function createWindowStub({ localStorage, doc, colorScheme = 'light' }) {
   const listeners = new Map();
   const timers = new Set();
+  const mediaQueries = [];
   const windowStub = {
     localStorage,
     h5vcc: null,
@@ -274,6 +275,47 @@ export function createWindowStub({ localStorage, doc }) {
     },
     clearTimeout(id) { timers.delete(id); clearTimeout(id); },
     document: doc,
+    /**
+     * Minimal style double: the mods only read the computed foreground colour
+     * of the header host, which the tests set through the inline style. This is
+     * a double for the reduced surface the userscript touches, not a browser.
+     */
+    getComputedStyle(element) {
+      const value = element && element.style
+        && typeof element.style.getPropertyValue === 'function'
+        ? element.style.getPropertyValue('color') : '';
+      return { color: value || '', getPropertyValue: (name) => (name === 'color' ? value || '' : '') };
+    },
+    matchMedia(query) {
+      const media = String(query);
+      const mql = {
+        media,
+        matches: media.includes('dark') && colorScheme === 'dark',
+        listeners: [],
+        addEventListener(type, listener) {
+          if (type === 'change') this.listeners.push(listener);
+        },
+        removeEventListener(type, listener) {
+          this.listeners = this.listeners.filter(item => item !== listener);
+        },
+        addListener(listener) { this.listeners.push(listener); },
+        removeListener(listener) { this.listeners = this.listeners.filter(item => item !== listener); },
+        setMatches(value) {
+          this.matches = value;
+          for (const listener of [...this.listeners]) listener({ matches: value, media });
+        },
+      };
+      mediaQueries.push(mql);
+      return mql;
+    },
+    mediaQueries,
+    /** Flip the OS colour preference and notify the registered listeners. */
+    setColorScheme(value) {
+      colorScheme = value;
+      for (const mql of mediaQueries) {
+        mql.setMatches(mql.media.includes('dark') && value === 'dark');
+      }
+    },
   };
   return windowStub;
 }

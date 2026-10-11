@@ -1,27 +1,42 @@
 import { configRead, configChangeEmitter } from '../config.js';
+import { YOUTUBE_PREMIUM_WORDMARK } from '../assets/youtubePremiumLogo.generated.js';
 
 /**
- * Cosmetic YouTube Premium-style wordmark.
+ * Cosmetic YouTube Premium wordmark (cosmetic header preference only).
+ *
+ * The artwork is the exact 2024 YouTube Premium lockup from Wikimedia Commons,
+ * bundled as vector geometry by `tools/fetch_premium_logo.py` (download,
+ * SHA-1 verification against the Commons revision metadata, sanitization) and
+ * turned into `assets/youtubePremiumLogo.generated.js` by
+ * `tools/build_logo_asset.py`. Nothing is fetched at runtime, nothing is
+ * retyped in a font, and no raster preview is used.
+ *
+ * Rendering rules:
+ *   - the red play emblem and its white triangle keep their literal source
+ *     paint in every theme (`icon-red` / `icon-white` paint tokens),
+ *   - the lettering paths use the `ytark-premium-ink` token, i.e.
+ *     `fill: currentColor` on the wrapper, and the wrapper's colour is resolved
+ *     from the real Leanback header foreground, so dark and light headers both
+ *     stay legible without inverting or filtering the emblem,
+ *   - a MutationObserver scoped to the logo host keeps the patch alive when the
+ *     frontend re-renders the slot, and is disconnected on teardown.
  *
  * The YouTube TV / Leanback header renders its logo inside a `ytlr-logo-entity`
  * host (Polymer wraps it as `ytlr-redux-connect-ytlr-logo-entity`) and the
  * visible artwork is either an inline-image element or a CSS `background-image`
- * on a descendant such as `ytlr-thumbnail-details`. The previous implementation
- * only looked for `ytlr-logo` with an `img`/`svg`/`yt-icon` child, so it never
- * matched the real markup and silently left the stock header in place.
+ * on a descendant such as `ytlr-thumbnail-details`.
  *
  * This module patches the actual host markup:
  *   - every logo host found (header and any secondary placement) gets exactly
  *     one wordmark,
  *   - the native artwork is hidden, never removed, and its inline styles are
  *     restored byte-for-byte when the option is turned off,
- *   - the wordmark is drawn from local DOM/CSS only: a red play emblem plus the
- *     label rendered with the frontend's own font and inherited colour, so no
- *     webfont, SVG document or remote image is required and light/dark theme
- *     contrast is preserved,
  *   - observation stays scoped to the logo hosts (or a short, bounded search
  *     for them) and disconnects as soon as the work is done.
  */
+
+const SVG_NAMESPACE = 'http://www.w3.org/2000/svg';
+
 
 const HOST_SELECTORS = [
   'ytlr-logo-entity',
@@ -52,6 +67,24 @@ const STYLE_ELEMENT_ID = 'ytark-premium-logo-style';
 const HIDDEN_CLASS = 'ytark-premium-logo-artwork-hidden';
 const WORDMARK_ATTRIBUTE = 'data-ytark-premium-wordmark';
 const WORDMARK_CLASS = 'ytark-premium-wordmark';
+/** Lettering paint token: only these paths follow the header foreground. */
+const INK_CLASS = 'ytark-premium-ink';
+const VECTOR_CLASS = 'ytark-premium-vector';
+const THEME_ATTRIBUTE = 'data-ytark-premium-theme';
+const INK_ATTRIBUTE = 'data-ytark-premium-ink';
+const INK_SOURCE_ATTRIBUTE = 'data-ytark-premium-ink-source';
+
+/**
+ * Theme ink tokens. `dark` is the near-white foreground a dark Leanback header
+ * uses, `light` the near-black foreground of the light header. They are only
+ * used when the live header colour cannot be read (no getComputedStyle, no
+ * mounted header) or when an app-level theme marker decides the theme.
+ */
+const INK_TOKENS = YOUTUBE_PREMIUM_WORDMARK.inkTokens;
+
+/** Document-root theme markers the TV frontend/app sets when a theme is forced. */
+const THEME_HINT_PATTERN = /(^|[\s_-])(dark|light)([\s_-]|$)/i;
+const THEME_HINT_ATTRIBUTES = ['class', 'theme', 'data-theme', 'dark', 'style'];
 
 /** Bounded search window after a navigation; long enough for Polymer to mount. */
 const OBSERVATION_WINDOW_MS = 12_000;
@@ -60,6 +93,8 @@ const MAX_MUTATION_BATCHES = 60;
 const MAX_SEARCH_BATCHES = 40;
 const RECONCILE_DELAY_MS = 120;
 const MAX_PATCH_ATTEMPTS = 40;
+/** Bounded re-arm delay used only while no header logo host has been found. */
+const SEARCH_RETRY_DELAY_MS = 2_000;
 
 const STYLE_SHEET = `
 .${HIDDEN_CLASS} {
@@ -68,45 +103,22 @@ const STYLE_SHEET = `
 [${WORDMARK_ATTRIBUTE}="true"] {
   display: inline-flex !important;
   align-items: center;
-  gap: 0.34em;
-  white-space: nowrap;
-  color: inherit;
-  font-family: inherit;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  line-height: 1;
+  justify-content: center;
+  min-width: 0;
   max-width: 100%;
+  color: inherit;
   pointer-events: none;
   user-select: none;
   -webkit-user-select: none;
 }
-[${WORDMARK_ATTRIBUTE}="true"] > .ytark-premium-mark {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 1.52em;
-  height: 1.06em;
-  flex: none;
-  border-radius: 0.26em;
-  background-color: #ff0033;
+[${WORDMARK_ATTRIBUTE}="true"] > svg.${VECTOR_CLASS} {
+  display: block;
+  width: auto;
+  max-width: 100%;
+  overflow: visible;
 }
-[${WORDMARK_ATTRIBUTE}="true"] > .ytark-premium-mark::after {
-  content: '';
-  width: 0;
-  height: 0;
-  border-style: solid;
-  border-width: 0.26em 0 0.26em 0.42em;
-  border-color: transparent transparent transparent #ffffff;
-  margin-left: 0.07em;
-}
-[${WORDMARK_ATTRIBUTE}="true"] > .ytark-premium-text {
-  display: inline-block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-[${WORDMARK_ATTRIBUTE}="true"] > .ytark-premium-text > .ytark-premium-suffix {
-  font-weight: 400;
-  opacity: 0.92;
+[${WORDMARK_ATTRIBUTE}="true"] path.${INK_CLASS} {
+  fill: currentColor;
 }
 `;
 
@@ -122,6 +134,8 @@ export const trace = {
   patchedHosts: 0,
   attempts: 0,
   patchedAt: 0,
+  theme: '',
+  inkSource: '',
 };
 
 function publishTrace() {
@@ -134,6 +148,8 @@ function publishTrace() {
       patchedHosts: trace.patchedHosts,
       attempts: trace.attempts,
       patchedAt: trace.patchedAt,
+      theme: trace.theme,
+      inkSource: trace.inkSource,
     };
   } catch (_) {
     /* diagnostics must never break the header */
@@ -207,6 +223,7 @@ export function ensureStyleSheet(doc) {
 export function makeWordmark(doc) {
   const target = documentRef(doc);
   if (!target || typeof target.createElement !== 'function') return null;
+  if (typeof target.createElementNS !== 'function') return null;
 
   const wordmark = target.createElement('span');
   wordmark.setAttribute(WORDMARK_ATTRIBUTE, 'true');
@@ -214,17 +231,201 @@ export function makeWordmark(doc) {
   wordmark.setAttribute('class', WORDMARK_CLASS);
   wordmark.setAttribute('part', 'ytark-premium-wordmark');
 
-  const mark = target.createElement('span');
-  mark.setAttribute('class', 'ytark-premium-mark');
-  mark.setAttribute('aria-hidden', 'true');
+  const svg = target.createElementNS(SVG_NAMESPACE, 'svg');
+  svg.setAttribute('class', VECTOR_CLASS);
+  svg.setAttribute('viewBox', YOUTUBE_PREMIUM_WORDMARK.viewBox);
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  svg.setAttribute('role', 'presentation');
+  svg.setAttribute('focusable', 'false');
+  svg.setAttribute('aria-hidden', 'true');
+  svg.setAttribute('data-ytark-premium-source', YOUTUBE_PREMIUM_WORDMARK.provenance.sourcePage);
 
-  const text = target.createElement('span');
-  text.setAttribute('class', 'ytark-premium-text');
-  text.textContent = 'YouTube Premium';
+  for (const entry of YOUTUBE_PREMIUM_WORDMARK.paths) {
+    const node = target.createElementNS(SVG_NAMESPACE, entry.tag);
+    for (const name of Object.keys(entry.attributes)) {
+      node.setAttribute(name, entry.attributes[name]);
+    }
+    if (entry.paint === 'ink') {
+      // Lettering only: the ink token follows the header foreground, while the
+      // emblem keeps its literal source paint in both themes.
+      node.setAttribute('class', INK_CLASS);
+      node.setAttribute('fill', 'currentColor');
+    } else {
+      node.setAttribute('fill', entry.fill);
+      node.setAttribute('data-ytark-premium-paint', entry.paint);
+    }
+    svg.appendChild(node);
+  }
 
-  wordmark.appendChild(mark);
-  wordmark.appendChild(text);
+  wordmark.appendChild(svg);
   return wordmark;
+}
+
+// ---------------------------------------------------------------------------
+// Theme resolution: the lettering follows the real header foreground
+// ---------------------------------------------------------------------------
+
+function activeWindow() {
+  return typeof window !== 'undefined' ? window : null;
+}
+
+export function parseCssColor(value) {
+  const text = String(value === undefined || value === null ? '' : value).trim().toLowerCase();
+  if (!text) return null;
+  const short = /^#([0-9a-f]{3})$/.exec(text);
+  if (short) {
+    const digits = short[1];
+    return {
+      r: parseInt(digits[0] + digits[0], 16),
+      g: parseInt(digits[1] + digits[1], 16),
+      b: parseInt(digits[2] + digits[2], 16),
+      a: 1,
+    };
+  }
+  const long = /^#([0-9a-f]{6})([0-9a-f]{2})?$/.exec(text);
+  if (long) {
+    return {
+      r: parseInt(long[1].slice(0, 2), 16),
+      g: parseInt(long[1].slice(2, 4), 16),
+      b: parseInt(long[1].slice(4, 6), 16),
+      a: long[2] ? parseInt(long[2], 16) / 255 : 1,
+    };
+  }
+  const functional = /^rgba?\(([^)]*)\)$/.exec(text);
+  if (functional) {
+    const parts = functional[1].split(/[,/]/).map(part => part.trim()).filter(Boolean);
+    if (parts.length >= 3) {
+      const channels = parts.slice(0, 3).map((part) => {
+        const number = parseFloat(part);
+        if (Number.isNaN(number)) return null;
+        return part.endsWith('%') ? Math.round((number / 100) * 255) : Math.round(number);
+      });
+      if (channels.every(channel => channel !== null && channel >= 0 && channel <= 255)) {
+        const alpha = parts.length > 3 ? parseFloat(parts[3]) : 1;
+        return {
+          r: channels[0], g: channels[1], b: channels[2],
+          a: Number.isNaN(alpha) ? 1 : alpha,
+        };
+      }
+    }
+    return null;
+  }
+  if (text === 'white') return { r: 255, g: 255, b: 255, a: 1 };
+  if (text === 'black') return { r: 0, g: 0, b: 0, a: 1 };
+  return null;
+}
+
+function relativeLuminance(color) {
+  const channel = (value) => {
+    const ratio = value / 255;
+    return ratio <= 0.03928 ? ratio / 12.92 : Math.pow((ratio + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * channel(color.r) + 0.7152 * channel(color.g) + 0.0722 * channel(color.b);
+}
+
+function toHex(color) {
+  const part = (value) => Math.max(0, Math.min(255, Math.round(value))).toString(16).padStart(2, '0');
+  return `#${part(color.r)}${part(color.g)}${part(color.b)}`;
+}
+
+/** Theme marker an app-level override leaves on the document root, if any. */
+function appThemeHint(doc) {
+  const target = documentRef(doc);
+  if (!target) return null;
+  const roots = [target.documentElement, target.body].filter(Boolean);
+  for (const root of roots) {
+    if (typeof root.getAttribute !== 'function') continue;
+    for (const attribute of THEME_HINT_ATTRIBUTES) {
+      const value = root.getAttribute(attribute);
+      if (!value) continue;
+      const match = THEME_HINT_PATTERN.exec(String(value));
+      if (match) return match[2].toLowerCase();
+    }
+  }
+  return null;
+}
+
+function prefersDarkTheme() {
+  const win = activeWindow();
+  if (!win || typeof win.matchMedia !== 'function') return null;
+  try {
+    const query = win.matchMedia('(prefers-color-scheme: dark)');
+    if (!query) return null;
+    return query.matches ? 'dark' : 'light';
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * Resolve the lettering colour for one header host.
+ *
+ * Priority: the header's own computed foreground (which already reflects any
+ * app theme override) → an app-level theme marker → the OS colour preference →
+ * the dark token. The emblem's paint is never part of this decision.
+ */
+export function resolveInkColor(host) {
+  const win = activeWindow();
+  if (host && win && typeof win.getComputedStyle === 'function') {
+    try {
+      const computed = win.getComputedStyle(host);
+      const parsed = computed ? parseCssColor(computed.color) : null;
+      if (parsed && parsed.a >= 0.5) {
+        return {
+          color: toHex(parsed),
+          theme: relativeLuminance(parsed) >= 0.5 ? 'dark' : 'light',
+          source: 'header-foreground',
+        };
+      }
+    } catch (_) {
+      /* fall through to the documented fallbacks */
+    }
+  }
+  const hint = appThemeHint();
+  if (hint) {
+    return { color: INK_TOKENS[hint] || INK_TOKENS.dark, theme: hint, source: 'app-theme' };
+  }
+  const preferred = prefersDarkTheme();
+  if (preferred) {
+    return { color: INK_TOKENS[preferred], theme: preferred, source: 'prefers-color-scheme' };
+  }
+  return { color: INK_TOKENS.dark, theme: 'dark', source: 'default' };
+}
+
+/** Apply the resolved ink to one wordmark; safe to call on every reconcile. */
+export function applyInk(host, wordmark) {
+  if (!wordmark || typeof wordmark.setAttribute !== 'function') return null;
+  const ink = resolveInkColor(host);
+  wordmark.setAttribute(THEME_ATTRIBUTE, ink.theme);
+  wordmark.setAttribute(INK_ATTRIBUTE, ink.color);
+  wordmark.setAttribute(INK_SOURCE_ATTRIBUTE, ink.source);
+  if (wordmark.style && typeof wordmark.style.setProperty === 'function') {
+    wordmark.style.setProperty('color', ink.color);
+  }
+  trace.theme = ink.theme;
+  trace.inkSource = ink.source;
+  return ink;
+}
+
+/** Re-apply the ink of every mounted wordmark (theme switch, app override). */
+export function refreshInk(doc) {
+  const target = documentRef(doc);
+  if (!target || typeof target.querySelectorAll !== 'function') return false;
+  let wordmarks = [];
+  try {
+    wordmarks = Array.from(target.querySelectorAll(WORDMARK_SELECTOR));
+  } catch (_) {
+    wordmarks = [];
+  }
+  let changed = false;
+  for (const wordmark of wordmarks) {
+    const host = wordmark.parentNode;
+    if (!host) continue;
+    const ink = applyInk(host, wordmark);
+    if (ink) changed = true;
+  }
+  if (changed) publishTrace();
+  return changed;
 }
 
 function isPlayerOverlay(host) {
@@ -397,13 +598,38 @@ function focusableHostHeight(host) {
   }
 }
 
+/**
+ * Size the bundled vector against the header slot it replaces. The artwork is
+ * pure vector geometry, so the same viewBox scales cleanly at 720p, 1080p and
+ * 4K; only the pixel height changes. Falls back to the previous default when
+ * the frontend does not report a box yet.
+ */
 function applyWordmarkSizing(host, wordmark) {
   const height = focusableHostHeight(host) || focusableHostHeight(host && host.parentNode);
-  let fontSize = height > 6 ? height * 0.52 : 0;
-  if (!fontSize || fontSize < 15) fontSize = 22;
-  if (fontSize > 44) fontSize = 44;
-  wordmark.style.setProperty('font-size', `${Math.round(fontSize * 10) / 10}px`);
-  wordmark.style.setProperty('min-height', '1.06em');
+  let pixelHeight = height > 6 ? height * 0.52 : 0;
+  if (!pixelHeight || pixelHeight < 15) pixelHeight = 22;
+  if (pixelHeight > 44) pixelHeight = 44;
+  pixelHeight = Math.round(pixelHeight * 10) / 10;
+  const ratio = YOUTUBE_PREMIUM_WORDMARK.width / YOUTUBE_PREMIUM_WORDMARK.height;
+  const pixelWidth = Math.round(pixelHeight * ratio * 10) / 10;
+  wordmark.style.setProperty('height', `${pixelHeight}px`);
+  let svg = null;
+  if (typeof wordmark.querySelector === 'function') {
+    try {
+      svg = wordmark.querySelector(`svg.${VECTOR_CLASS}`);
+    } catch (_) {
+      svg = null;
+    }
+  }
+  if (svg && typeof svg.setAttribute === 'function') {
+    svg.setAttribute('height', `${pixelHeight}px`);
+    svg.setAttribute('width', `${pixelWidth}px`);
+    if (svg.style && typeof svg.style.setProperty === 'function') {
+      svg.style.setProperty('height', `${pixelHeight}px`);
+      svg.style.setProperty('width', `${pixelWidth}px`);
+    }
+  }
+  return { pixelHeight, pixelWidth };
 }
 
 export function restoreHost(host) {
@@ -544,11 +770,12 @@ export function setPremiumLogo(host, enabled, doc) {
   host.style.setProperty('display', 'inline-flex', 'important');
   host.style.setProperty('align-items', 'center', 'important');
   host.style.setProperty('gap', '0.34em', 'important');
-  if (artwork.mode === 'background') {
-    host.style.setProperty('min-height', '1.06em', 'important');
-  }
-  applyWordmarkSizing(host, wordmark);
   host.appendChild(wordmark);
+  const sizing = applyWordmarkSizing(host, wordmark);
+  if (artwork.mode === 'background') {
+    host.style.setProperty('min-height', `${sizing.pixelHeight}px`, 'important');
+  }
+  applyInk(host, wordmark);
   patchByHost.set(host, state);
   trace.patchedHosts += 1;
   trace.patchedAt = Date.now();
@@ -564,6 +791,7 @@ export function setPremiumLogo(host, enabled, doc) {
 let searchObserver = null;
 let searchRoot = null;
 let searchDeadline = null;
+let searchRetry = null;
 let searchBatches = 0;
 const hostObservers = new WeakMap();
 const observedHosts = new Set();
@@ -573,9 +801,11 @@ let cleanupRequested = false;
 function stopSearchObserver() {
   if (searchObserver) searchObserver.disconnect();
   if (searchDeadline !== null) clearTimeout(searchDeadline);
+  if (searchRetry !== null) clearTimeout(searchRetry);
   searchObserver = null;
   searchRoot = null;
   searchDeadline = null;
+  searchRetry = null;
   searchBatches = 0;
 }
 
@@ -613,6 +843,9 @@ function watchHost(host) {
     if (!state) return;
     if (state.wordmark && state.wordmark.parentNode === host) {
       applyWordmarkSizing(host, state.wordmark);
+      // A header re-render can change the theme token without replacing the
+      // slot, so the ink is re-resolved whenever the host mutates.
+      applyInk(host, state.wordmark);
       const list = classListOf(state.artwork);
       if (list && !list.contains(HIDDEN_CLASS)) list.add(HIDDEN_CLASS);
       return;
@@ -671,6 +904,7 @@ function reconcile() {
     if (patchByHost.has(host)) {
       const state = patchByHost.get(host);
       if (state.wordmark && state.wordmark.parentNode === host) {
+        applyInk(host, state.wordmark);
         watchHost(host);
         continue;
       }
@@ -679,7 +913,7 @@ function reconcile() {
   }
 
   if (hosts.length > 0) {
-    trace.state = patchByHost ? 'active' : 'idle';
+    trace.state = trace.patchedHosts > 0 ? 'active' : 'idle';
     publishTrace();
   } else if (trace.attempts < MAX_PATCH_ATTEMPTS) {
     reportOnce('the YouTube TV header logo host has not been found yet');
@@ -697,6 +931,9 @@ export function startObserver(forceRestart = false) {
   cleanupRequested = false;
   if (!configRead('enablePremiumLogo')) return;
   ensureStyleSheet(document);
+  // cleanup() releases the theme watchers; re-arm them with the search cycle.
+  startThemeObserver();
+  startThemeMediaQuery();
 
   if (!forceRestart && searchObserver && searchRoot === document.body) return;
   stopSearchObserver();
@@ -743,6 +980,16 @@ export function startObserver(forceRestart = false) {
   // place the per-host observer keeps it correct without rescanning the page.
   searchDeadline = setTimeout(() => {
     stopSearchObserver();
+    // Nothing was patched yet (the header mounts later on a slow cold start):
+    // re-arm a bounded number of short search cycles instead of watching the
+    // whole document forever.
+    if (!cleanupRequested && trace.patchedHosts === 0
+        && trace.attempts < MAX_PATCH_ATTEMPTS && configRead('enablePremiumLogo')) {
+      searchRetry = setTimeout(() => {
+        searchRetry = null;
+        if (!cleanupRequested) startObserver(true);
+      }, SEARCH_RETRY_DELAY_MS);
+    }
   }, OBSERVATION_WINDOW_MS);
 
   scheduleReconcile();
@@ -752,6 +999,8 @@ function onNavigation() {
   if (!configRead('enablePremiumLogo')) return;
   // Drop stale references: Polymer replaces the header on navigation.
   forgetDetachedHosts();
+  // The header (and with it the theme token) may have been replaced.
+  refreshInk(document);
   // A pagehide cleanup followed by a pageshow return must be able to re-arm the
   // bounded observation cycle without reloading the userscript.
   startObserver(true);
@@ -794,12 +1043,86 @@ function onConfigChange(event) {
 export function cleanup() {
   cleanupRequested = true;
   stopSearchObserver();
+  stopThemeWatchers();
   for (const host of Array.from(observedHosts)) stopHostObserver(host);
   if (reconcileTimer !== null) clearTimeout(reconcileTimer);
   reconcileTimer = null;
   if (typeof document !== 'undefined' && document.body) forgetHosts(document);
   // Route/config/page listeners stay installed so a back-forward-cache return
   // can start a fresh bounded cycle without reloading the userscript.
+}
+
+// ---------------------------------------------------------------------------
+// Theme changes: refresh the ink without touching the emblem paint
+// ---------------------------------------------------------------------------
+
+let themeObserver = null;
+let themeMediaQuery = null;
+let themeMediaListener = null;
+let themeRefreshTimer = null;
+
+function onThemeChange() {
+  if (cleanupRequested) return;
+  if (!configRead('enablePremiumLogo')) return;
+  if (themeRefreshTimer !== null) return;
+  // Debounced: app theme switches flip several root attributes at once.
+  themeRefreshTimer = setTimeout(() => {
+    themeRefreshTimer = null;
+    if (cleanupRequested) return;
+    if (typeof document === 'undefined' || !document.body) return;
+    refreshInk(document);
+  }, RECONCILE_DELAY_MS);
+}
+
+function startThemeObserver() {
+  if (typeof MutationObserver === 'undefined' || typeof document === 'undefined') return;
+  const roots = [document.documentElement, document.body].filter(Boolean);
+  if (!roots.length) return;
+  if (themeObserver) themeObserver.disconnect();
+  themeObserver = new MutationObserver(() => onThemeChange());
+  for (const root of roots) {
+    // Scoped to the document root's own attributes: no subtree, no pages.
+    themeObserver.observe(root, { attributes: true, attributeFilter: THEME_HINT_ATTRIBUTES });
+  }
+}
+
+function startThemeMediaQuery() {
+  const win = activeWindow();
+  if (!win || typeof win.matchMedia !== 'function') return;
+  if (themeMediaQuery && themeMediaListener) return;
+  try {
+    themeMediaQuery = win.matchMedia('(prefers-color-scheme: dark)');
+  } catch (_) {
+    themeMediaQuery = null;
+    return;
+  }
+  if (!themeMediaQuery) return;
+  themeMediaListener = () => onThemeChange();
+  if (typeof themeMediaQuery.addEventListener === 'function') {
+    themeMediaQuery.addEventListener('change', themeMediaListener);
+  } else if (typeof themeMediaQuery.addListener === 'function') {
+    themeMediaQuery.addListener(themeMediaListener);
+  }
+}
+
+function stopThemeWatchers() {
+  if (themeObserver) themeObserver.disconnect();
+  themeObserver = null;
+  if (themeRefreshTimer !== null) clearTimeout(themeRefreshTimer);
+  themeRefreshTimer = null;
+  if (themeMediaQuery && themeMediaListener) {
+    try {
+      if (typeof themeMediaQuery.removeEventListener === 'function') {
+        themeMediaQuery.removeEventListener('change', themeMediaListener);
+      } else if (typeof themeMediaQuery.removeListener === 'function') {
+        themeMediaQuery.removeListener(themeMediaListener);
+      }
+    } catch (_) {
+      /* nothing to release */
+    }
+  }
+  themeMediaQuery = null;
+  themeMediaListener = null;
 }
 
 function initialize() {
@@ -811,8 +1134,16 @@ function initialize() {
     window.addEventListener('pageshow', onNavigation, true);
     window.addEventListener('hashchange', onNavigation, true);
   }
-  if (document.body) startObserver();
-  else document.addEventListener('DOMContentLoaded', () => startObserver(), { once: true });
+  startThemeMediaQuery();
+  if (document.body) {
+    startThemeObserver();
+    startObserver();
+  } else {
+    document.addEventListener('DOMContentLoaded', () => {
+      startThemeObserver();
+      startObserver();
+    }, { once: true });
+  }
 }
 
 configChangeEmitter.addEventListener('configChange', onConfigChange);
