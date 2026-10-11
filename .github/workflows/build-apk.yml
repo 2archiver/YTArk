@@ -1,20 +1,38 @@
-name: Build the YTArk ARMv7 APK candidate (Actions artefact only)
+name: Build and publish the YTArk ARMv7 APK
 
-# Candidate builds never create tags, releases or GitHub Release assets. Stable
-# publication is the separate, explicitly authorised publish-release.yml workflow,
-# which re-verifies the exact reviewed candidate artefact before it publishes.
+# One trusted pipeline. After a successful main-branch build and every package
+# check, the SAME run publishes the exact verified bytes as the stable GitHub
+# release; there is no tag-push chain and no manual stage.
+#
+# Trust boundary:
+# - Only 2archiver/YTArk on refs/heads/main may publish, and publication runs
+#   after the build job succeeds in this run (explicit `needs`).
+# - The build job uses the signing key but holds a read-only token.
+# - contents: write is granted to the publish job alone; actions: read is added
+#   there because it downloads the artefact this run produced.
+# - Pull requests and forks never reach this workflow: it does not listen to
+#   pull_request or pull_request_target.
 on:
   push:
     branches:
       - main
   workflow_dispatch:
+    inputs:
+      device_test_notes:
+        description: "Optional self-reported notes from a real-device test of this build (never required, never a gate)"
+        type: string
+        required: false
+        default: ""
 
-# Least privilege by default. No job here requests contents: write.
+# Least privilege by default; the publish job raises only what it needs.
 permissions:
   contents: read
 
+# One concurrency group across every path that can mutate the release, so the
+# automatic main-branch run and a recovery dispatch cannot race. Nothing is ever
+# cancelled mid-upload.
 concurrency:
-  group: ytark-release-${{ github.ref }}
+  group: ytark-release-publication
   cancel-in-progress: false
 
 env:
@@ -24,53 +42,31 @@ env:
 
 jobs:
   release-guard:
-    name: Skip when this version is already published
+    name: Classify the release state for this version
     runs-on: ubuntu-latest
     timeout-minutes: 10
     if: github.repository == '2archiver/YTArk'
     permissions:
       contents: read
     outputs:
-      needed: ${{ steps.check.outputs.needed }}
+      state: ${{ steps.plan.outputs.state }}
+      action: ${{ steps.plan.outputs.action }}
+      build_needed: ${{ steps.plan.outputs.build_needed }}
+      missing: ${{ steps.plan.outputs.missing }}
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Load release version
-        run: python3 tools/validate_release.py emit-env --file "$GITHUB_ENV"
-
-      - name: Detect an already-published release for this version tag
-        id: check
+      - name: Classify the existing release (assets must actually validate)
+        id: plan
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          state=absent
-          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$VERSION_TAG" \
-              > "$RUNNER_TEMP/existing-release.json" 2>/dev/null; then
-            state="$(python3 -c 'import json,sys; print("draft" if json.load(open(sys.argv[1])).get("draft") else "published")' \
-              "$RUNNER_TEMP/existing-release.json")"
-          fi
-          echo "Existing release state for $VERSION_TAG: $state"
-          {
-            echo "## YTArk release $VERSION_TAG"
-            echo "- Configured versionCode: $VERSION_CODE"
-            echo "- Existing release state: $state"
-          } >> "$GITHUB_STEP_SUMMARY"
-          if [ "$state" = "published" ]; then
-            echo "needed=false" >> "$GITHUB_OUTPUT"
-            {
-              echo "- **Nothing to build.** This version is already published; published assets and"
-              echo "  its immutable userscript tag are never rebuilt or moved."
-              echo "- Bump \`release/version.properties\` (and \`scriptTag\` when the bundle bytes change)"
-              echo "  to release again."
-            } >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "needed=true" >> "$GITHUB_OUTPUT"
-            echo "- Building and validating this version." >> "$GITHUB_STEP_SUMMARY"
-          fi
+          python3 tools/publish_release.py plan \
+            --head-sha "$GITHUB_SHA" --file "$GITHUB_OUTPUT"
 
   build-apk-candidates:
     name: Build and package-check the ARMv7 APK
@@ -78,7 +74,7 @@ jobs:
     timeout-minutes: 150
     needs:
       - release-guard
-    if: github.repository == '2archiver/YTArk' && needs.release-guard.outputs.needed == 'true'
+    if: github.repository == '2archiver/YTArk' && needs.release-guard.outputs.build_needed == 'true'
     # Candidate only: no tag, no release, no write token. Signing secrets are
     # used only on push/workflow_dispatch of this repository, never for fork PRs.
     permissions:
@@ -137,16 +133,17 @@ jobs:
       - name: Load release version
         run: python3 tools/validate_release.py emit-env --file "$GITHUB_ENV"
 
-      - name: Bind the APK to the immutable userscript URL (no tag is created here)
+      - name: Bind the APK to the immutable userscript URL (the tag is published after the package checks)
         run: |
           set -euo pipefail
           # GITHUB_ENV is available only in subsequent steps, never in the step
           # that writes it. The preceding step provides SCRIPT_TAG here.
-          # The tag is published only by publish-release.yml after review.
+          # The tag is published by the publish job of this same run, after every
+          # package check has passed, and never for a failed build.
           test -n "${SCRIPT_TAG:-}"
           script_url="https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@${SCRIPT_TAG}/userScript.js?v="
           echo "SCRIPT_URL=$script_url" >> "$GITHUB_ENV"
-          echo "Candidate APK script URL: $script_url (tag publication is a separate, gated step)"
+          echo "Candidate APK script URL: $script_url"
 
       - name: Install Android build tools and validate release inputs
         env:
@@ -273,6 +270,18 @@ jobs:
           cat update-smoke/eligibility.properties
           echo "These checks compare package metadata and signer only; they do not run adb install or launch an emulator."
 
+      - name: Record the candidate manifest (exact artefact layout and digests)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 tools/publish_release.py write-manifest \
+            --output candidate-manifest.json \
+            --candidate-dir . \
+            --commit "$GITHUB_SHA" \
+            --run-id "$GITHUB_RUN_ID"
+          cat candidate-manifest.json
+
       - name: Upload the ARMv7 candidate and validation metadata
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -281,6 +290,83 @@ jobs:
             release-assets/*
             update-smoke/*.apk
             update-smoke/eligibility.properties
+            candidate-manifest.json
           if-no-files-found: error
           retention-days: 30
-          # Actions artefact only: nothing here creates a tag, release or asset.
+          # An Actions artefact is not a public release: the publish job below
+          # decides whether these bytes become the stable release.
+
+  publish-release:
+    name: Publish the verified ARMv7 APK as the stable release
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    needs:
+      - release-guard
+      - build-apk-candidates
+    # Explicit dependency on a successful build of THIS run for trusted code:
+    # a failed or cancelled build can never reach publication.
+    if: >-
+      github.repository == '2archiver/YTArk'
+      && github.ref == 'refs/heads/main'
+      && needs.release-guard.result == 'success'
+      && needs.build-apk-candidates.result != 'failure'
+      && needs.build-apk-candidates.result != 'cancelled'
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - name: Checkout the exact commit this run built
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Install Android build-tools to re-verify the published package
+        run: |
+          set -euo pipefail
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+          (set +o pipefail; yes | sdkmanager --licenses >/dev/null)
+          sdkmanager "build-tools;${BUILD_TOOLS}" >/dev/null
+          echo "$ANDROID_HOME/build-tools/$BUILD_TOOLS" >> "$GITHUB_PATH"
+
+      - name: Download the candidate artefact produced by this run
+        if: needs.release-guard.outputs.build_needed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh run download "$GITHUB_RUN_ID" -R "$GITHUB_REPOSITORY" \
+            -n ytark-armv7-candidate -D candidate
+          # Show the real extraction layout; the manifest is authoritative.
+          find candidate -maxdepth 2 -type f | sort
+
+      - name: Publish, resume or repair the stable release from the verified bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          YTARK_BUILD_NEEDED: ${{ needs.release-guard.outputs.build_needed }}
+          YTARK_DEVICE_TEST_NOTES: ${{ inputs.device_test_notes }}
+        run: |
+          set -euo pipefail
+          args=(--commit "$GITHUB_SHA" --run-id "$GITHUB_RUN_ID" --workdir publish-work)
+          if [ "$YTARK_BUILD_NEEDED" = "true" ]; then
+            args+=(--candidate-dir candidate --manifest candidate/candidate-manifest.json)
+          fi
+          if [ -n "${YTARK_DEVICE_TEST_NOTES:-}" ]; then
+            args+=(--device-test-notes "$YTARK_DEVICE_TEST_NOTES")
+          fi
+          python3 tools/publish_release.py publish "${args[@]}" \
+            --aapt "$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt" \
+            --apksigner "$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner"
+
+      - name: Load release version
+        run: python3 tools/validate_release.py emit-env --file "$GITHUB_ENV"
+
+      - name: Record the public release state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$VERSION_TAG" \
+            --jq '{tag: .tag_name, draft: .draft, prerelease: .prerelease, name: .name, assets: [.assets[].name]}'
+          gh api "repos/$GITHUB_REPOSITORY/releases/latest" \
+            --jq '{latest: .tag_name, draft: .draft, prerelease: .prerelease}'

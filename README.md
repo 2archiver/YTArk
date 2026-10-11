@@ -12,7 +12,7 @@ native updater that always hands installation to Android for user confirmation.
 |---|---|
 | Android package | `io.github.twoarchiver.ytark` (unchanged; same signing certificate) |
 | Launcher label | `YTArk` |
-| Version | `2.2` (Android versionName `2.2.0`, release title `YTArk 2.2`) — **candidate until device acceptance is recorded** |
+| Version | `2.2` (Android versionName `2.2.0`, release title `YTArk 2.2`) |
 | versionCode | `2020000` (above every published YTArk APK; 2.1.2 stays `2010200`) |
 | APK (the only architecture) | `YTArk-v2.2.0-armv7.apk` — `armeabi-v7a` |
 | Userscript revision | `s21` (the immutable tag `s20` is never moved) |
@@ -29,8 +29,9 @@ runtime and the existing repack pipeline, and changes four things:
 - The Settings **YTArk Updates** card shows the installed version, the latest
   stable release and a plain status. Where this build cannot install updates
   itself, it shows the official release page with a QR code.
-- Release tooling is retargeted to 2.2.0. Candidate builds are Actions artefacts
-  only. Publication is a separate, manually dispatched workflow.
+- Release tooling is retargeted to 2.2.0, and the pipeline publishes itself: a
+  successful `main` build verifies and then publishes the same verified bytes as
+  the stable GitHub release (see [`docs/RELEASE-PIPELINE.md`](docs/RELEASE-PIPELINE.md)).
 - Documentation is corrected to separate what is implemented, what CI verifies
   and what a device has run.
 
@@ -60,12 +61,12 @@ and its release asset were removed from the pipeline; historical releases keep
 their published assets, and a `*-arm64.apk` file is no longer produced, offered
 or documented as an installable choice.
 
-These filenames identify the intended candidate, not proof that an APK has
+These filenames identify the intended release asset, not proof that an APK has
 been installed. **No physical Google TV / Android TV acceptance is claimed by
 source-only or CI packaging checks.** Use the official
-[YTArk Releases](https://github.com/2archiver/YTArk/releases) page once a release
-has been published. A candidate stays a draft or an Actions artefact until device
-acceptance is recorded.
+[YTArk Releases](https://github.com/2archiver/YTArk/releases) page. An Actions
+artefact is not a public release: publication is what makes an APK downloadable,
+and only the release page counts as published.
 
 ## Check the ABI first — 4K is not an ABI
 
@@ -374,8 +375,9 @@ repacks that single base, and checks the compiled manifest, the single
 `armeabi-v7a` `lib/` payload, DEX payloads, alignment, signer, checksums, and the
 draft release asset contract. A stray second architecture fails the pipeline
 rather than being published. Static packaging checks are not ARM hardware or TV
-runtime tests: no release should be published before the intended device passes
-[`docs/RUNTIME-CHECKLIST.md`](docs/RUNTIME-CHECKLIST.md).
+runtime tests: they prove the package, the signer, the ABI and the bytes, not
+behaviour on a TV. [`docs/RUNTIME-CHECKLIST.md`](docs/RUNTIME-CHECKLIST.md)
+records the device checks; they are optional and not a publication gate.
 
 Local userscript checks:
 
@@ -407,30 +409,41 @@ whenever the bundle bytes change; published tags are never moved). The
 `versionCode` follows `major * 1_000_000 + minor * 10_000 + patch * 100`, and CI
 refuses any candidate that is not above every published installable build.
 
-**Workflows (least privilege; no release from a push).**
+**Workflows (automatic publication; least privilege).**
 
 - `ci.yml` runs on pull requests and pushes. It is read-only, has no secrets, and
   creates no tags or releases. It checks the userscript, the tests, the release
   metadata and the workflow policy (`tools/check_workflow_policy.py`).
-- `build-apk.yml` runs on push to `main` or manual dispatch. It builds and signs
-  the ARMv7 candidate APK and uploads it as an **Actions artefact only**. It
-  creates no tag and no release.
-- `publish-release.yml` is manual-only and bound to the `ytark-release`
-  environment. It names one reviewed candidate run and commit, re-verifies the
-  artefact (signer, versionCode, ABI, checksums and the script URL it loads), and
-  then runs three explicit stages: `script-tag` (publish the immutable `s21`
-  userscript tag from the candidate's bytes), `draft`, and `publish`. `publish`
-  refuses to run without recorded device-acceptance evidence
-  ([`docs/DEVICE-ACCEPTANCE.md`](docs/DEVICE-ACCEPTANCE.md)).
+- `build-apk.yml` runs on push to `main` or manual dispatch. It builds, signs and
+  package-checks the ARMv7 candidate APK, uploads it as an Actions artefact, and
+  then — in the same run, in a separate job that depends on the build succeeding
+  — publishes the immutable `s21` userscript tag and the stable GitHub release
+  from those exact bytes. Only that publish job holds `contents: write`; the build
+  job stays read-only and is the only job that sees the signing key.
+- `publish-release.yml` is the manual recovery path. It takes
+  `candidate_run_id`, `expected_head_sha` and an optional `device_test_notes`,
+  verifies that the named run is a successful `build-apk.yml` run of that commit
+  on `main` in this repository, and then publishes, resumes or repairs the release
+  for the configured version tag. There is no environment approval gate and no
+  mandatory device-acceptance input.
+
+Both paths share the concurrency group `ytark-release-publication` and never
+cancel a run mid-upload. The full state machine (absent release, matching draft
+resume, complete stable no-op, stable missing APK, conflicting asset, immutable
+release) lives in `tools/publish_release.py` and is covered by
+`tools/tests/test_publish_release.py`. Details and the one-command recovery
+procedure: [`docs/RELEASE-PIPELINE.md`](docs/RELEASE-PIPELINE.md).
 
 **Script delivery dependency.** The APK loads its script from the immutable tag
-named in `scriptTag`. A candidate APK built before that tag exists cannot be run
-on a device until the `script-tag` stage has published the same bytes. Device
-acceptance of a candidate therefore depends on that stage having been authorised.
-Existing tags are never moved, and `s20` (2.1.2) is never touched.
+named in `scriptTag`. The pipeline publishes that tag from the candidate's bytes
+before it promotes the release, and refuses to move a tag that already serves
+different bytes. Existing tags are never moved, and `s20` (2.1.2) is never
+touched.
 
-The updater ignores drafts and prereleases, so a candidate draft is never offered
-as an update.
+The updater ignores drafts and prereleases, so a staged draft is never offered
+as an update. Static packaging checks are not device tests:
+[`docs/DEVICE-ACCEPTANCE.md`](docs/DEVICE-ACCEPTANCE.md) is an optional, honest
+checklist and is not a gate on publication.
 
 ## Support and upstream attribution
 
