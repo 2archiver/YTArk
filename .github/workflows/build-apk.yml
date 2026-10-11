@@ -1,19 +1,15 @@
-name: Build the YTArk ARMv7 APK candidate for Android TV
+name: Build the YTArk ARMv7 APK candidate (Actions artefact only)
 
+# Candidate builds never create tags, releases or GitHub Release assets. Stable
+# publication is the separate, explicitly authorised publish-release.yml workflow,
+# which re-verifies the exact reviewed candidate artefact before it publishes.
 on:
   push:
     branches:
       - main
   workflow_dispatch:
-    inputs:
-      publish:
-        description: >-
-          Promote the validated candidate to a stable, non-prerelease release
-          (device acceptance in docs/RUNTIME-CHECKLIST.md must be recorded first).
-        type: boolean
-        default: false
 
-# Least privilege by default; only the publishing jobs get contents: write.
+# Least privilege by default. No job here requests contents: write.
 permissions:
   contents: read
 
@@ -76,100 +72,15 @@ jobs:
             echo "- Building and validating this version." >> "$GITHUB_STEP_SUMMARY"
           fi
 
-  publish-userscript-tag:
-    name: Build userscript and publish immutable tag
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs: release-guard
-    if: github.repository == '2archiver/YTArk' && needs.release-guard.outputs.needed == 'true'
-    permissions:
-      contents: write
-    outputs:
-      script_url: ${{ steps.script.outputs.script_url }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Set up Node.js
-        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: "22"
-          cache: npm
-          cache-dependency-path: TizenTube/mods/package-lock.json
-
-      - name: Load release version
-        run: python3 tools/validate_release.py emit-env --file "$GITHUB_ENV"
-
-      - name: Verify the bundled Premium vector wordmark before building
-        run: |
-          set -euo pipefail
-          python3 tools/fetch_premium_logo.py --verify-only --out-dir TizenTube/mods/assets
-          python3 tools/build_logo_asset.py --check
-
-      - name: Build userscript and run feature/TV-control tests
-        working-directory: TizenTube/mods
-        run: |
-          set -euo pipefail
-          npm ci --no-audit --no-fund
-          node --test tests/*.test.mjs
-          npm run build
-          node --check ../dist/userScript.js
-          grep -q "YTArk Quick Controls" ../dist/userScript.js
-          grep -q "YouTube Premium" ../dist/userScript.js
-          grep -q "ytark://updates" ../dist/userScript.js
-          if grep -Eqi '<text|<image|href="http|url\(https?:' ../dist/userScript.js; then
-            echo "The generated userscript must not carry text/raster/external logo content" >&2
-            exit 1
-          fi
-          grep -q "ytark-premium-ink" ../dist/userScript.js
-          if grep -Eqi 'Personal[[:space:]]+Tube[[:space:]]+TV' ../dist/userScript.js; then
-            echo "Deprecated branding found in generated userscript" >&2
-            exit 1
-          fi
-          echo "Built YTArk userscript: $(wc -c < ../dist/userScript.js) bytes"
-
-      - name: Publish immutable userscript tag and verify exact bytes
-        id: script
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          bash tools/publish_script_tag.sh TizenTube/dist/userScript.js
-          SCRIPT_URL="https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@${SCRIPT_TAG}/userScript.js?v="
-          SERVED="$RUNNER_TEMP/served-userScript.js"
-          verified=false
-          for attempt in $(seq 1 20); do
-            if curl -fsSL "$SCRIPT_URL" -o "$SERVED" && cmp -s TizenTube/dist/userScript.js "$SERVED"; then
-              verified=true
-              break
-            fi
-            echo "Waiting for immutable userscript tag propagation ($attempt/20)."
-            sleep 15
-          done
-          if [ "$verified" != true ]; then
-            echo "jsDelivr did not serve the exact immutable release userscript" >&2
-            exit 1
-          fi
-          echo "script_url=$SCRIPT_URL" >> "$GITHUB_OUTPUT"
-
-      - name: Upload built userscript
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: ytark-user-script
-          path: TizenTube/dist/userScript.js
-          if-no-files-found: error
-          retention-days: 7
-
   build-apk-candidates:
     name: Build and package-check the ARMv7 APK
     runs-on: ubuntu-latest
     timeout-minutes: 150
     needs:
       - release-guard
-      - publish-userscript-tag
     if: github.repository == '2archiver/YTArk' && needs.release-guard.outputs.needed == 'true'
+    # Candidate only: no tag, no release, no write token. Signing secrets are
+    # used only on push/workflow_dispatch of this repository, never for fork PRs.
     permissions:
       contents: read
     steps:
@@ -189,11 +100,49 @@ jobs:
         with:
           node-version: "22"
 
-      - name: Download verified userscript bundle
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+      - name: Set up Node.js for the userscript build
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          name: ytark-user-script
-          path: TizenTube/dist
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: TizenTube/mods/package-lock.json
+
+      - name: Verify the bundled Premium vector wordmark before building
+        run: |
+          set -euo pipefail
+          python3 tools/fetch_premium_logo.py --verify-only --out-dir TizenTube/mods/assets
+          python3 tools/build_logo_asset.py --check
+
+      - name: Build and test the userscript bundle
+        working-directory: TizenTube/mods
+        run: |
+          set -euo pipefail
+          npm ci --no-audit --no-fund
+          node --test tests/*.test.mjs
+          npm run build
+          node --check ../dist/userScript.js
+          grep -q "YTArk Quick Controls" ../dist/userScript.js
+          grep -q "YouTube Premium" ../dist/userScript.js
+          if grep -Eqi '<text|<image|href="http|url\(https?:' ../dist/userScript.js; then
+            echo "The generated userscript must not carry text/raster/external logo content" >&2
+            exit 1
+          fi
+          grep -q "ytark-premium-ink" ../dist/userScript.js
+          if grep -Eqi 'Personal[[:space:]]+Tube[[:space:]]+TV' ../dist/userScript.js; then
+            echo "Deprecated branding found in generated userscript" >&2
+            exit 1
+          fi
+          echo "Built YTArk userscript: $(wc -c < ../dist/userScript.js) bytes, sha256 $(sha256sum ../dist/userScript.js | cut -d' ' -f1)"
+
+      - name: Bind the APK to the immutable userscript URL (no tag is created here)
+        run: |
+          set -euo pipefail
+          # The APK loads its script from ${SCRIPT_TAG}. The tag is published only
+          # by publish-release.yml, from these exact bytes, after review.
+          python3 tools/validate_release.py emit-env --file "$GITHUB_ENV"
+          test -n "${SCRIPT_TAG:-}"
+          echo "SCRIPT_URL=https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@${SCRIPT_TAG}/userScript.js?v=" >> "$GITHUB_ENV"
+          echo "Candidate APK script URL: $SCRIPT_URL (tag publication is a separate, gated step)"
 
       - name: Load release version
         run: python3 tools/validate_release.py emit-env --file "$GITHUB_ENV"
@@ -219,7 +168,6 @@ jobs:
           test -n "$BASE_TAG"
           gh api "repos/reisxd/TizenTubeCobalt/releases/tags/$BASE_TAG" \
             > "$RUNNER_TEMP/ytark-validation/base-release.json"
-          echo "SCRIPT_URL=${{ needs.publish-userscript-tag.outputs.script_url }}" >> "$GITHUB_ENV"
 
       - name: Prepare pinned YTArk signing key
         env:
@@ -334,182 +282,4 @@ jobs:
             update-smoke/eligibility.properties
           if-no-files-found: error
           retention-days: 30
-
-  publish-draft-release:
-    name: Create validated draft release
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    needs:
-      - release-guard
-      - build-apk-candidates
-    if: github.repository == '2archiver/YTArk' && needs.release-guard.outputs.needed == 'true'
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Load release version
-        run: |
-          set -euo pipefail
-          python3 tools/validate_release.py emit-env --file "$GITHUB_ENV"
-
-      - name: Download the ARMv7 candidate and validation metadata
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
-        with:
-          name: ytark-armv7-candidate
-          path: staging
-
-      - name: Create draft release and validate its asset contract
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          export SIGNING_CERT_SHA256="$(grep -v '^[[:space:]]*#' signing/YTArk-cert-sha256.txt | tr -d '[:space:]:' | tr '[:upper:]' '[:lower:]')"
-          mkdir -p release-assets
-          mv staging/release-assets/* release-assets/
-          bash tools/create_release.sh
-          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-            | python3 -c '
-          import json, sys
-          tag = sys.argv[1]
-          for release in json.load(sys.stdin):
-              if release.get("tag_name") == tag:
-                  json.dump(release, sys.stdout)
-                  sys.exit(0)
-          raise SystemExit(f"Draft release {tag} not found")
-          ' "$VERSION_TAG" > "$RUNNER_TEMP/draft-release.json"
-          python3 tools/validate_release.py verify-release \
-            --release-json "$RUNNER_TEMP/draft-release.json" \
-            --state draft
-          echo "The release remains a draft. Static packaging checks are not physical-device validation."
-
-      - name: Record unverified runtime acceptance
-        run: |
-          {
-            echo "## YTArk runtime validation status"
-            echo "- The ARMv7 packaging/manifest/signature checks ran in CI (the only published architecture)."
-            echo "- No physical Google TV / Android device was attached to this workflow."
-            echo "- Installation, launch, D-pad interaction, sign-in/guest flow, playback, 2160p streams, captions, and in-place PackageInstaller updates remain unverified."
-            if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.publish }}" != "true" ]; then
-              echo "- Manual candidate run: the promotion job is skipped, so this release stays a draft until it is requested explicitly."
-            else
-              echo "- The promotion job publishes this draft once the packaging, checksum and metadata gates pass; it does not add device acceptance evidence."
-            fi
-          } >> "$GITHUB_STEP_SUMMARY"
-
-  promote-stable-release:
-    name: Promote validated candidate to stable release
-    runs-on: ubuntu-latest
-    timeout-minutes: 45
-    needs:
-      - release-guard
-      - publish-draft-release
-    # A manual candidate run keeps the validated draft unpublished unless
-    # `publish: true` is requested; pushes to main promote as before.
-    if: >-
-      github.repository == '2archiver/YTArk'
-      && needs.release-guard.outputs.needed == 'true'
-      && (github.event_name == 'push' || inputs.publish)
-
-    permissions:
-      contents: write
-    steps:
-      - name: Checkout
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - name: Load release version
-        run: python3 tools/validate_release.py emit-env --file "$GITHUB_ENV"
-
-      - name: Re-validate the draft asset contract before promotion
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          # releases/tags/<tag> 404s for a draft release, so list and filter by
-          # tag exactly the way the draft job does.
-          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
-            | python3 -c '
-          import json, sys
-          tag = sys.argv[1]
-          for release in json.load(sys.stdin):
-              if release.get("tag_name") == tag:
-                  json.dump(release, sys.stdout)
-                  sys.exit(0)
-          raise SystemExit(f"Draft release {tag} not found")
-          ' "$VERSION_TAG" > "$RUNNER_TEMP/pre-promotion-release.json"
-          python3 tools/validate_release.py verify-release \
-            --release-json "$RUNNER_TEMP/pre-promotion-release.json" \
-            --state draft
-
-      - name: Publish the validated candidate as stable, non-prerelease and latest
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          gh release edit "$VERSION_TAG" --draft=false --prerelease=false --latest
-          echo "Published $VERSION_TAG as a stable non-prerelease release."
-
-      - name: Install Android build-tools to re-verify the published APK bytes
-        run: |
-          set -euo pipefail
-          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
-          (set +o pipefail; yes | sdkmanager --licenses >/dev/null)
-          sdkmanager "build-tools;${BUILD_TOOLS}" >/dev/null
-          echo "$ANDROID_HOME/build-tools/$BUILD_TOOLS" >> "$GITHUB_PATH"
-
-      - name: Download the validated ARMv7 candidate artifacts
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
-        with:
-          name: ytark-armv7-candidate
-          path: candidate
-
-      - name: Verify published metadata, latest resolution, bytes, checksums and signer
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$VERSION_TAG" \
-            > "$RUNNER_TEMP/published-release.json"
-          gh api "repos/$GITHUB_REPOSITORY/releases/latest" \
-            > "$RUNNER_TEMP/latest-release.json"
-          python3 tools/validate_release.py verify-release \
-            --release-json "$RUNNER_TEMP/published-release.json" \
-            --state published \
-            --latest-json "$RUNNER_TEMP/latest-release.json"
-
-          mkdir -p published
-          for asset in "$APK_ARMV7" userScript.js SHA256SUMS.txt \
-                       base-apk-sha256.txt NOTICE.md; do
-            curl -fsSL --retry 3 \
-              "https://github.com/$GITHUB_REPOSITORY/releases/download/$VERSION_TAG/$asset" \
-              -o "published/$asset"
-          done
-
-          # The promoted bytes must be exactly the bytes the candidate job validated.
-          cmp "candidate/release-assets/$APK_ARMV7" "published/$APK_ARMV7"
-          python3 tools/validate_release.py check-apk \
-            --apk "published/$APK_ARMV7" --architecture armv7 \
-            --cert-file signing/YTArk-cert-sha256.txt \
-            --aapt "$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt" \
-            --apksigner "$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner"
-          for asset in userScript.js SHA256SUMS.txt base-apk-sha256.txt; do
-            cmp "candidate/release-assets/$asset" "published/$asset"
-          done
-          python3 tools/validate_release.py check-checksums \
-            --checksums published/SHA256SUMS.txt \
-            --armv7 "published/$APK_ARMV7" \
-            --user-script published/userScript.js
-          grep -Fq "TizenTubeCobalt $BASE_TAG" published/NOTICE.md
-          grep -Fq "GPL-3.0-only" published/NOTICE.md
-          {
-            echo "## YTArk stable release published"
-            echo "- \`$VERSION_TAG\` is published, non-draft, non-prerelease and resolves as GitHub latest."
-            echo "- The ARMv7 APK asset was re-downloaded from its official URL and verified byte-identical to the validated candidate."
-            echo "- Compiled manifest, native ABI, alignment, SHA-256 and signing-certificate checks re-ran against the published APK."
-            echo "- Physical TV installation, playback and sign-in persistence were not exercised by this workflow."
-          } >> "$GITHUB_STEP_SUMMARY"
+          # Actions artefact only: nothing here creates a tag, release or asset.

@@ -10,6 +10,24 @@ candidate**, so every device column is NOT RUN.
 Base: TizenTubeCobalt `v2.0.2` (Cobalt runtime and YouTube TV frontend are the
 upstream ones, unchanged). YTArk adds the userscript layer and native updater.
 
+## 2.2.0 candidate: what each claim is backed by
+
+Three separate columns, never merged. **Source implemented** means the code exists
+in this repository. **Packaged / CI verified** means a named CI gate or the candidate
+build checks it. **Device tested** means a physical TV run is recorded for this exact
+APK. Only the first two can be true before a device run.
+
+| Claim | Source implemented | Packaged / CI verified | Device tested |
+|---|---|---|---|
+| Version 2.2.0 / versionCode 2020000 / `v2.2.0` / `s21` metadata | Yes (`release/version.properties`) | `ci.yml` grep checks, `validate_release.py`, release contract tests | NOT RUN |
+| SponsorBlock bounded lookup, strict validation, late-result discard | Yes (`features/settlementDeadline.js`, `sponsorblock*.js`) | `ci.yml` Node tests (28 SponsorBlock tests) | NOT RUN |
+| Settings → YTArk Updates card (Installed / Latest / Status / QR fallback) | Yes (`features/updater.js`, `ui/settings.js`) | Node tests (`updates-settings.test.mjs`) | NOT RUN |
+| Bundled native updater (Java ABI and release contracts) | Yes (`android-updater/`) | `ci.yml` Java tests; DEX compiled in `build-apk.yml` | NOT RUN |
+| `ytark://updates` → native `UpdateActivity` | Manifest intent-filter declared by the repacker; **the 2.2 card does not trigger it** | `check-apk` (manifest validation) | **NOT RUN — native integration pending** |
+| ARMv7-only APK, signer, versionCode, checksums | Yes | `build-apk.yml` candidate and `publish-release.yml` verify | NOT RUN |
+| Workflow least privilege (PR read-only, candidate Actions-only, publish gated) | Yes | `tools/check_workflow_policy.py` in `ci.yml` | n/a |
+| Session preserved over 2.1.2 install; preferences survive | Not a source property | Not a CI property | **NOT RUN** (see `docs/DEVICE-ACCEPTANCE.md`) |
+
 ## Released-artefact identity (2.1.2, from GitHub API metadata)
 
 | Item | Value | Source |
@@ -39,7 +57,7 @@ reproducibility result verified for the released artefacts.
 | 2 | Browse, search, subscriptions, playlists, recommendations | upstream | YouTube TV service | not modified | NOT RUN |
 | 3 | Playback (normal, autoplay, captions) | upstream | Cobalt player | not modified | NOT RUN |
 | 4 | Client-side ad blocking | ON (`enableAdBlock: true`) | `features/adblock.js`, `adRendererPolicy.js` | tests in `tests/` | NOT RUN |
-| 5 | SponsorBlock segment skipping | ON (`enableSponsorBlock`) | `features/sponsorblock.js`, `sponsorblockRequest.js` | `sponsorblock-request.test.mjs` (12) | NOT RUN |
+| 5 | SponsorBlock segment skipping | ON (`enableSponsorBlock`) | `features/sponsorblock.js`, `sponsorblockRequest.js` | `sponsorblock-request.test.mjs` (28) | NOT RUN |
 | 6 | SponsorBlock categories and manual-skip set | per-category flags | `config.js` (`enableSponsorBlock*`, `sponsorBlockManualSkips`) | config defaults | NOT RUN |
 | 7 | SponsorBlock toasts and undo | ON | `sponsorblock.js` | — | NOT RUN |
 | 8 | DeArrow titles (thumbnails opt-in) | ON / thumbnails OFF | `config.js` (`enableDeArrow*`) | — | NOT RUN |

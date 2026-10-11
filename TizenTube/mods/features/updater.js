@@ -7,6 +7,7 @@
 // read-only stable-release check so the page never shows a blank card or a
 // fabricated status.
 
+import { settleWithin } from './settlementDeadline.js';
 import { showModal, showToast, buttonItem, overlayPanelItemListRenderer, overlayMessageRenderer, QrCodeRenderer } from '../ui/ytUI.js';
 import qrcode from 'qrcode-npm';
 import {
@@ -16,7 +17,10 @@ import {
   describeState,
   displayVersion,
   formatBytes,
+  RELEASES_API,
   officialReleasePageUrl,
+  LATEST_RELEASE_PAGE,
+  RELEASES_PAGE,
   formatTimestamp,
   parseNativeState,
   validateReleasePayload,
@@ -91,9 +95,12 @@ export function nativeArchitecture() {
 }
 
 const qrCache = new Map();
+const RELEASES_PAGE_PREFIX = `${RELEASES_PAGE}/`;
 
 /** Data URL of a QR code for an official https URL; '' when generation fails. */
 export function qrCodeDataUrl(url) {
+  // Only official YTArk release pages are encoded; anything else gets no QR.
+  if (typeof url !== 'string' || !url.startsWith(RELEASES_PAGE_PREFIX)) return '';
   if (qrCache.has(url)) return qrCache.get(url);
   let dataUrl = '';
   try {
@@ -109,44 +116,18 @@ export function qrCodeDataUrl(url) {
   return dataUrl;
 }
 
-function openBestEffortDeepLink() {
-  // The repacked manifest declares a `ytark://updates` VIEW/BROWSABLE activity
-  // for the native screen. Chromium-based Cobalt builds do not always forward
-  // custom schemes, so this stays a best-effort fallback behind the bridge.
-  try {
-    const link = document.createElement('a');
-    link.href = 'ytark://updates';
-    link.tabIndex = -1;
-    link.setAttribute('aria-hidden', 'true');
-    link.style.position = 'absolute';
-    link.style.left = '-10000px';
-    document.body.appendChild(link);
-    link.click();
-    setTimeout(() => link.parentNode && link.parentNode.removeChild(link), 1000);
-    return true;
-  } catch (error) {
-    console.warn('[YTArk Updates] Could not request the native update screen:', error);
-    return false;
-  }
-}
+const MAX_RELEASE_BYTES = 512 * 1024;
 
 async function fetchLatestRelease(fetchImplementation, timeoutMs) {
   const fetchFn = fetchImplementation
     || (typeof fetch === 'function' ? fetch : null);
   if (!fetchFn) throw new Error('No network API is available in this runtime.');
   const controller = typeof AbortController === 'function' ? new AbortController() : null;
-  let timer = null;
-  if (controller) {
-    timer = setTimeout(() => controller.abort(), timeoutMs);
-  }
-  try {
-    const response = await fetchFn(
-      'https://api.github.com/repos/2archiver/YTArk/releases/latest',
-      {
-        headers: { accept: 'application/vnd.github+json' },
-        signal: controller ? controller.signal : undefined,
-      },
-    );
+  const outcome = await settleWithin(async () => {
+    const response = await fetchFn(RELEASES_API, {
+      headers: { accept: 'application/vnd.github+json' },
+      signal: controller ? controller.signal : undefined,
+    });
     if (response.status === 403 || response.status === 429) {
       const retryAfter = response.headers && response.headers.get
         ? response.headers.get('retry-after') : null;
@@ -166,10 +147,27 @@ async function fetchLatestRelease(fetchImplementation, timeoutMs) {
       error.kind = 'http';
       throw error;
     }
+    if (typeof response.text === 'function') {
+      const text = await response.text();
+      if (String(text).length > MAX_RELEASE_BYTES) {
+        const error = new Error('The release metadata is larger than expected and was ignored.');
+        error.kind = 'too-large';
+        throw error;
+      }
+      return JSON.parse(text);
+    }
     return await response.json();
-  } finally {
-    if (timer !== null) clearTimeout(timer);
+  }, timeoutMs);
+  if (outcome.timedOut) {
+    if (controller) {
+      try { controller.abort(); } catch (_) { /* best effort only */ }
+    }
+    const error = new Error('The update check timed out. Nothing was downloaded or changed.');
+    error.name = 'AbortError';
+    throw error;
   }
+  if (outcome.error) throw outcome.error;
+  return outcome.value;
 }
 
 export function createUpdateController(overrides = {}) {
@@ -187,8 +185,8 @@ export function createUpdateController(overrides = {}) {
     || ((timeoutMs) => fetchLatestRelease(null, timeoutMs));
   const readInstalledVersion = overrides.installedVersion || nativeInstalledVersion;
   const readArchitecture = overrides.architecture || nativeArchitecture;
-  const deepLink = overrides.deepLink || openBestEffortDeepLink;
   const now = overrides.now || (() => Date.now());
+  const checkTimeoutMs = overrides.checkTimeoutMs || CHECK_TIMEOUT_MS;
 
   const state = {
     model: null,
@@ -252,9 +250,6 @@ export function createUpdateController(overrides = {}) {
     const installed = model.installed;
     lines.push(`Installed version: ${installed.display || installed.version || 'unknown'}`);
     if (installed.code) lines.push(`Android versionCode: ${installed.code}`);
-    if (!bridge) {
-      lines.push('This card only checks for releases. Downloads and installation are done from the official release page below, or from the native YTArk Updates screen when it is available.');
-    }
     if (model.available) {
       lines.push(`Available stable version: ${model.available.display} (${model.available.abi})`);
       if (model.available.size) lines.push(`Download size: ${formatBytes(model.available.size)}`);
@@ -278,7 +273,76 @@ export function createUpdateController(overrides = {}) {
     return lines;
   }
 
+  function statusLabel(model) {
+    switch (model.state) {
+      case 'checking': return 'Checking the official YTArk release…';
+      case 'current': return 'Up to date';
+      case 'available': return 'Update available';
+      case 'check_error': return `Couldn't check: ${model.error || 'unknown error'}`;
+      default: return 'Not checked yet';
+    }
+  }
+
+  // Manual-install card. The repacked build cannot connect the native engine
+  // to this surface, so the card only reports a verified release check and
+  // links to the official page. It offers no download or install control.
+  function renderManual(model) {
+    const signature = signatureOf(model);
+    const release = model.available || state.fallback;
+    const pageUrl = officialReleasePageUrl(release ? release.tag : '');
+    const installed = model.installed.display || model.installed.version || 'unknown';
+    const latest = release && release.display
+      ? (release.abi ? `${release.display} (${release.abi})` : release.display)
+      : 'not checked yet';
+    const lastSuccess = formatTimestamp(model.lastSuccessAt) || 'none yet';
+    const lines = [
+      `Installed: ${installed}`,
+      `Latest stable: ${latest}`,
+      `Status: ${statusLabel(model)}`,
+      `Last successful check: ${lastSuccess}`,
+      'Check here, then download the ARMv7 APK from the official page.',
+      `Official page: ${pageUrl}`,
+      'Manual install: this screen does not download or install. Android asks you to confirm any install.',
+    ];
+    if (state.fallbackError && model.state !== 'check_error') lines.push(state.fallbackError);
+    if (release && release.size) lines.push(`Download size: ${formatBytes(release.size)}`);
+
+    const items = [ui.overlayMessageRenderer(lines.join('\n'))];
+    if (release && release.notes) {
+      items.push(ui.overlayMessageRenderer(`Release notes\n${release.notes}`));
+    }
+    const qr = qrCodeDataUrl(pageUrl);
+    if (qr) items.push(ui.QrCodeRenderer(qr));
+    items.push(ui.buttonItem(
+      { title: state.checking ? 'Checking…' : 'Check again' },
+      { icon: 'SYSTEM_UPDATE' },
+      [{ customAction: { action: 'YTARK_UPDATE_COMMAND', parameters: 'check' } }],
+    ));
+    items.push(ui.buttonItem(
+      { title: 'Close' },
+      { icon: 'CLOSE' },
+      [{ signalAction: { signal: 'POPUP_BACK' } }],
+    ));
+
+    state.renderSignature = signature;
+    try {
+      ui.showModal(
+        { title: 'YTArk Updates', subtitle: 'Manual update check · official release page' },
+        ui.overlayPanelItemListRenderer(items, 0),
+        'ytark-updates',
+        true,
+      );
+    } catch (error) {
+      console.warn('[YTArk Updates] The update panel could not be rendered:', error);
+      state.renderSignature = '';
+    }
+  }
+
   function render(model) {
+    if (!bridge) {
+      renderManual(model);
+      return;
+    }
     const signature = signatureOf(model);
     const status = describeState(model);
     const lines = noteLines(model);
@@ -288,9 +352,7 @@ export function createUpdateController(overrides = {}) {
       : state.fallback && state.fallback.notes ? state.fallback.notes : '';
     if (notes) lines.push('', 'Release notes', notes);
 
-    const allowed = bridge ? null : ['check', 'later', 'open'];
-    const actions = actionsForState(model)
-      .filter(action => !allowed || allowed.includes(action.id));
+    const actions = actionsForState(model);
     const items = [
       ui.overlayMessageRenderer(status),
       ui.overlayMessageRenderer(lines.join('\n')),
@@ -305,25 +367,13 @@ export function createUpdateController(overrides = {}) {
         [{ customAction: { action: 'YTARK_UPDATE_COMMAND', parameters: action.id } }],
       ));
     }
-    if (!bridge) {
-      // Manual-install fallback: a scannable link to the official release page.
-      // The repacked build cannot connect the native engine to this card, so
-      // the page is offered instead of a reconnect control that cannot work.
-      const pageUrl = officialReleasePageUrl(model.available ? model.available.tag
-        : state.fallback ? state.fallback.tag : '');
-      items.push(ui.overlayMessageRenderer(`Official download page: ${pageUrl}`));
-      const qr = qrCodeDataUrl(pageUrl);
-      if (qr) items.push(ui.QrCodeRenderer(qr));
-    }
 
     state.renderSignature = signature;
     try {
       ui.showModal(
         {
           title: 'YTArk Updates',
-          subtitle: bridge
-            ? 'Verified updates from the official YTArk stable release'
-            : 'Read-only release check; the native updater is not connected yet',
+          subtitle: 'Verified updates from the official YTArk stable release',
         },
         ui.overlayPanelItemListRenderer(items, 0),
         'ytark-updates',
@@ -351,6 +401,7 @@ export function createUpdateController(overrides = {}) {
   }
 
   async function runFallbackCheck() {
+    if (state.checking) return state.model;
     state.checking = true;
     state.fallbackError = '';
     const pending = currentModel();
@@ -359,7 +410,7 @@ export function createUpdateController(overrides = {}) {
     render(state.model);
     try {
       const installedVersion = readInstalledVersion();
-      const payload = await fetchReleasePayload(CHECK_TIMEOUT_MS);
+      const payload = await fetchReleasePayload(checkTimeoutMs);
       const result = validateReleasePayload(payload, {
         installedVersion,
         architecture: readArchitecture(),
@@ -465,11 +516,7 @@ export function createUpdateController(overrides = {}) {
         return null;
       case 'open':
         if (bridge) return runNativeCommand('open');
-        if (deepLink()) {
-          ui.showToast('YTArk Updates', 'Requested the native YTArk Updates screen.');
-        } else {
-          ui.showToast('YTArk Updates', 'The native updater screen is available from the YTArk update notification.');
-        }
+        ui.showToast('YTArk Updates', `Official page: ${LATEST_RELEASE_PAGE}`);
         return null;
       default:
         return null;
@@ -550,4 +597,3 @@ export default function openYtArkUpdates() {
   }
 }
 
-export { openBestEffortDeepLink };

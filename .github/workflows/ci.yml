@@ -55,7 +55,6 @@ jobs:
           node --check ../dist/userScript.js
           grep -q "YTArk Quick Controls" ../dist/userScript.js
           grep -q "YouTube Premium" ../dist/userScript.js
-          grep -q "ytark://updates" ../dist/userScript.js
           # The bundled wordmark is real vector geometry: no <text> node, no
           # <image>, no external href to an image host, and no runtime fetch.
           if grep -Eqi '<text|<image|href="http|url\(https?:' ../dist/userScript.js; then
@@ -77,13 +76,14 @@ jobs:
           python3 tools/repack_apk.py --self-test
           python3 tools/render_launcher_art.py --check
           python3 tools/check_no_secrets.py --history
+          python3 tools/check_workflow_policy.py
           python3 tools/validate_release.py emit-env --file "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'VERSION_NAME=3.0.0' "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'DISPLAY_VERSION=3.0' "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'VERSION_CODE=3000000' "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'VERSION_TAG=v3.0.0' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'VERSION_NAME=2.2.0' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'DISPLAY_VERSION=2.2' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'VERSION_CODE=2020000' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'VERSION_TAG=v2.2.0' "$RUNNER_TEMP/ytark-release.env"
           grep -Fx 'SCRIPT_TAG=s21' "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'APK_ARMV7=YTArk-v3.0.0-armv7.apk' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'APK_ARMV7=YTArk-v2.2.0-armv7.apk' "$RUNNER_TEMP/ytark-release.env"
           # ARMv7 is the only published architecture; an ARM64 asset name must
           # not exist anywhere in the release environment or the active pipeline.
           if grep -q 'ARM64' "$RUNNER_TEMP/ytark-release.env"; then
@@ -93,7 +93,8 @@ jobs:
           # tools/tests keeps the historical ARM64 asset names on purpose: they
           # prove that the updater and the checksum contract reject them.
           if grep -rlniE 'cobalt-arm64|APK_ARM64|ytark-dual-abi' \
-              .github/workflows/build-apk.yml .github/workflows/fetch-premium-logo.yml \
+              .github/workflows/build-apk.yml .github/workflows/publish-release.yml \
+              .github/workflows/fetch-premium-logo.yml \
               release README.md docs tools/*.sh tools/*.py; then
             echo "ARM64 release plumbing is still present in the active pipeline" >&2
             exit 1

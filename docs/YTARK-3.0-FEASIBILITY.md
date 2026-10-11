@@ -1,3 +1,12 @@
+> **Dated snapshot (2026-10-11), superseded for status.** This note records the
+> feasibility check made when the work was still named "3.0" on the v2.0.2 base. Its
+> observed values (for example `versionName=2.1.2` and `scriptTag=s20`) describe the
+> repository at that time. The release has since been retargeted to **YTArk 2.2**
+> (`versionName=2.2.0`, `versionCode=2020000`, `scriptTag=s21`) on the same
+> TizenTubeCobalt `v2.0.2` base. It is **not** a newer Cobalt engine, and no
+> YouTube upgrade is claimed. Current status and the capability split are in
+> the README and `docs/FEATURE-INVENTORY.md`. Nothing below is a device result.
+
 # YTArk 3.0 feasibility and blocker report
 
 Prepared 2026-10-11 from the `arena/a39bb08d-ytark` session. This document records
