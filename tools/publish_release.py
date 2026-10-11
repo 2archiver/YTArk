@@ -19,12 +19,11 @@ Three entry points are used by the workflows:
                      it to a stable, non-draft, non-prerelease, latest release
                      and verify the public bytes.
 
-Reads go through the REST API with explicit status handling: a confirmed 404
-means "no such release", while 403/rate-limit/network/malformed responses are
-hard errors and are never mistaken for "absent".
-
-Mutations go through the GitHub CLI, which handles the large binary uploads.
-Asset names are always checked first so no upload ever clobbers published bytes.
+Reads and mutations both go through the REST API, keyed by release id, with
+explicit status handling: a confirmed 404 means "no such release", while
+403/rate-limit/network/malformed responses are hard errors and are never
+mistaken for "absent". Asset names are always checked first, so no upload ever
+clobbers published bytes.
 """
 
 from __future__ import annotations
@@ -152,24 +151,30 @@ class GitHub:
         *,
         accept: str = "application/vnd.github+json",
         allow_404: bool = False,
+        data: Any = None,
+        headers: dict[str, str] | None = None,
+        retries: int | None = None,
     ) -> Response | None:
         url = path if path.startswith("http") else f"{self.api_url}{path}"
         if params:
             url = f"{url}?{urllib.parse.urlencode(params)}"
+        retries = self.retries if retries is None else retries
         attempt = 0
         while True:
             attempt += 1
-            request = urllib.request.Request(url=url, method=method)
+            request = urllib.request.Request(url=url, method=method, data=data)
             request.add_header("Accept", accept)
             request.add_header("X-GitHub-Api-Version", "2022-11-28")
             request.add_header("User-Agent", "ytark-release-publisher")
             if self.token:
                 request.add_header("Authorization", f"Bearer {self.token}")
+            for name, value in (headers or {}).items():
+                request.add_header(name, value)
             transport = self._transport or self._default_transport
             try:
                 response = transport(request)
             except urllib.error.URLError as error:
-                if attempt <= self.retries:
+                if attempt <= retries:
                     self._sleep(2 ** attempt)
                     continue
                 raise GitHubApiError(
@@ -178,7 +183,7 @@ class GitHub:
             status = response.status
             if status == 404 and allow_404:
                 return None
-            if status in (429, 500, 502, 503, 504) and attempt <= self.retries:
+            if status in (429, 500, 502, 503, 504) and attempt <= retries:
                 delay = 2 ** attempt
                 retry_after = response.headers.get("retry-after")
                 try:
@@ -210,6 +215,9 @@ class GitHub:
                 message = f"{message}: {payload['message']}"
         except (UnicodeDecodeError, json.JSONDecodeError):
             pass
+        if method != "GET" and status in (403, 422):
+            return ImmutableRelease(message + " (release assets are immutable, or the "
+                                    "mutation was refused)", status, body)
         return GitHubApiError(message, status, body)
 
     def json(self, method: str, path: str, **kwargs: Any) -> Any:
@@ -222,6 +230,72 @@ class GitHub:
             raise GitHubApiError(
                 f"Malformed JSON from GitHub for {method} {path}: {error}"
             ) from error
+
+    # -- release mutations (never keyed by tag: drafts 404 on /releases/tags) #
+
+    def _json_body(self, payload: dict[str, Any]) -> bytes:
+        return json.dumps(payload).encode("utf-8")
+
+    def create_release(self, tag: str, commit: str, title: str, body: str) -> dict[str, Any]:
+        payload = self.json(
+            "POST", f"/repos/{self.repository}/releases",
+            data=self._json_body({
+                "tag_name": tag,
+                "target_commitish": commit,
+                "name": title,
+                "body": body,
+                "draft": True,
+                "prerelease": False,
+            }),
+            headers={"Content-Type": "application/json"},
+        )
+        if not isinstance(payload, dict):
+            raise GitHubApiError("Release creation returned an unexpected JSON shape")
+        return payload
+
+    def patch_release(self, release_id: Any, **fields: Any) -> dict[str, Any]:
+        payload = self.json(
+            "PATCH", f"/repos/{self.repository}/releases/{release_id}",
+            data=self._json_body(fields),
+            headers={"Content-Type": "application/json"},
+        )
+        if not isinstance(payload, dict):
+            raise GitHubApiError("Release update returned an unexpected JSON shape")
+        return payload
+
+    def delete_release(self, release_id: Any) -> None:
+        self.request("DELETE", f"/repos/{self.repository}/releases/{release_id}")
+
+    def upload_asset(self, release_id: Any, path: Path, name: str) -> dict[str, Any]:
+        """Upload one asset by release id, streaming the file and never clobbering."""
+        url = (
+            f"https://uploads.github.com/repos/{self.repository}/releases/{release_id}"
+            f"/assets?name={urllib.parse.quote(name)}"
+        )
+        last_error: ReleaseError | None = None
+        for attempt in range(1, self.retries + 2):
+            with path.open("rb") as stream:
+                try:
+                    payload = self.json(
+                        "POST", url, data=stream, retries=0,
+                        headers={
+                            "Content-Type": "application/octet-stream",
+                            "Content-Length": str(path.stat().st_size),
+                        },
+                    )
+                    break
+                except ImmutableRelease:
+                    raise
+                except GitHubApiError as error:
+                    last_error = error
+                    if error.status not in (429, 500, 502, 503, 504) or attempt > self.retries:
+                        raise
+                    self._sleep(2 ** attempt)
+        else:  # pragma: no cover - the loop above either breaks or raises
+            raise last_error or GitHubApiError(f"Upload of {name} failed")
+        if not isinstance(payload, dict):
+            raise GitHubApiError(f"Upload of {name} returned an unexpected JSON shape")
+        return payload
 
     # -- release reads ------------------------------------------------------ #
 
@@ -717,85 +791,56 @@ def verify_script_binding(apk: Path, url: str) -> None:
 # GitHub CLI mutations
 # --------------------------------------------------------------------------- #
 
-IMMUTABLE_HINTS = ("immutable", "release assets are immutable", "protected", "not permitted")
-
-
-class CommandError(ReleaseError):
-    pass
-
-
-def gh(args: Sequence[str], *, capture: bool = True) -> str:
-    command = ["gh", *args]
-    print("$", " ".join(command[:6]) + (" …" if len(command) > 6 else ""))
-    result = subprocess.run(
-        command,
-        cwd=str(ROOT),
-        check=False,
-        capture_output=capture,
-        text=True,
-    )
-    if result.returncode != 0:
-        stderr = (result.stderr or "").strip()
-        stdout = (result.stdout or "").strip()
-        detail = stderr or stdout or f"exit status {result.returncode}"
-        lowered = detail.lower()
-        if "http 403" in lowered or "http 422" in lowered or any(
-            hint in lowered for hint in IMMUTABLE_HINTS
-        ):
-            raise ImmutableRelease(f"{' '.join(command[:4])} refused: {detail}")
-        raise CommandError(f"{' '.join(command[:4])} failed: {detail}")
-    return (result.stdout or "").strip()
+# Release mutations all go through the REST API with the release id: GitHub
+# returns 404 on /releases/tags/{tag} for a draft, so tag-keyed commands (such
+# as `gh release upload <tag>`) cannot stage assets on an unpublished release.
 
 
 def create_draft_release(
+    github: GitHub,
     tag: str,
     *,
     commit: str,
     title: str,
     notes_file: Path,
 ) -> None:
-    gh([
-        "release", "create", tag,
-        "--repo", TRUSTED_REPOSITORY,
-        "--target", commit,
-        "--draft",
-        "--title", title,
-        "--notes-file", str(notes_file),
-    ])
+    github.create_release(tag, commit, title, notes_file.read_text(encoding="utf-8"))
 
 
-def delete_release(tag: str) -> None:
-    gh(["release", "delete", tag, "--repo", TRUSTED_REPOSITORY, "--yes"])
+def delete_draft(github: GitHub, release: dict[str, Any], tag: str) -> None:
+    github.delete_release(release["id"])
 
 
-def upload_assets(tag: str, files: Iterable[Path]) -> None:
-    paths = [str(path) for path in files]
-    if not paths:
-        return
-    gh(["release", "upload", tag, "--repo", TRUSTED_REPOSITORY, *paths])
+def upload_assets(
+    github: GitHub, release: dict[str, Any], files: Iterable[tuple[str, Path]]
+) -> None:
+    """Upload each missing asset by name; an existing name is never clobbered."""
+    for name, path in files:
+        github.upload_asset(release["id"], path, name)
 
 
 def edit_release(
-    tag: str,
+    github: GitHub,
+    release: dict[str, Any],
     *,
     title: str | None = None,
     notes_file: Path | None = None,
     draft: bool | None = None,
     prerelease: bool | None = None,
-    latest: bool | None = None,
+    make_latest: bool | None = None,
 ) -> None:
-    args = ["release", "edit", tag, "--repo", TRUSTED_REPOSITORY]
-    if title:
-        args += ["--title", title]
-    if notes_file:
-        args += ["--notes-file", str(notes_file)]
+    fields: dict[str, Any] = {}
+    if title is not None:
+        fields["name"] = title
+    if notes_file is not None:
+        fields["body"] = notes_file.read_text(encoding="utf-8")
     if draft is not None:
-        args.append("--draft=true" if draft else "--draft=false")
+        fields["draft"] = draft
     if prerelease is not None:
-        args.append("--prerelease=true" if prerelease else "--prerelease=false")
-    if latest:
-        args.append("--latest")
-    gh(args)
+        fields["prerelease"] = prerelease
+    if make_latest:
+        fields["make_latest"] = "true"
+    github.patch_release(release["id"], **fields)
 
 
 # --------------------------------------------------------------------------- #
@@ -1000,7 +1045,7 @@ def publish_command(args: argparse.Namespace) -> int:
             "- The draft was never public, so its staged assets are discarded and "
             "replaced with the currently verified candidate.",
         ])
-        delete_release(config["VERSION_TAG"])
+        delete_draft(github, release, config["VERSION_TAG"])
         release = None
         plan = classify(None, config, head_sha=args.commit, candidate=candidate)
 
@@ -1030,6 +1075,7 @@ def publish_command(args: argparse.Namespace) -> int:
                 f"reviewed commit {args.commit}. Tags are never moved."
             )
         create_draft_release(
+            github,
             config["VERSION_TAG"],
             commit=args.commit,
             title=config["RELEASE_NAME"],
@@ -1043,7 +1089,7 @@ def publish_command(args: argparse.Namespace) -> int:
     # Upload whatever is genuinely missing, by name, never clobbering.
     if plan.missing:
         assets = release_assets(release or {})
-        to_upload = []
+        to_upload: list[tuple[str, Path]] = []
         for name in plan.missing:
             if name in assets:
                 raise ReleaseConflict(
@@ -1055,8 +1101,8 @@ def publish_command(args: argparse.Namespace) -> int:
                 raise ReleaseError(
                     f"Candidate file {path} does not match the release asset name {name}"
                 )
-            to_upload.append(path)
-        upload_assets(config["VERSION_TAG"], to_upload)
+            to_upload.append((name, path))
+        upload_assets(github, release, to_upload)
         release = github.release_by_tag(config["VERSION_TAG"])
         if release is None:
             raise ReleaseError(f"Release {config['VERSION_TAG']} disappeared after upload")
@@ -1070,7 +1116,7 @@ def publish_command(args: argparse.Namespace) -> int:
     # Refresh the draft's title and notes so the published body always carries
     # this candidate's identity.
     edit_release(
-        config["VERSION_TAG"],
+        github, release,
         title=config["RELEASE_NAME"],
         notes_file=notes_with_identity,
     )
@@ -1091,7 +1137,7 @@ def publish_command(args: argparse.Namespace) -> int:
     ])
 
     edit_release(
-        config["VERSION_TAG"], draft=False, prerelease=False, latest=True,
+        github, release, draft=False, prerelease=False, make_latest=True,
         title=config["RELEASE_NAME"], notes_file=notes_with_identity,
     )
     return verify_published(github, candidate, config, args)

@@ -74,6 +74,12 @@ and `repository.full_name == 2archiver/YTArk`, and unless the
 | `published-conflict` | fail with the next patch version to use; never overwrite | no |
 | `published-invalid` | fail loudly (metadata/assets do not validate) | no |
 
+Mutations are keyed by release **id**, never by tag: GitHub answers
+`GET /releases/tags/{tag}` with 404 while a release is still a draft, so a
+tag-keyed upload (for example `gh release upload v2.2.0 …`) cannot stage assets
+on an unpublished release. This bit the 2.2 release once; it is now covered by
+`test_assets_are_uploaded_by_release_id_not_by_tag`.
+
 Rules that never change:
 
 - A published asset that already exists is never overwritten, renamed or deleted.

@@ -15,6 +15,7 @@ import sys
 import tempfile
 import unittest
 import urllib.error
+import urllib.parse
 import urllib.request
 import zipfile
 from pathlib import Path
@@ -216,6 +217,9 @@ class Scenario:
     def __call__(self, request: urllib.request.Request) -> Response:
         url = request.full_url
         self.requests.append(url)
+        mutation = self._mutate(request, request.get_method())
+        if mutation is not None:
+            return mutation
         if "/releases/tags/" in url:
             return Response(200, public(self.release)) if self.release else Response(
                 404, {"message": "Not Found"}
@@ -242,88 +246,63 @@ class Scenario:
 
         return transport
 
-    # -- gh CLI ------------------------------------------------------------ #
+    # -- release mutations -------------------------------------------------- #
 
-    def gh(self, args, **kwargs):
-        self.calls.append(list(args))
-        joined = " ".join(args)
-        for fragment, message in self.failures.items():
-            if fragment in joined:
-                raise publish_release.ImmutableRelease(message)
-        if args[:2] == ["release", "create"]:
-            self.release = release_payload(
-                draft=True,
-                assets=[],
-                body=Path(args[args.index("--notes-file") + 1]).read_text(encoding="utf-8"),
-                name=args[args.index("--title") + 1],
+    def _mutate(self, request: urllib.request.Request, method: str) -> Response | None:
+        url = request.full_url
+        if method == "POST" and url.startswith("https://uploads.github.com/"):
+            name = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)["name"][0]
+            data = request.data
+            payload = data.read() if hasattr(data, "read") else (data or b"")
+            self.calls.append(["upload", name])
+            if any(fragment in name for fragment in self.failures):
+                raise publish_release.ImmutableRelease(self.failures[name])
+            asset = {
+                "id": self.next_asset_id,
+                "name": name,
+                "size": len(payload),
+                "state": "uploaded",
+                "digest": "sha256:" + sha256(payload),
+                "browser_download_url": (
+                    f"https://github.com/2archiver/YTArk/releases/download/"
+                    f"{CONFIG['VERSION_TAG']}/{name}"
+                ),
+                "_bytes": payload,
+            }
+            self.release["assets"].append(asset)
+            self.next_asset_id += 1
+            return Response(201, {k: v for k, v in asset.items() if k != "_bytes"})
+        if method == "POST" and url.endswith("/releases"):
+            body = json.loads((request.data or b"{}").decode())
+            self.calls.append(
+                ["create", body["tag_name"]]
+                + [f"--{key}={value}" for key, value in sorted(body.items())]
             )
-            return ""
-        if args[:2] == ["release", "upload"]:
-            for path in self._files(args):
-                self.release["assets"].append({
-                    "id": self.next_asset_id,
-                    "name": path.name,
-                    "size": path.stat().st_size,
-                    "state": "uploaded",
-                    "digest": "sha256:" + publish_release.file_sha256(path),
-                    "browser_download_url": (
-                        f"https://github.com/2archiver/YTArk/releases/download/"
-                        f"{CONFIG['VERSION_TAG']}/{path.name}"
-                    ),
-                    "_bytes": path.read_bytes(),
-                })
-                self.next_asset_id += 1
-            return ""
-        if args[:2] == ["release", "edit"]:
-            if "--draft=false" in args:
-                self.release["draft"] = False
-            if "--draft=true" in args:
-                self.release["draft"] = True
-            if "--prerelease=false" in args:
-                self.release["prerelease"] = False
-            if "--title" in args:
-                self.release["name"] = args[args.index("--title") + 1]
-            if "--notes-file" in args:
-                self.release["body"] = Path(
-                    args[args.index("--notes-file") + 1]
-                ).read_text(encoding="utf-8")
-            return ""
-        if args[:2] == ["release", "delete"]:
+            self.release = release_payload(
+                draft=True, assets=[], body=body["body"], name=body["name"],
+            )
+            return Response(201, public(self.release))
+        if method == "PATCH" and "/releases/" in url:
+            body = json.loads((request.data or b"{}").decode())
+            self.calls.append(
+                ["edit"] + [f"--{key}={value}" for key, value in sorted(body.items())]
+            )
+            for key, value in body.items():
+                if key == "make_latest":
+                    continue
+                self.release[key] = value
+            return Response(200, public(self.release))
+        if method == "DELETE" and "/releases/" in url:
+            self.calls.append(["delete", url.rsplit("/", 1)[-1]])
             self.release = None
-            return ""
-        raise AssertionError(f"unexpected gh command: {args}")
+            return Response(204, b"")
+        return None
 
-    def _files(self, args: list[str]) -> list[Path]:
-        files: list[Path] = []
-        skip = False
-        for index, token in enumerate(args):
-            if skip:
-                skip = False
-                continue
-            if token == "--repo":
-                skip = True
-                continue
-            if token.startswith("--") or index < 3:
-                continue
-            path = Path(token)
-            files.append(path if path.is_absolute() else Path(tempfile.gettempdir()) / token)
-        resolved: list[Path] = []
-        for path in files:
-            if path.is_file():
-                resolved.append(path)
-                continue
-            matches = sorted(Path(tempfile.gettempdir()).rglob(path.name))
-            if not matches:
-                raise AssertionError(f"upload target not found: {path}")
-            resolved.append(matches[0])
-        return resolved
+    def uploads(self) -> list[list[str]]:
+        return [call for call in self.calls if call[0] == "upload"]
 
     def called_with(self, fragment: str) -> bool:
         return any(fragment in " ".join(call) for call in self.calls)
-
-    def uploads(self) -> list[list[str]]:
-        return [call for call in self.calls if call[:2] == ["release", "upload"]]
-
 
 def namespace(**values):
     return type("Args", (), values)
@@ -375,7 +354,6 @@ class PublishReleaseTestCase(unittest.TestCase):
     def run_publish(self, release, *, scenario: Scenario | None = None, **overrides):
         scenario = scenario or Scenario(release)
         with patch.object(publish_release.GitHub, "_default_transport", scenario.as_transport()), \
-             patch.object(publish_release, "gh", scenario.gh), \
              patch.object(publish_release, "ROOT", self.scratch), \
              patch.object(publish_release, "publish_script_tag", lambda candidate: None), \
              patch.dict(
@@ -530,16 +508,14 @@ class PublicationTests(PublishReleaseTestCase):
     def test_absent_release_is_staged_then_promoted(self):
         result, scenario = self.run_publish(None)
         self.assertEqual(result, 0)
-        self.assertTrue(scenario.called_with(f"release create {CONFIG['VERSION_TAG']}"))
-        self.assertTrue(scenario.called_with("--draft"))
-        self.assertTrue(scenario.called_with("--draft=false"))
-        self.assertTrue(scenario.called_with("--prerelease=false"))
-        self.assertTrue(scenario.called_with("--latest"))
-        self.assertFalse(scenario.called_with("--clobber"))
-        uploaded = scenario.uploads()
-        self.assertEqual(len(uploaded), 1)
+        self.assertTrue(scenario.called_with(f"create {CONFIG['VERSION_TAG']}"))
+        self.assertTrue(scenario.called_with("--draft=True"))
+        self.assertTrue(scenario.called_with("--draft=False"))
+        self.assertTrue(scenario.called_with("--prerelease=False"))
+        self.assertTrue(scenario.called_with("--make_latest=true"))
+        self.assertEqual(len(scenario.uploads()), len(ALL_ASSETS))
         for name in ALL_ASSETS:
-            self.assertIn(name, " ".join(uploaded[0]))
+            self.assertTrue(any(call[1] == name for call in scenario.uploads()), name)
         self.assertFalse(scenario.release["draft"])
         self.assertFalse(scenario.release["prerelease"])
 
@@ -547,10 +523,10 @@ class PublicationTests(PublishReleaseTestCase):
         draft = release_payload(draft=True, body=identity_body(self.candidate))
         result, scenario = self.run_publish(draft)
         self.assertEqual(result, 0)
-        self.assertFalse(scenario.called_with("release create"))
-        self.assertFalse(scenario.called_with("release delete"))
-        self.assertFalse(scenario.called_with("release upload"))
-        self.assertTrue(scenario.called_with("--draft=false"))
+        self.assertFalse(scenario.called_with("create"))
+        self.assertFalse(scenario.called_with("delete"))
+        self.assertEqual(scenario.uploads(), [])
+        self.assertTrue(scenario.called_with("--draft=False"))
         self.assertFalse(scenario.release["draft"])
 
     def test_complete_stable_release_changes_nothing(self):
@@ -566,11 +542,10 @@ class PublicationTests(PublishReleaseTestCase):
         )
         result, scenario = self.run_publish(published)
         self.assertEqual(result, 0)
-        self.assertFalse(scenario.called_with("release create"))
-        uploaded = scenario.uploads()
-        self.assertEqual(len(uploaded), 1)
-        self.assertIn(APK, " ".join(uploaded[0]))
-        self.assertNotIn(SCRIPT, " ".join(uploaded[0]))
+        self.assertFalse(scenario.called_with("create"))
+        uploads = scenario.uploads()
+        self.assertEqual(len(uploads), 1)
+        self.assertEqual(uploads[0][1], APK)
 
     def test_conflicting_published_asset_is_refused(self):
         published = release_payload(
@@ -592,8 +567,8 @@ class PublicationTests(PublishReleaseTestCase):
         draft = release_payload(draft=True, body=stale)
         result, scenario = self.run_publish(draft)
         self.assertEqual(result, 0)
-        self.assertTrue(scenario.called_with("release delete"))
-        self.assertTrue(scenario.called_with("release create"))
+        self.assertTrue(scenario.called_with("delete"))
+        self.assertTrue(scenario.called_with(f"create {CONFIG['VERSION_TAG']}"))
         summary = (self.root / "summary.md").read_text(encoding="utf-8")
         self.assertIn("Replacing an unpublished draft", summary)
 
@@ -603,13 +578,10 @@ class PublicationTests(PublishReleaseTestCase):
             self.run_publish(published)
 
     def test_immutable_release_upload_is_reported_with_the_next_patch_version(self):
-        scenario = Scenario(
-            None,
-            failures={"release upload": "HTTP 403: release assets are immutable once published"},
-        )
+        scenario = Scenario(None, failures={APK: "asset upload refused"})
         with self.assertRaises(publish_release.ImmutableRelease) as caught:
             self.run_publish(None, scenario=scenario)
-        self.assertIn("403", str(caught.exception))
+        self.assertIn("asset upload refused", str(caught.exception))
         version, code = publish_release.next_patch_version(CONFIG)
         self.assertEqual((version, code), ("2.2.1", 2020100))
 
@@ -645,6 +617,15 @@ class PublicationTests(PublishReleaseTestCase):
     def test_publication_requires_the_trusted_repository(self):
         with self.assertRaises(publish_release.ReleaseError):
             self.run_publish(None, repository="evil/YTArk")
+
+    def test_assets_are_uploaded_by_release_id_not_by_tag(self):
+        """Drafts 404 on /releases/tags/{tag}, so uploads must use the release id."""
+        _, scenario = self.run_publish(None)
+        uploads = [url for url in scenario.requests if "uploads.github.com" in url]
+        self.assertEqual(len(uploads), len(ALL_ASSETS))
+        for url in uploads:
+            self.assertIn("/releases/409000001/assets", url)
+            self.assertNotIn("/releases/tags/", url)
 
     def test_summary_only_links_the_apk_after_public_verification(self):
         self.run_publish(None)
