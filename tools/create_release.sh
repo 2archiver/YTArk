@@ -62,14 +62,14 @@ separately recorded on a named device.
 ## What changed in this release
 
 - **Premium logo (cosmetic) fixed.** The wordmark now patches the real Leanback
-  header markup (`ytlr-logo-entity` / `ytlr-redux-connect-ytlr-logo-entity` and
-  the `ytlr-thumbnail-details` artwork inside it) instead of the selector that
+  header markup (\`ytlr-logo-entity\` / \`ytlr-redux-connect-ytlr-logo-entity\` and
+  the \`ytlr-thumbnail-details\` artwork inside it) instead of the selector that
   never matched, so the wordmark appears on cold launch and after navigation.
   Exactly one wordmark is placed per logo location, the stock artwork is hidden
-  and restored byte-for-byte, focus/`tabindex`/accessible names are preserved,
-  and the setting is on by default while an explicit opt-out keeps winning after
-  relaunch. It is cosmetic only: never a subscription, entitlement or billing
-  state.
+  and restored byte-for-byte, focus, \`tabindex\` and accessible names are
+  preserved, and the setting is on by default while an explicit opt-out keeps
+  winning after relaunch. It is cosmetic only: never a subscription, entitlement
+  or billing state.
 - **Settings -> YTArk Updates is real.** The card shows the installed version,
   performs a validated check of the official stable release, lists the available
   version, size and release notes, shows the last *successful* check, and reports
@@ -86,8 +86,9 @@ separately recorded on a named device.
 The 20-point device checklist (cold launch, wordmark placement, both themes,
 navigation returns, focus order, toggle off/on, ad blocking, SponsorBlock,
 offline check, download/verify/install, installer cancellation, relaunch with
-data preserved) is recorded per device in `docs/RUNTIME-CHECKLIST.md`. Rows that
-have not been executed on a physical ARM TV remain **NOT RUN**.
+data preserved) is recorded per device in \`docs/RUNTIME-CHECKLIST.md\` in the
+source repository. Rows that have not been executed on a physical ARM TV remain
+**NOT RUN**.
 
 ## Choose and install the APK
 
