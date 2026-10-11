@@ -305,8 +305,15 @@ jobs:
       - build-apk-candidates
     # Explicit dependency on a successful build of THIS run for trusted code:
     # a failed or cancelled build can never reach publication.
+    # `always()` only lifts GitHub's rule that a job whose needs were skipped is
+    # skipped; every gate below still applies, so a failed, cancelled or unguarded
+    # build can never reach publication. It is needed because a release that is
+    # already published and complete skips the build, and the published bytes
+    # still have to be re-verified.
     if: >-
-      github.repository == '2archiver/YTArk'
+      always()
+      && !cancelled()
+      && github.repository == '2archiver/YTArk'
       && github.ref == 'refs/heads/main'
       && needs.release-guard.result == 'success'
       && needs.build-apk-candidates.result != 'failure'
