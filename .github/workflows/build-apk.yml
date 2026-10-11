@@ -369,7 +369,6 @@ jobs:
           # Surface any publication failure as a check annotation: the reason is
           # then visible on the run page without opening the raw job log.
           python3 - "$log" <<'PY'
-          import re
           import sys
 
           lines = [
@@ -377,11 +376,9 @@ jobs:
               in open(sys.argv[1], encoding="utf-8", errors="replace").read().splitlines()
               if line.strip()
           ]
-          interesting = [
-              line for line in lines
-              if re.search(r"(Traceback|Error|error|failed|refused|Killed)", line)
-          ]
-          for line in (interesting + lines)[-30:]:
+          # GitHub keeps at most ten error annotations per step, so only the
+          # tail is emitted: it always contains the reason for the failure.
+          for line in lines[-10:]:
               safe = line.replace("%", "%25").replace("\r", " ").replace("\n", "%0A")
               print(f"::error title=YTArk release publication failed::{safe[:900]}")
           PY
