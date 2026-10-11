@@ -3,20 +3,83 @@
 export const YTARK_CHANGELOG = {
   "schema": 1,
   "source": "CHANGELOG.md",
-  "sourceSha256": "a889283ebc3f7caa49210126a79e699a8913fa6f673fd906cf73353a2889e07b",
+  "sourceSha256": "baae4f13c35888cabc176e5be4943235a2c90717b36dd84e8323f30da7380a37",
   "entries": [
     {
-      "version": "2.3.0",
-      "display": "2.3",
+      "version": "2.4.0",
+      "display": "2.4",
       "status": "unreleased",
       "date": null,
       "publishedAt": null,
+      "tag": "v2.4.0",
+      "versionCode": 2040000,
+      "scriptTag": "s23",
+      "title": "YTArk 2.4",
+      "releaseUrl": null,
+      "facts": "Not yet published. Planned tag v2.4.0 · versionCode 2040000 · userscript s23 · one ARMv7 APK (armeabi-v7a) on TizenTubeCobalt v2.0.2. The publication date is recorded on the GitHub release when the release workflow publishes this build.",
+      "summary": "A safer updater and a tidier settings home. Same package, signing certificate, ARMv7 base and YouTube TV frontend as 2.3.",
+      "sections": [
+        {
+          "heading": "Added",
+          "items": [
+            "Verdict-aware update checks (YTArk Updates). Device architecture is now collected as structured evidence: the Android ABI list, the running ARMv7-only build (2.1.2 and later), runtime CPU labels and bridge availability are kept apart and classified as compatible, incompatible or unknown. Missing, delayed or unreadable data is never read as \"unsupported\"; the check, release notes and retrying detection stay available, and the manual route on the official release page is shown with a recovery action. An ARMv7 release asset is matched only on explicit compatible evidence.",
+            "Re-detect device architecture on the Updates card (also offered when the architecture is unknown). Re-reads the device architecture, waiting for the Cobalt bridge if it binds late, and re-matches the cached release without a full check.",
+            "YTArk entry in the guide (Navigation). Keeps YTArk Settings reachable from the sidebar even when other guide entries are hidden or reordered; default on, no secret key combinations, exactly one entry per guide load."
+          ]
+        },
+        {
+          "heading": "Changed",
+          "items": [
+            "YTArk Settings is grouped into labelled categories — Playback, Appearance, Privacy, Navigation — plus Quick Controls, Updates, About and Support. The legacy \"User Interface\" and \"Miscellaneous\" root menus and the duplicate Changelog row are removed; every setting id is preserved, so settings search and saved preferences keep working. The root description reads \"Playback, appearance, privacy and updates\".",
+            "The YTArk Settings guide entry is added right after Home through the existing settings action and only after the reordering and hiding passes, so hiding sidebar items can never make settings unreachable. It is not exposed to the move/hide guide-entry actions.",
+            "The Updates screen names the official release page as the manual route (with a QR code) and offers one recovery path in every state instead of a categorical message when the architecture cannot be confirmed."
+          ]
+        },
+        {
+          "heading": "Defaults and migration",
+          "items": [
+            "Fresh installations start with OLED Black, Hide channel watermark and Remove player dimming turned on (unchanged from 2.3), and with the YTArk entry in the guide on.",
+            "Updated installations keep every existing preference, including the 2.3 appearance choices and the settings schema marker; only the new guide-entry toggle starts on and can be turned off under Navigation. Google account data, cookies and other preferences are not touched."
+          ]
+        },
+        {
+          "heading": "Fixed",
+          "items": [
+            "The update screen could report a device as unsupported when the architecture bridge was late or empty, when a 64-bit first ABI was reported, or when the device ABI list and runtime CPU label disagreed. It now reports only what is actually known and offers a retry; a categorical \"not compatible\" message is reserved for an explicit non-ARM userspace.",
+            "Repeated opens of YTArk Settings could mount duplicate Premium wordmarks and duplicate observers in a patched header; each host is now tracked on its own, detached hosts are restored to the stock logo and forgotten, and route changes keep exactly one observer per host.",
+            "A YouTube guide response with an empty items list could throw while the YTArk Settings entry was being added and stop the rest of response processing; empty and guide-less payloads are now accepted unchanged.",
+            "Re-verifying an already-published release failed on the temporary local file names of the re-downloaded public assets (the packaging checks require the published names), so the release pipeline could report a failed run after a successful publication. The public bytes are now validated under their published names."
+          ]
+        },
+        {
+          "heading": "Known limitations",
+          "items": [
+            "The repacked build cannot connect the native updater engine to the settings card (Cobalt owns the JavaScript bridges). The card performs a real, validated release check and hands installation to the official page and Android's installer, always with user confirmation; the bundled native updater screen itself is not device-verified.",
+            "\"Could not confirm this device's app architecture\" can still appear when the bridge never reports a value and the installed build predates 2.1.2; the manual route covers that case.",
+            "No physical TV run has been recorded for this build: updater D-pad flows, the guide entry, logo placement and in-place update with session continuity are tracked as NOT RUN in docs/RUNTIME-CHECKLIST.md."
+          ]
+        },
+        {
+          "heading": "Validation",
+          "items": [
+            "Automated: the userscript unit and integration tests (Node), the Python release, repacker and changelog tests and the native updater Java contract tests run in CI for this build. CHANGELOG.md and the bundled in-app changelog data are regenerated and checked, and the release pipeline re-downloads and re-verifies the published assets under their published names.",
+            "NOT RUN on a physical TV: D-pad flows, cold launch, signed-in and guest navigation, player transitions, theme restoration, keyboard entry, settings reordering, changelog scrolling and in-place update with session continuity. They stay tracked as NOT RUN in docs/RUNTIME-CHECKLIST.md until a device run is recorded."
+          ]
+        }
+      ]
+    },
+    {
+      "version": "2.3.0",
+      "display": "2.3",
+      "status": "published",
+      "date": "2026-10-11",
+      "publishedAt": "2026-10-11T13:46Z",
       "tag": "v2.3.0",
       "versionCode": 2030000,
       "scriptTag": "s22",
       "title": "YTArk 2.3",
-      "releaseUrl": null,
-      "facts": "Not yet published. Planned tag v2.3.0 · versionCode 2030000 · userscript s22 · one ARMv7 APK (armeabi-v7a) on TizenTubeCobalt v2.0.2. The publication date is recorded on the GitHub release when the release workflow publishes this build.",
+      "releaseUrl": "https://github.com/2archiver/YTArk/releases/tag/v2.3.0",
+      "facts": "Published 2026-10-11 13:46 UTC as YTArk 2.3 · tag v2.3.0 · versionCode 2030000 · userscript s22 · one ARMv7 APK",
       "summary": "OLED Black, cleaner playback, searchable settings, a customizable YouTube Settings page and a complete changelog. Same package, signing certificate, ARMv7 base and YouTube TV frontend as 2.2.",
       "sections": [
         {

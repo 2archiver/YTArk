@@ -12,54 +12,52 @@ native updater that always hands installation to Android for user confirmation.
 |---|---|
 | Android package | `io.github.twoarchiver.ytark` (unchanged; same signing certificate) |
 | Launcher label | `YTArk` |
-| Version | `2.3` (Android versionName `2.3.0`, release title `YTArk 2.3`) |
-| versionCode | `2030000` (above every published YTArk APK; 2.2.0 stays `2020000`) |
-| APK (the only architecture) | `YTArk-v2.3.0-armv7.apk` — `armeabi-v7a` |
-| Userscript revision | `s22` (the immutable tags `s21` and earlier are never moved) |
+| Version | `2.4` (Android versionName `2.4.0`, release title `YTArk 2.4`) |
+| versionCode | `2040000` (above every published YTArk APK; 2.3.0 stays `2030000`) |
+| APK (the only architecture) | `YTArk-v2.4.0-armv7.apk` — `armeabi-v7a` |
+| Userscript revision | `s23` (the immutable tags `s22` and earlier are never moved) |
 | Android base | TizenTubeCobalt `v2.0.2` ARMv7 APK |
 
-**YTArk 2.3 is a feature release on the same TizenTubeCobalt `v2.0.2` base.** It
-is **not** a newer Cobalt engine, **not** a newer YouTube client, and **not** an
-official YouTube upgrade. It keeps the package, the signing certificate, stored
-preferences and the YouTube TV frontend, and adds:
+**YTArk 2.4 is an updater and settings release on the same TizenTubeCobalt
+`v2.0.2` base.** It is **not** a newer Cobalt engine, **not** a newer YouTube
+client, and **not** an official YouTube upgrade. It keeps the package, the
+signing certificate, stored preferences and the YouTube TV frontend (including
+the 2.3 appearance features: OLED Black, Hide channel watermark, Remove player
+dimming, settings search and Customize YouTube Settings), and adds:
 
-- **OLED Black theme** (YTArk Settings → Appearance → Theme): true black
-  (`#000000`) for the supported Home, Search and Subscriptions surfaces, the
-  sidebar, the YouTube Settings background, YTArk Settings, dialogs and the
-  changelog reader, through one managed stylesheet and shared design tokens.
-  Images, thumbnails, video and subtitles are never recoloured; "YouTube default"
-  brings back the previous look including saved custom colours.
-- **Hide channel watermark** (Appearance → Player): removes the clickable
-  channel branding watermark (`playerAnnotationsExpandedRenderer.featuredChannel`)
-  from player responses before the frontend reads them, with a player-scoped,
-  exact-URL safety net for a watermark already on screen. Fully reversible.
-- **Remove player dimming** (Appearance → Player): clears only the dark scrim
-  behind playback controls (`.ytLrWatchDefaultShadow`,
-  `.ytLrWatchDefault2025Shadow`, `[idomkey="shadow"]`) and keeps controls
-  readable with a light text shadow. No filter touches the video; the inactivity
-  screen dimming stays a separate setting.
-- **Search settings** at the top of YTArk Settings: every YTArk setting
-  (nested ones included) by name, description, category or alias; results show
-  the current value and breadcrumb and open the real control. D-pad keyboard,
-  suggested searches and the TV's own keyboard; searches never leave the TV.
-- **Customize YouTube Settings**: reorder/hide sections of the native YouTube
-  Settings page, pin entries into a Pinned section, hide optional entries, with
-  protected account/sign-in/About/Help/YTArk entries and a scoped "Restore
-  default layout".
-- **Changelog / What's new**: `CHANGELOG.md` is bundled for offline reading
-  from YTArk Settings and YTArk Updates; a dismissible What's new card appears
-  once per installed version after an update.
-- Fixes found along the way (inverted Hide Shorts/Hide Previews switches, the
-  codec setting's missing default, malformed-settings repair, duplicate start-up
-  initialisation, a clock timer leak, over-broad settings-page detection) — see
+- **Verdict-aware updates** (YTArk Settings → YTArk Updates): the device's
+  architecture is collected as structured evidence — the Android ABI list, the
+  running ARMv7-only build (2.1.2 and later), runtime CPU labels and bridge
+  availability are kept apart and classified as compatible, incompatible or
+  unknown. Missing, delayed or unreadable data is never read as "unsupported":
+  the release check, release notes and a **Re-detect device architecture**
+  action stay available, with the official release page and a QR code as the
+  manual route. An ARMv7 release asset is matched only on explicit compatible
+  evidence; a categorical "not compatible" message is reserved for an explicit
+  non-ARM userspace.
+- **Settings categories**: YTArk Settings is grouped into Playback, Appearance,
+  Privacy and Navigation (plus Quick Controls, Updates, About and Support). The
+  legacy "User Interface"/"Miscellaneous" root menus are gone; every setting id
+  is preserved, so settings search and saved preferences keep working.
+- **YTArk entry in the guide** (Navigation, default on): keeps YTArk Settings
+  reachable from the sidebar even when other guide entries are hidden or
+  reordered. Exactly one entry per guide load, no secret key combinations.
+- **Steadier header branding and guide handling**: the Premium wordmark keeps
+  one scoped observer per header host and restores the stock logo on detached
+  hosts, so repeated Settings opens and route changes cannot stack duplicates;
+  empty guide payloads no longer break response processing.
+- Fixes found along the way (a 64-bit-first ABI report being read as
+  "unsupported", duplicate logo mounts, an empty-guide crash, and a published
+  release re-verification failure in the release pipeline) — see
   [`CHANGELOG.md`](CHANGELOG.md).
 
 **Defaults and migration.** Fresh installations start with OLED Black, Hide
-channel watermark and Remove player dimming on. Installations updated from 2.2 or
-earlier keep their current appearance: the three options stay off until chosen.
-A settings schema marker (`configSchemaVersion` 2) makes this a one-time step;
-explicit choices win afterwards, and Google account data, cookies and other
-preferences are never touched.
+channel watermark and Remove player dimming on (as in 2.3), and with the YTArk
+entry in the guide on. Updated installations keep every existing preference:
+the appearance options stay as chosen, the settings schema marker
+(`configSchemaVersion` 2) is unchanged, and only the new guide-entry toggle
+starts on. Google account data, cookies and other preferences are never
+touched.
 
 ### Capability status
 
@@ -148,7 +146,8 @@ simply not an update target any more.
 ## Remote-friendly installation
 
 1. From the official release page, download the versioned ARMv7 APK
-   (`YTArk-v2.3.0-armv7.apk`, once published; 2.2 remains available as `YTArk-v2.2.0-armv7.apk`). Download `SHA256SUMS.txt` too.
+   (`YTArk-v2.4.0-armv7.apk`, once published; earlier versions remain on the
+   [release page](https://github.com/2archiver/YTArk/releases)). Download `SHA256SUMS.txt` too.
 2. Verify the selected file on the computer, for example:
 
    ```sh
@@ -190,7 +189,7 @@ an update unless you understand that uninstalling can erase app data.
 | Changelog and What's new | Bundled history (offline), dismissible card once per installed version. Device NOT RUN |
 | Settings → YTArk Updates | Source implemented: installed version, latest stable check, plain status, official-page QR fallback, changelog link. Device NOT RUN |
 | Native updater | Source and packaged-CI verified (SHA-256, signer, ABI, manual Android installer). **Device NOT RUN; native entry pending** |
-| ARMv7 (`armeabi-v7a`) APK | **The only published architecture** from 2.1.2; 2.3.0 publishes from `main` like 2.2.0, and device acceptance stays NOT RUN until recorded |
+| ARMv7 (`armeabi-v7a`) APK | **The only published architecture** from 2.1.2; 2.4.0 publishes from `main` like 2.3.0, and device acceptance stays NOT RUN until recorded |
 | 64-bit-only Android userspace (`arm64-v8a` only) | **Not supported** by this release line; documented exclusion, no ARM64 asset |
 | Background playback, PiP, casting, downloads, system-wide ad blocking | **Not claimed** |
 
@@ -295,10 +294,10 @@ builds used a link click that could not be verified without a bridge, and it was
 removed rather than faked. Native entry from the card is therefore **native
 integration pending**. Device status: NOT RUN.
 
-**Release rules (native updater; source implemented, device NOT RUN for 2.3).**
+**Release rules (native updater; source implemented, device NOT RUN for 2.4).**
 The bundled native updater is written to check the official GitHub stable release
 over HTTPS to `api.github.com`, with a 24-hour **Later** snooze. Its periodic
-checks are **not** device-verified for 2.3 and this release does **not** advertise
+checks are **not** device-verified for 2.4 and this release does **not** advertise
 automatic update prompts. Settings → YTArk Updates runs a manual check instead. It ignores draft and prerelease entries, requires the
 published release body to confirm the same Android versionCode as the tag, and
 selects an APK matching the **installed** native ABI (4K branding is not an
@@ -449,7 +448,7 @@ section of the release notes:
 ```sh
 python3 tools/build_changelog.py --write       # regenerate TizenTube/mods/assets/changelog.generated.js
 python3 tools/build_changelog.py --check       # what CI runs
-python3 tools/build_changelog.py release-notes --version 2.3.0
+python3 tools/build_changelog.py release-notes --version 2.4.0
 ```
 
 Python release/repacker contract tests:
@@ -482,7 +481,7 @@ refuses any candidate that is not above every published installable build.
 - `build-apk.yml` runs on push to `main` or manual dispatch. It builds, signs and
   package-checks the ARMv7 candidate APK, uploads it as an Actions artefact, and
   then — in the same run, in a separate job that depends on the build succeeding
-  — publishes the immutable `s22` userscript tag and the stable GitHub release
+  — publishes the immutable `s23` userscript tag and the stable GitHub release
   from those exact bytes. Only that publish job holds `contents: write`; the build
   job stays read-only and is the only job that sees the signing key.
 - `publish-release.yml` is the manual recovery path. It takes

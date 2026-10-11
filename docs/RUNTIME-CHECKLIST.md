@@ -87,7 +87,21 @@ tests do not replace these rows.
 | 34 | Restore default layout | Only the layout resets; YTArk and YouTube settings and the session are unchanged | |
 | 35 | Changelog reader | Version list newest first with the installed version marked; long versions scroll with the D-pad; Back returns; QR opens the release page | |
 | 36 | Section reset | The confirmation lists the defaults; only that section changes | |
-| 37 | In-place update to 2.3 | Installs over 2.2 without uninstalling; session, cookies and preferences preserved | |
+| 37 | In-place update to 2.4 | Installs over 2.3 without uninstalling; session, cookies and preferences preserved | |
+
+## YTArk 2.4 features (updater verdicts, settings categories, guide entry)
+
+Every row is **NOT RUN** until recorded on the build under test. Static and unit
+tests do not replace these rows.
+
+| # | Check | Expected | Result |
+|---|---|---|---|
+| 38 | YTArk Updates on a normal ARMv7 TV | Installed version and latest stable shown; "armeabi-v7a (confirmed)" after a check; the manual route names the official page and the QR scans to it | |
+| 39 | YTArk Updates with the architecture bridge empty (or a 64-bit-first report) | "Could not confirm this device's app architecture" with recovery actions — never "not compatible"; Re-detect and Check again stay selectable; release notes still open | |
+| 40 | YTArk Updates while offline / rate-limited | Honest failure text (timeout or rate limit), never "up to date"; retry offered; nothing is downloaded | |
+| 41 | Settings categories | YTArk Settings shows Playback, Appearance, Privacy, Navigation plus Quick Controls, Updates, About, Support; no "User Interface"/"Miscellaneous" root rows; every setting opens and keeps its saved value | |
+| 42 | YTArk entry in the guide | Exactly one "YTArk Settings" entry right after Home, on every guide load; turning the Navigation toggle off removes it; hiding other sidebar entries never removes access | |
+| 43 | Repeated Settings opens and route changes | Exactly one Premium wordmark per header host after many opens; no duplicate mounts, no blank logo slot; the stock logo returns on unpatched hosts | |
 
 ## 64-bit-only userspace check (expected exclusion)
 

@@ -10,7 +10,7 @@ until a named device has recorded it. Nothing here is inferred from a previous
 release: evidence belongs to the exact APK whose sha256 is written below.
 
 Device: `__________` (model, Google TV / Android TV version, `ro.product.cpu.abilist`)
-Installed before: `__________` · Candidate/release: `YTArk-v2.3.0-armv7.apk`
+Installed before: `__________` · Candidate/release: `YTArk-v2.4.0-armv7.apk`
 APK sha256: `__________` · Signer SHA-256 matches `signing/YTArk-cert-sha256.txt`: [ ]
 
 | # | Check | Result |

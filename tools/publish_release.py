@@ -1536,6 +1536,15 @@ def verify_published(
     downloaded: list[str] = []
     workdir = Path(args.workdir)
     workdir.mkdir(parents=True, exist_ok=True)
+    # The re-downloaded public bytes live in their own directory so every file
+    # keeps its exact published basename: validate_apk and check_checksums
+    # enforce the public names (and the SHA256SUMS.txt entries keyed by them),
+    # so a prefixed scratch name would fail the very checks this path exists to
+    # run. This is the regression that made a successful publication report a
+    # failed run ("Expected APK filename YTArk-v<version>-armv7.apk, got
+    # published-YTArk-v<version>-armv7.apk").
+    public_dir = workdir / "published"
+    public_dir.mkdir(parents=True, exist_ok=True)
     for key in ASSET_KEYS:
         name = asset_name(key, config)
         asset = assets.get(name)
@@ -1549,7 +1558,7 @@ def verify_published(
                 f"Published asset {name} sha256 {digest} does not match the verified "
                 f"candidate {candidate.files[key].sha256}"
             )
-        destination = workdir / f"published-{name}"
+        destination = public_dir / name
         github.download_asset(asset, destination)
         actual = file_sha256(destination)
         if actual != candidate.files[key].sha256:
@@ -1559,16 +1568,16 @@ def verify_published(
             )
         downloaded.append(name)
 
-    public_apk = workdir / f"published-{config['APK_ARMV7']}"
+    public_apk = public_dir / config["APK_ARMV7"]
     if not args.skip_static_checks:
         validate_release.validate_apk(
-            public_apk, "armv7", str(ROOT / "signing" / "YTArk-cert-sha256.txt"),
+            str(public_apk), "armv7", str(ROOT / "signing" / "YTArk-cert-sha256.txt"),
             args.aapt, args.apksigner,
         )
         validate_release.check_checksums(
-            str(workdir / "published-SHA256SUMS.txt"),
+            str(public_dir / "SHA256SUMS.txt"),
             str(public_apk),
-            str(workdir / "published-userScript.js"),
+            str(public_dir / "userScript.js"),
         )
     apk_url = (
         f"https://github.com/{TRUSTED_REPOSITORY}/releases/download/{tag}/{config['APK_ARMV7']}"

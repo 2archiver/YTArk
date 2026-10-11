@@ -234,6 +234,12 @@ export function validateReleasePayload(payload, { installedVersion, architecture
   if (verdict !== 'compatible' && verdict !== 'unknown' && verdict !== 'incompatible') {
     return { error: 'The release check was given an unusable architecture verdict.' };
   }
+  if (verdict === 'compatible' && !assetSuffixForArchitecture(architecture)) {
+    // Inconsistent evidence (features/abiEvidence.js only ever reports
+    // "compatible" with an exact armeabi-v7a architecture). Refuse the check
+    // instead of guessing an asset name from a missing or alien value.
+    return { error: 'The release check was given inconsistent architecture evidence.' };
+  }
   const baseRelease = {
     tag,
     version,
