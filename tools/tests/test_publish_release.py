@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import os
 import shutil
 import sys
@@ -211,6 +212,9 @@ class Scenario:
         self.calls: list[list[str]] = []
         self.requests: list[str] = []
         self.next_asset_id = 900
+        # GitHub does not always surface a freshly created draft in the tag or
+        # list lookups; the by-id route always works.
+        self.list_visibility = True
 
     # -- GitHub REST ------------------------------------------------------- #
 
@@ -221,15 +225,23 @@ class Scenario:
         if mutation is not None:
             return mutation
         if "/releases/tags/" in url:
-            return Response(200, public(self.release)) if self.release else Response(
-                404, {"message": "Not Found"}
-            )
+            if self.release and self.list_visibility:
+                return Response(200, public(self.release))
+            return Response(404, {"message": "Not Found"})
         if "/releases/latest" in url:
             if self.release and not self.release.get("draft"):
                 return Response(200, public(self.release))
             return Response(404, {"message": "Not Found"})
         if "/releases?" in url:
-            return Response(200, [public(self.release)] if self.release else [])
+            if self.release and self.list_visibility:
+                return Response(200, [public(self.release)])
+            return Response(200, [])
+        if re.search(r"/releases/\d+$", url):
+            # A freshly created or mutated release is only reliably readable by id.
+            wanted = int(url.rsplit("/", 1)[-1])
+            if self.release and int(self.release["id"]) == wanted:
+                return Response(200, public(self.release))
+            return Response(404, {"message": "Not Found"})
         if "/git/matching-refs/tags/" in url:
             return Response(200, [])
         if "/releases/assets/" in url:
@@ -617,6 +629,15 @@ class PublicationTests(PublishReleaseTestCase):
     def test_publication_requires_the_trusted_repository(self):
         with self.assertRaises(publish_release.ReleaseError):
             self.run_publish(None, repository="evil/YTArk")
+
+    def test_a_freshly_created_draft_is_read_back_by_id(self):
+        """A draft that the tag/list lookups miss must still be published."""
+        scenario = Scenario(None)
+        scenario.list_visibility = False
+        result, scenario = self.run_publish(None, scenario=scenario)
+        self.assertEqual(result, 0)
+        self.assertFalse(scenario.release["draft"])
+        self.assertEqual(len(scenario.release["assets"]), len(ALL_ASSETS))
 
     def test_assets_are_uploaded_by_release_id_not_by_tag(self):
         """Drafts 404 on /releases/tags/{tag}, so uploads must use the release id."""
