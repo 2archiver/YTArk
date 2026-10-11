@@ -82,14 +82,18 @@ on an unpublished release. This bit the 2.2 release once; it is now covered by
 `test_assets_are_uploaded_by_release_id_not_by_tag`.
 
 The git tag is created and verified **before** the release, and a release whose
-tag GitHub rewrote is deleted so the next run can retry. Two failure modes made
-this necessary:
+tag GitHub rewrote is deleted and recreated after a longer settle (default 90s,
+then 180s). Three failure modes made this necessary:
 
 - GitHub silently renames a release to `untagged-<sha>` when it cannot create
   the requested tag, which breaks the immutable version binding without any
   error. Deleting a release also deletes its tag, and recreating that tag
   seconds later is what makes GitHub fall back to the synthetic name, so a
   stale draft is now **restaged in place** instead of deleted and recreated.
+- A tag that was created or moved moments before the release is created is not
+  always resolved by GitHub's release service, which then silently renames the
+  release to `untagged-<sha>`. The tag is therefore written first and given time
+  to settle before the release is created.
 - A draft that no tag lookup can find any more (because its tag was rewritten)
   is recovered by shape — the expected release name, or holding one of the
   required asset names — so an interrupted run never leaves a duplicate draft.

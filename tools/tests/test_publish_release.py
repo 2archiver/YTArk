@@ -404,6 +404,7 @@ class PublishReleaseTestCase(unittest.TestCase):
             "apksigner": "apksigner",
             "skip_static_checks": True,
             "device_test_notes": "",
+            "tag_settle_seconds": 0.0,
         }
         values.update(overrides)
         return namespace(**values)
@@ -681,6 +682,23 @@ class PublicationTests(PublishReleaseTestCase):
     def test_publication_requires_the_trusted_repository(self):
         with self.assertRaises(publish_release.ReleaseError):
             self.run_publish(None, repository="evil/YTArk")
+
+    def test_a_rewritten_tag_is_retried_then_reported(self):
+        """GitHub answering untagged-<sha> is retried once, then fails loudly."""
+        scenario = Scenario(None)
+        scenario.rewrite_tag = True
+        with self.assertRaises(publish_release.ReleaseError) as raised:
+            self.run_publish(None, scenario=scenario)
+        self.assertIn("untagged-7b746ba5cc9cc9db7e5e", str(raised.exception))
+        self.assertEqual(
+            len([call for call in scenario.calls if call[0] == "create"]), 2,
+            "the release is created again for the retry",
+        )
+        self.assertTrue(
+            [call for call in scenario.calls if call[0] == "create-tag"],
+            "the release tag is created before the release",
+        )
+        self.assertIsNone(scenario.release, "no unusable draft may be left behind")
 
     def test_a_freshly_created_draft_is_read_back_by_id(self):
         """A draft that the tag/list lookups miss must still be published."""
