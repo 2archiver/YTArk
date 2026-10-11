@@ -354,9 +354,26 @@ jobs:
           if [ -n "${YTARK_DEVICE_TEST_NOTES:-}" ]; then
             args+=(--device-test-notes "$YTARK_DEVICE_TEST_NOTES")
           fi
-          python3 tools/publish_release.py publish "${args[@]}" \
-            --aapt "$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt" \
-            --apksigner "$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner"
+          log="$RUNNER_TEMP/ytark-publish.log"
+          if ! python3 tools/publish_release.py publish "${args[@]}" \
+              --aapt "$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt" \
+              --apksigner "$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner" \
+              >"$log" 2>&1; then
+            cat "$log"
+          # Surface any publication failure as a check annotation: the reason is
+          # then visible on the run page without opening the raw job log.
+          python3 - "$log" <<'PY'
+          import sys
+
+          text = open(sys.argv[1], encoding="utf-8", errors="replace").read().strip()
+          if text:
+              for line in text.splitlines()[-15:]:
+                  safe = line.replace("%", "%25").replace("\r", " ").replace("\n", "%0A")
+                  print(f"::error title=YTArk release publication failed::{safe[:900]}")
+          PY
+            exit 1
+          fi
+          cat "$log"
 
       - name: Load release version
         run: python3 tools/validate_release.py emit-env --file "$GITHUB_ENV"
