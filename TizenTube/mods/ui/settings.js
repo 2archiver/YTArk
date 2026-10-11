@@ -15,12 +15,39 @@ import {
   buildSettingsTree, findNode, parentOf, valueText, dependencyNote, toggleDisplayValue, selectedOption,
   defaultValueText, walkTree, ytarkDisplayVersion, ytarkUpdateSubtitle,
 } from './settingsRegistry.js';
+import { installedVersionInfo, onVersionResolved } from '../features/appVersion.js';
 import { tx } from '../translations/text.js';
 
 export { ytarkDisplayVersion, ytarkUpdateSubtitle };
 
 const custom = (action, parameters) => ({ customAction: { action, parameters } });
 const POPUP_BACK = { signalAction: { signal: 'POPUP_BACK' } };
+/** Runs `action` after the modal closed (POPUP_BACK is always first). */
+const deferred = (action, parameters) => custom('YTARK_DEFERRED', { action, parameters });
+
+/**
+ * The one panel currently waiting for asynchronous metadata: its id, or null.
+ * Set only while a panel actually rendered a loading state, so a late version
+ * result can never reopen a panel the user already closed.
+ */
+let awaitingPanelId = null;
+let versionWatchInstalled = false;
+
+function watchAwaitingPanel(panelId, awaiting) {
+  awaitingPanelId = awaiting ? panelId : null;
+  if (!awaiting || versionWatchInstalled) return;
+  versionWatchInstalled = true;
+  onVersionResolved(() => {
+    const id = awaitingPanelId;
+    if (!id) return;
+    awaitingPanelId = null;
+    try {
+      showPanel(id, { update: true });
+    } catch (error) {
+      console.warn('[YTArk] The panel could not be refreshed with the resolved version:', error);
+    }
+  });
+}
 
 /** Labels for reset keys that have no row of their own. */
 const KEY_LABELS = {
@@ -171,7 +198,7 @@ export function showSettingsMenu(menuId = 'root', options = {}) {
     resolveCommand(custom('YTARK_SETTING_UNAVAILABLE', { id: node.id }));
     return null;
   }
-  if (node.type === 'panel') return showPanel(node.id);
+  if (node.type === 'panel') return showPanel(node.id, { update: !!options.update });
   if (node.type === 'link') return showSettingsMenu(node.target, options);
   if (node.type === 'toggle' || node.type === 'action') {
     const parent = parentOf(tree, node.id) || tree;
@@ -190,19 +217,41 @@ export function showSettingsMenu(menuId = 'root', options = {}) {
     if (selected) selectedIndex = node.options.indexOf(selected);
   }
   const header = node.header || { title: node.title, subtitle: node.description || '' };
+  // A menu replaces whatever panel was waiting for asynchronous metadata.
+  awaitingPanelId = null;
+  const parent = node.id === 'root' ? null : parentOf(tree, node.id);
   const onDismiss = options.returnTo === 'search'
-    ? [custom('YTARK_DEFERRED', { action: 'YTARK_SEARCH_SHOW', parameters: { update: true } })]
-    : undefined;
+    ? [deferred('YTARK_SEARCH_SHOW', { update: true })]
+    // Back from a submenu returns to its parent with focus on the row that was
+    // used, instead of dropping focus back to the top of the list.
+    : (parent ? [deferred('YTARK_MENU_SHOW', { menuId: parent.id, focusId: node.id, update: true })] : undefined);
   return showModal(header, overlayPanelItemListRenderer(rows, selectedIndex),
     node.menuId || `ytark-menu-${node.id}`, !!options.update, { onDismiss });
 }
 
-export function showPanel(id) {
+/**
+ * Render an information panel. options: { update }.
+ *
+ * Panels that depend on metadata the platform answers asynchronously (About
+ * YTArk's installed version) render a short loading state and are re-rendered
+ * in place — same `uniqueId`, `updateAction` — as soon as the value arrives, so
+ * no second panel is ever created. Back closes the panel and returns focus to
+ * the row it was opened from.
+ */
+export function showPanel(id, options = {}) {
   const tree = buildSettingsTree();
   const node = findNode(tree, id);
   if (!node || typeof node.panel !== 'function') return null;
   const panel = node.panel();
-  return showModal({ title: panel.title, subtitle: panel.subtitle }, panel.content, `ytark-panel-${node.id}`, false);
+  watchAwaitingPanel(node.id, node.versionAware === true && installedVersionInfo().loading);
+  const parent = parentOf(tree, node.id);
+  return showModal(
+    { title: panel.title, subtitle: panel.subtitle },
+    panel.content,
+    `ytark-panel-${node.id}`,
+    !!options.update,
+    { onDismiss: parent ? [deferred('YTARK_MENU_SHOW', { menuId: parent.id, focusId: node.id, update: true })] : undefined },
+  );
 }
 
 function ownerOf(node, key) {

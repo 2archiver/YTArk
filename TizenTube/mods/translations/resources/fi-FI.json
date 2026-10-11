@@ -54,7 +54,6 @@
                             "enableWWOnExit": "Ota Kuka katsoo -valikko käyttöön sovelluksesta poistuttaessa"
                         }
                     },
-                    "fixUI": "Korjaa käyttöliittymä",
                     "hqThumbnails": "Ota korkealaatuiset pikkukuvat käyttöön",
                     "longPress": "Ota pitkän painalluksen toiminnot käyttöön",
                     "shorts": "Ota Shorts käyttöön",

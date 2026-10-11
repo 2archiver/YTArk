@@ -31,6 +31,7 @@ import {
   incompatibleArchitectureMessage,
 } from './updateState.js';
 import { deriveAbiEvidence, VERDICTS } from './abiEvidence.js';
+import { installedPackageVersion, installedVersionLabel, normalizePackageVersion } from './appVersion.js';
 
 const POLL_INTERVAL_MS = 1500;
 const POLL_DEADLINE_MS = 15 * 60 * 1000;
@@ -83,14 +84,42 @@ export function makeBridge() {
   return adaptBridge(typeof window !== 'undefined' ? window[BRIDGE_NAME] : null);
 }
 
+/**
+ * The installed YTArk package version, as the platform reports it.
+ *
+ * `GetVersion()` is an asynchronous bridge call on the pinned Cobalt base, so a
+ * plain synchronous read used to yield `undefined` — or, worse, the string
+ * "[object Promise]" — which this function reported as the installed version.
+ * The value is normalized here, and when the platform has not answered, the
+ * asynchronous resolver in features/appVersion.js (which handles the callback,
+ * Promise and synchronous binding shapes) supplies it.
+ *
+ * This stays *package* metadata only: the architecture evidence and the update
+ * comparison must never be driven by this build's packaging metadata, or a
+ * device that never reported itself could be told it is armeabi-v7a.
+ */
 export function nativeInstalledVersion() {
   try {
     const getVersion = window.h5vcc && window.h5vcc.tizentube && window.h5vcc.tizentube.GetVersion;
-    if (typeof getVersion === 'function') return String(getVersion() || 'unknown');
+    if (typeof getVersion === 'function') {
+      const sync = normalizePackageVersion(String(getVersion() || ''));
+      if (sync) return sync;
+    }
   } catch (error) {
     console.warn('[YTArk Updates] Could not read the installed version:', error);
   }
-  return 'unknown';
+  return installedPackageVersion() || 'unknown';
+}
+
+/**
+ * What the panel shows as the installed version: the platform's package value
+ * when there is one, otherwise this build's packaging metadata (labelled), and
+ * only then "unknown". The latest available release is never used here.
+ */
+export function installedDisplayText(installed) {
+  const fromModel = installed ? (installed.display || installed.version || '') : '';
+  if (fromModel && fromModel !== 'unknown') return fromModel;
+  return installedVersionLabel() || 'unknown';
 }
 
 export function nativeArchitecture() {
@@ -322,7 +351,7 @@ export function createUpdateController(overrides = {}) {
   function noteLines(model) {
     const lines = [];
     const installed = model.installed;
-    lines.push(`Installed version: ${installed.display || installed.version || 'unknown'}`);
+    lines.push(`Installed version: ${installedDisplayText(installed)}`);
     if (installed.code) lines.push(`Android versionCode: ${installed.code}`);
     if (model.available) {
       lines.push(`Available stable version: ${model.available.display} (${model.available.abi})`);
@@ -382,7 +411,7 @@ export function createUpdateController(overrides = {}) {
   function factLines(model) {
     const evidence = state.evidence;
     const release = model.available || state.fallback;
-    const installed = model.installed.display || model.installed.version || 'unknown';
+    const installed = installedDisplayText(model.installed);
     const lines = [`Installed: ${installed}`];
     if (release && release.display) {
       const abiNote = release.abi ? ` (${release.abi})` : '';

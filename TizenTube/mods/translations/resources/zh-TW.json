@@ -54,7 +54,6 @@
                             "enableWWOnExit": "程式離開時顯示"
                         }
                     },
-                    "fixUI": "修復介面",
                     "hqThumbnails": "啟用高畫質縮圖",
                     "longPress": "啟用長按操作",
                     "shorts": "啟用 Shorts(短影音)",

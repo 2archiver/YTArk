@@ -54,7 +54,6 @@
                             "enableWWOnExit": "Aktivér Hvem Ser Med-menu ved Afslutning af App"
                         }
                     },
-                    "fixUI": "Reparér UI",
                     "hqThumbnails": "Aktivér Højkvalitets-thumbnails",
                     "longPress": "Aktivér handlinger ved langt tryk",
                     "shorts": "Aktivér Shorts",

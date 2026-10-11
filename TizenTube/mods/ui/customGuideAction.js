@@ -1,14 +1,20 @@
 import { configChangeEmitter, configRead, configWrite } from "../config.js";
 import getCommandExecutor from "./customCommandExecution.js";
 import { GuideEntryRenderer } from "./ytUI.js";
+import { GUIDE_SETTINGS_ACTION } from "./guideEntryActivation.js";
 import { t } from "i18next";
 
 const YTARK_GUIDE_ENTRY_MARKER = "__ytarkGuideEntry";
 
 function ytarkGuideEntry() {
+    // The entry carries its own action, not `TT_SETTINGS_SHOW`. The TV frontend
+    // resolves a guide entry's navigation endpoint when the entry is *focused*,
+    // which used to open YTArk Settings just by scrolling past it. This action
+    // is honoured only after an explicit OK/Enter or click
+    // (ui/guideEntryActivation.js), so focusing the row only highlights it.
     const entry = GuideEntryRenderer(
         t('settings.ttSettings.title'),
-        { customAction: { action: 'TT_SETTINGS_SHOW', parameters: [] } },
+        { customAction: { action: GUIDE_SETTINGS_ACTION, parameters: [] } },
         'SETTINGS'
     );
     entry[YTARK_GUIDE_ENTRY_MARKER] = true;
@@ -20,9 +26,12 @@ function ytarkGuideEntry() {
  *
  * The entry is added after the reordering and hiding passes so that hiding
  * sidebar items can never make the settings unreachable, and it is placed
- * near the top (right after Home). Toggling it off removes it on the next
- * guide load. The entry carries a marker so repeated guide loads stay
- * idempotent and so the move/hide guide-entry UI (which works from
+ * last — below every YouTube navigation entry and below YouTube's own
+ * Settings entry — so scrolling the sidebar cannot end on it by accident.
+ * It stays reachable with the remote: focusing it highlights it and OK/Enter
+ * opens exactly one YTArk Settings panel. Toggling the setting off removes it
+ * on the next guide load. The entry carries a marker so repeated guide loads
+ * stay idempotent and so the move/hide guide-entry UI (which works from
  * `originalItems`, captured before this pass) never offers to relocate it.
  */
 function applyYtarkGuideEntry(r) {
@@ -31,8 +40,15 @@ function applyYtarkGuideEntry(r) {
     for (let i = section.items.length - 1; i >= 0; i--) {
         if (section.items[i]?.[YTARK_GUIDE_ENTRY_MARKER]) section.items.splice(i, 1);
     }
+    // A re-parsed (already patched) guide must not keep the entry in the stock
+    // snapshot the move/hide UI works from either.
+    if (Array.isArray(section.originalItems)) {
+        for (let i = section.originalItems.length - 1; i >= 0; i--) {
+            if (section.originalItems[i]?.[YTARK_GUIDE_ENTRY_MARKER]) section.originalItems.splice(i, 1);
+        }
+    }
     if (configRead('enableYtarkGuideEntry') === false) return;
-    section.items.splice(1, 0, ytarkGuideEntry());
+    section.items.push(ytarkGuideEntry());
 }
 
 const origParse = JSON.parse;

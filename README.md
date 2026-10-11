@@ -12,52 +12,70 @@ native updater that always hands installation to Android for user confirmation.
 |---|---|
 | Android package | `io.github.twoarchiver.ytark` (unchanged; same signing certificate) |
 | Launcher label | `YTArk` |
-| Version | `2.4` (Android versionName `2.4.0`, release title `YTArk 2.4`) |
-| versionCode | `2040000` (above every published YTArk APK; 2.3.0 stays `2030000`) |
-| APK (the only architecture) | `YTArk-v2.4.0-armv7.apk` — `armeabi-v7a` |
-| Userscript revision | `s23` (the immutable tags `s22` and earlier are never moved) |
+| Version | `2.5` (Android versionName `2.5.0`, release title `YTArk 2.5`) |
+| versionCode | `2050000` (above every published YTArk APK; 2.4.0 stays `2040000`) |
+| APK (the only architecture) | `YTArk-v2.5.0-armv7.apk` — `armeabi-v7a` |
+| Userscript revision | `s24` (the immutable tags `s23` and earlier are never moved) |
 | Android base | TizenTubeCobalt `v2.0.2` ARMv7 APK |
 
-**YTArk 2.4 is an updater and settings release on the same TizenTubeCobalt
-`v2.0.2` base.** It is **not** a newer Cobalt engine, **not** a newer YouTube
-client, and **not** an official YouTube upgrade. It keeps the package, the
-signing certificate, stored preferences and the YouTube TV frontend (including
-the 2.3 appearance features: OLED Black, Hide channel watermark, Remove player
-dimming, settings search and Customize YouTube Settings), and adds:
+**YTArk 2.5 is a settings cleanup and UX repair release on the same
+TizenTubeCobalt `v2.0.2` base.** It is **not** a newer Cobalt engine, **not** a
+newer YouTube client, and **not** an official YouTube upgrade. It keeps the
+package, the signing certificate, the YouTube TV frontend, the 2.4 verdict-aware
+updater and the 2.3 appearance features, and it repairs what was broken or
+misleading in 2.4:
 
-- **Verdict-aware updates** (YTArk Settings → YTArk Updates): the device's
-  architecture is collected as structured evidence — the Android ABI list, the
-  running ARMv7-only build (2.1.2 and later), runtime CPU labels and bridge
-  availability are kept apart and classified as compatible, incompatible or
-  unknown. Missing, delayed or unreadable data is never read as "unsupported":
-  the release check, release notes and a **Re-detect device architecture**
-  action stay available, with the official release page and a QR code as the
-  manual route. An ARMv7 release asset is matched only on explicit compatible
-  evidence; a categorical "not compatible" message is reserved for an explicit
-  non-ARM userspace.
-- **Settings categories**: YTArk Settings is grouped into Playback, Appearance,
-  Privacy and Navigation (plus Quick Controls, Updates, About and Support). The
-  legacy "User Interface"/"Miscellaneous" root menus are gone; every setting id
-  is preserved, so settings search and saved preferences keep working.
-- **YTArk entry in the guide** (Navigation, default on): keeps YTArk Settings
-  reachable from the sidebar even when other guide entries are hidden or
-  reordered. Exactly one entry per guide load, no secret key combinations.
-- **Steadier header branding and guide handling**: the Premium wordmark keeps
-  one scoped observer per header host and restores the stock logo on detached
-  hosts, so repeated Settings opens and route changes cannot stack duplicates;
-  empty guide payloads no longer break response processing.
-- Fixes found along the way (a 64-bit-first ABI report being read as
-  "unsupported", duplicate logo mounts, an empty-guide crash, and a published
-  release re-verification failure in the release pipeline) — see
-  [`CHANGELOG.md`](CHANGELOG.md).
+- **About YTArk reports the real installed version.** `GetVersion()` is an
+  asynchronous bridge call on the pinned base, so the synchronous read in 2.4
+  produced nothing and every build said "Version unknown".
+  `features/appVersion.js` now accepts a callback, a returned Promise or a
+  synchronous string, retries on a bounded schedule while the bridge binds, and
+  falls back to packaging metadata embedded at build time
+  (`assets/buildInfo.generated.js`, generated from `release/version.properties`
+  by `tools/build_buildinfo.py`). About shows **YTArk version**, **YouTube
+  version** (only when the running frontend publishes one) and **Build details**
+  as separate fields; the update comparison and the architecture evidence keep
+  using package metadata only. Nothing reads the latest GitHub release and no
+  version label is hardcoded.
+- **The YTArk Settings entry opens only when you select it.** Focusing, hovering
+  or scrolling past the sidebar entry highlights it and does nothing else; an
+  explicit OK/Enter, click or equivalent arms a single-use activation
+  (`ui/guideEntryActivation.js`) that the entry's own action then consumes. No
+  key is prevented or swallowed, so unrelated remote input reaches the frontend
+  untouched. The entry sits **last** in the sidebar, below every YouTube entry,
+  and Back returns to the previous sidebar position with focus on the row used.
+- **OLED Black actually paints.** Nothing re-applied the managed stylesheet once
+  the TV DOM existed in 2.4, the overlay surfaces YTArk's own panels render into
+  were not covered, and the near-black default left little visible difference.
+  The theme now paints true black on the app root, browsing and search surfaces,
+  the sidebar container and the overlay/dialog surfaces, keeps the focused
+  sidebar entry visibly raised, is re-applied by a startup step, and a narrowly
+  scoped head observer (bounded to five restorations) restores the stylesheet if
+  the frontend drops it. Video, thumbnails, artwork, captions and the player
+  scrim are never targeted.
+- **One control per behaviour.** YTArk Settings is grouped into Playback,
+  Appearance, Privacy, Navigation, YTArk Updates, About YTArk and Support, and
+  the "YTArk Quick Controls" menu is dissolved: nine of its eleven rows
+  duplicated rows that already existed elsewhere, and the two that did not moved
+  to the category that describes them (Premium logo → Appearance, Hide end-screen
+  cards → Appearance › Player). The root menu states whose settings these are,
+  and YouTube's own Settings page keeps its rows.
+- **Removed controls, with a one-shot migration**: the experimental **User-Agent
+  profile** (YTArk uses the platform's own Cobalt user agent and never applies a
+  substitute string), **Presets / Undo Last Preset / Quick Quality**, and
+  **Fix UI**. Settings an applied preset had already changed stay exactly as the
+  user left them; only the retired preference keys are deleted, once
+  (`configSchemaVersion` 3), and their previous values are reported through
+  `getConfigMeta().retiredValues`.
 
 **Defaults and migration.** Fresh installations start with OLED Black, Hide
 channel watermark and Remove player dimming on (as in 2.3), and with the YTArk
-entry in the guide on. Updated installations keep every existing preference:
-the appearance options stay as chosen, the settings schema marker
-(`configSchemaVersion` 2) is unchanged, and only the new guide-entry toggle
-starts on. Google account data, cookies and other preferences are never
-touched.
+entry in the guide on. Updated installations keep every retained preference:
+the appearance options stay as chosen, and the settings schema marker moves to
+`configSchemaVersion` 3, which deletes the six retired keys
+(`userAgentProfile`, `enableFixedUI`, `tvActivePreset`, `tvLastPresetSnapshot`,
+`tvQuickQuality`, `videoPreferredCodec`) exactly once. No other YTArk preference
+is reset. Google account data, cookies and other preferences are never touched.
 
 ### Capability status
 
@@ -66,6 +84,9 @@ imply the earlier ones are complete.
 
 | Capability | Source implemented | Packaged / CI verified | Device tested |
 |---|---|---|---|
+| Installed-version resolution (About / Updates, generated build metadata) | Yes (`features/appVersion.js`, `assets/buildInfo.generated.js`, `tools/build_buildinfo.py`) | Node tests (`app-version.test.mjs`); `build_buildinfo.py --check` in `ci.yml` and `build-apk.yml` | NOT RUN |
+| Explicit activation of the YTArk guide entry (no open on focus or scroll) | Yes (`ui/guideEntryActivation.js`, `ui/customGuideAction.js`, `resolveCommand.js`) | Node tests (`guide-entry-activation.test.mjs`) | NOT RUN |
+| Removal of User-Agent profile, presets and Fix UI with a one-shot migration | Yes (`config.js`, `features/userAgentRetirement.js`) | Node tests (`settings-cleanup.test.mjs`, `config-migration.test.mjs`); retired-symbol and bundle greps in `ci.yml` | NOT RUN |
 | OLED Black theme (managed stylesheet, root class, custom colours preserved) | Yes (`ui/theme.js`, `ui/appearanceStyles.js`, `ui/themeTokens.js`) | Node tests (`appearance-theme.test.mjs`); bundle grep in `ci.yml` | NOT RUN |
 | Hide channel watermark (renderer removal + player-scoped DOM safety net) | Yes (`features/playerWatermark.js`) | Node tests (`player-watermark.test.mjs`) | NOT RUN — the current TV frontend may not draw the watermark at all |
 | Remove player dimming (scrim only, independent of idle dimming) | Yes (`ui/appearanceStyles.js`) | Node tests (`appearance-theme.test.mjs`) | NOT RUN |
@@ -103,7 +124,7 @@ and only the release page counts as published.
 ## Check the ABI first — 4K is not an ABI
 
 **4K does not select an APK architecture.** Resolution, Android version, device
-marketing name, a 64-bit CPU and a spoofed YouTube User-Agent do not determine
+marketing name and a 64-bit CPU do not determine
 which native code the Android userspace can load. A 4K TV may run 32-bit
 `armeabi-v7a` userspace, and devices with a 64-bit-capable CPU still frequently
 run a 32-bit Android userspace. The published release is ARMv7-only, so the
@@ -146,7 +167,7 @@ simply not an update target any more.
 ## Remote-friendly installation
 
 1. From the official release page, download the versioned ARMv7 APK
-   (`YTArk-v2.4.0-armv7.apk`, once published; earlier versions remain on the
+   (`YTArk-v2.5.0-armv7.apk`, once published; earlier versions remain on the
    [release page](https://github.com/2archiver/YTArk/releases)). Download `SHA256SUMS.txt` too.
 2. Verify the selected file on the computer, for example:
 
@@ -177,7 +198,7 @@ an update unless you understand that uninstalling can erase app data.
 |---|---|
 | YouTube TV frontend (feeds, search, playback) | Upstream Cobalt `v2.0.2`, kept stock |
 | Google sign-in / Continue as guest | Upstream flows, preserved; not modified by YTArk |
-| Client-side ad blocking | **On by default**, user-visible toggle in YTArk Quick Controls |
+| Client-side ad blocking | **On by default**, user-visible toggle in YTArk Settings → Privacy |
 | SponsorBlock segment skipping | **On by default**, category settings preserved |
 | DeArrow titles/thumbnails | On by default (title only unless thumbnails enabled) |
 | Quality selection | Auto default, manual ceiling; no resolution promises |
@@ -189,7 +210,7 @@ an update unless you understand that uninstalling can erase app data.
 | Changelog and What's new | Bundled history (offline), dismissible card once per installed version. Device NOT RUN |
 | Settings → YTArk Updates | Source implemented: installed version, latest stable check, plain status, official-page QR fallback, changelog link. Device NOT RUN |
 | Native updater | Source and packaged-CI verified (SHA-256, signer, ABI, manual Android installer). **Device NOT RUN; native entry pending** |
-| ARMv7 (`armeabi-v7a`) APK | **The only published architecture** from 2.1.2; 2.4.0 publishes from `main` like 2.3.0, and device acceptance stays NOT RUN until recorded |
+| ARMv7 (`armeabi-v7a`) APK | **The only published architecture** from 2.1.2; 2.5.0 publishes from `main` like 2.4.0, and device acceptance stays NOT RUN until recorded |
 | 64-bit-only Android userspace (`arm64-v8a` only) | **Not supported** by this release line; documented exclusion, no ARM64 asset |
 | Background playback, PiP, casting, downloads, system-wide ad blocking | **Not claimed** |
 
@@ -248,7 +269,7 @@ on a real TV before release acceptance.
   swoosh (master artwork and rights notes in `branding/`). The build checks the
   compiled launcher and Leanback entry.
 - Remote-accessible settings expose ad-block and SponsorBlock toggles, quality
-  selection, themes/presets, and the updater. **Ad blocking is enabled for fresh
+  selection, themes, and the updater. **Ad blocking is enabled for fresh
   installs**, but a saved user opt-out is preserved. Ad filtering is a
   client-side modification, not a guarantee that every ad is removed.
 - SponsorBlock uses its online segment service and its own saved setting; it is
@@ -258,8 +279,10 @@ on a real TV before release acceptance.
   that stream and device actually support it. The settings can report a
   requested selection and the player's reported quality, not guarantee a
   particular resolution or playback stability.
-- Native Cobalt User-Agent is the default. Experimental profiles are opt-in,
-  bounded to one reload per explicit transition, and have a reset control. A
+- The **native Cobalt User-Agent is the only one used**. The experimental
+  user-agent profiles were removed in 2.5: YTArk never builds or applies a
+  substitute string, and an installation that had chosen a profile is handed
+  back the platform user agent once (`features/userAgentRetirement.js`). A
   User-Agent is never used to choose the APK architecture.
 
 YTArk does **not** claim video downloads, background playback, picture-in-picture,
@@ -294,10 +317,10 @@ builds used a link click that could not be verified without a bridge, and it was
 removed rather than faked. Native entry from the card is therefore **native
 integration pending**. Device status: NOT RUN.
 
-**Release rules (native updater; source implemented, device NOT RUN for 2.4).**
+**Release rules (native updater; source implemented, device NOT RUN for 2.5).**
 The bundled native updater is written to check the official GitHub stable release
 over HTTPS to `api.github.com`, with a 24-hour **Later** snooze. Its periodic
-checks are **not** device-verified for 2.4 and this release does **not** advertise
+checks are **not** device-verified for 2.5 and this release does **not** advertise
 automatic update prompts. Settings → YTArk Updates runs a manual check instead. It ignores draft and prerelease entries, requires the
 published release body to confirm the same Android versionCode as the tag, and
 selects an APK matching the **installed** native ABI (4K branding is not an
@@ -355,10 +378,13 @@ is ever committed here; CI scans the tree and full history for secret material.
 - **Channel watermark:** current YouTube TV frontends may not draw the branding
   watermark at all; then "Hide channel watermark" has nothing to remove.
   Watermarks burned into the video picture cannot be removed.
-- **OLED Black** covers the YouTube TV surfaces verified by class name (browse,
-  search, account selector, sidebar, side-sheet dialogs, the app root). Surfaces
-  the frontend adds later keep YouTube's colours until supported. It is a visual
-  mode and can only save power on emissive (OLED) panels.
+- **OLED Black** covers the surfaces this build can select by class name: the app
+  root (`html`, `body`, `#container`), browse and search surfaces, the sidebar /
+  guide container, the account selector, and the side-sheet and overlay dialogs
+  the frontend renders panels into — plus YouTube's own background variables. A
+  surface whose class this build does not render keeps YouTube's colour until
+  supported; the visual check on a device is NOT RUN. It is a visual mode and can
+  only save power on emissive (OLED) panels.
 - **YouTube Settings customization** applies the next time the page loads from
   YouTube and only to sections/entries with a stable section id, entry id or
   client setting; protected account, sign-in, About, Help and YTArk entries can't
@@ -448,7 +474,18 @@ section of the release notes:
 ```sh
 python3 tools/build_changelog.py --write       # regenerate TizenTube/mods/assets/changelog.generated.js
 python3 tools/build_changelog.py --check       # what CI runs
-python3 tools/build_changelog.py release-notes --version 2.4.0
+python3 tools/build_changelog.py release-notes --version 2.5.0
+```
+
+Build metadata: About YTArk and the Updates card report the installed package
+version, and fall back to metadata embedded in the bundle (labelled as such)
+when the platform has not answered. That metadata is generated, never
+hand-written, and CI fails when it is stale:
+
+```sh
+python3 tools/build_buildinfo.py --write       # regenerate TizenTube/mods/assets/buildInfo.generated.js
+python3 tools/build_buildinfo.py --check       # what CI runs
+python3 tools/build_buildinfo.py json          # the metadata itself
 ```
 
 Python release/repacker contract tests:
@@ -462,6 +499,7 @@ python3 tools/check_no_secrets.py --history    # no key material in tree or hist
 python3 tools/fetch_premium_logo.py --verify-only --out-dir TizenTube/mods/assets
 python3 tools/build_logo_asset.py --check      # bundled wordmark matches its verified source
 python3 tools/build_changelog.py --check       # bundled changelog matches CHANGELOG.md
+python3 tools/build_buildinfo.py --check       # bundled build metadata matches version.properties
 ```
 
 A complete APK build additionally needs Java 17, Android SDK platform/build
@@ -469,7 +507,9 @@ tools, Apktool, OpenSSL, GitHub access, and the pinned public community
 keystore. Update `release/version.properties` for the next release: it is the
 only place that defines `versionName`, `displayVersion`, `versionCode`,
 `versionTag` and the immutable userscript `scriptTag` (a new revision is needed
-whenever the bundle bytes change; published tags are never moved). The
+whenever the bundle bytes change; published tags are never moved), and it feeds
+the two generated modules: run `tools/build_buildinfo.py --write` and
+`tools/build_changelog.py --write` after a bump and commit both. The
 `versionCode` follows `major * 1_000_000 + minor * 10_000 + patch * 100`, and CI
 refuses any candidate that is not above every published installable build.
 
@@ -481,7 +521,7 @@ refuses any candidate that is not above every published installable build.
 - `build-apk.yml` runs on push to `main` or manual dispatch. It builds, signs and
   package-checks the ARMv7 candidate APK, uploads it as an Actions artefact, and
   then — in the same run, in a separate job that depends on the build succeeding
-  — publishes the immutable `s23` userscript tag and the stable GitHub release
+  — publishes the immutable `s24` userscript tag and the stable GitHub release
   from those exact bytes. Only that publish job holds `contents: write`; the build
   job stays read-only and is the only job that sees the signing key.
 - `publish-release.yml` is the manual recovery path. It takes

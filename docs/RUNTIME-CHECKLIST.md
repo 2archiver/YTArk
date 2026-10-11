@@ -99,9 +99,30 @@ tests do not replace these rows.
 | 38 | YTArk Updates on a normal ARMv7 TV | Installed version and latest stable shown; "armeabi-v7a (confirmed)" after a check; the manual route names the official page and the QR scans to it | |
 | 39 | YTArk Updates with the architecture bridge empty (or a 64-bit-first report) | "Could not confirm this device's app architecture" with recovery actions — never "not compatible"; Re-detect and Check again stay selectable; release notes still open | |
 | 40 | YTArk Updates while offline / rate-limited | Honest failure text (timeout or rate limit), never "up to date"; retry offered; nothing is downloaded | |
-| 41 | Settings categories | YTArk Settings shows Playback, Appearance, Privacy, Navigation plus Quick Controls, Updates, About, Support; no "User Interface"/"Miscellaneous" root rows; every setting opens and keeps its saved value | |
-| 42 | YTArk entry in the guide | Exactly one "YTArk Settings" entry right after Home, on every guide load; turning the Navigation toggle off removes it; hiding other sidebar entries never removes access | |
+| 41 | Settings categories | YTArk Settings shows Playback, Appearance, Privacy, Navigation, YTArk Updates, About YTArk, Support; no "User Interface"/"Miscellaneous" root rows and no "YTArk Quick Controls" menu; every setting opens and keeps its saved value | |
+| 42 | YTArk entry in the guide | Exactly one "YTArk Settings" entry, last in the sidebar, on every guide load; turning the Navigation toggle off removes it; hiding other sidebar entries never removes access | |
 | 43 | Repeated Settings opens and route changes | Exactly one Premium wordmark per header host after many opens; no duplicate mounts, no blank logo slot; the stock logo returns on unpatched hosts | |
+
+## YTArk 2.5 features (settings cleanup, explicit activation, OLED repaint, installed version)
+
+Every row is **NOT RUN** until recorded on the build under test. Static and unit
+tests do not replace these rows, and a stored boolean is not proof that a theme
+painted.
+
+| # | Check | Expected | Result |
+|---|---|---|---|
+| 44 | Scroll the sidebar past **YTArk Settings** | The entry only highlights; no panel opens; focus keeps moving to the entries around it; no key is swallowed | |
+| 45 | Explicit OK/Enter on the entry | Exactly one YTArk Settings panel opens; a second OK does not open a second one; a click with a mouse/remote pointer behaves the same | |
+| 46 | Back from YTArk Settings | Returns to the previous sidebar position with focus on the entry; Back from a submenu or About returns to its parent with focus on the row used | |
+| 47 | Entry placement | The entry is last in the sidebar (below every YouTube entry) on a fresh guide load, after a route change, after a guide reload and after toggling Navigation → YTArk entry off/on | |
+| 48 | Ownership is obvious | YTArk Settings and YouTube's own Settings are visually distinguishable (labels, grouping, headings); no heading or separator is an empty selectable row; long labels stay readable and the focused row scrolls into view on long pages | |
+| 49 | Removed controls | User Agent Profile, Fix UI, Presets and Undo Last Preset appear nowhere in the tree or in settings search; no search result links into a deleted route; search still finds every retained setting | |
+| 50 | Upgrade from a real 2.4 install | Installs over 2.4 without uninstalling; sign-in/session preserved; every retained preference keeps its effective value; an install that had chosen a user-agent profile reloads at most once and then uses the platform user agent | |
+| 51 | OLED Black paints | Home/browse, sidebar, Search, Settings and supported dialogs show true black; text and icons stay readable; the focused sidebar entry is visibly distinct; thumbnails, artwork, video and captions keep their colours | |
+| 52 | OLED Black persists | The look survives route changes, reopening Settings and an app restart; turning it off restores the previous theme including any saved custom colours, without a reload | |
+| 53 | About YTArk offline | With the network off, About shows the installed version (never "Version unknown") plus separate YTArk version, YouTube version (only when the frontend publishes one) and Build details lines; a build-metadata fallback is labelled as such | |
+| 54 | Installed vs available | The Updates card's "Installed" value matches About; "Latest" stays a separate value; a pending asynchronous read shows a brief loading state and then the real version in place (no second panel) | |
+| 55 | No duplicates after heavy use | Repeated opens/closes of YTArk Settings, its submenus, About and the changelog create no duplicate panels, rows or handlers; playback, YouTube's own Settings page and the update check still work | |
 
 ## 64-bit-only userspace check (expected exclusion)
 

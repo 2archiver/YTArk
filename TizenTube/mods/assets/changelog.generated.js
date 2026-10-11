@@ -3,20 +3,98 @@
 export const YTARK_CHANGELOG = {
   "schema": 1,
   "source": "CHANGELOG.md",
-  "sourceSha256": "baae4f13c35888cabc176e5be4943235a2c90717b36dd84e8323f30da7380a37",
+  "sourceSha256": "8d31df9c346176ddbda863d76ff865fbb5b424d90912b797ec2a34e7635e9de8",
   "entries": [
     {
-      "version": "2.4.0",
-      "display": "2.4",
+      "version": "2.5.0",
+      "display": "2.5",
       "status": "unreleased",
       "date": null,
       "publishedAt": null,
+      "tag": "v2.5.0",
+      "versionCode": 2050000,
+      "scriptTag": "s24",
+      "title": "YTArk 2.5",
+      "releaseUrl": null,
+      "facts": "Not yet published. Planned tag v2.5.0 · versionCode 2050000 · userscript s24 · one ARMv7 APK (armeabi-v7a) on TizenTubeCobalt v2.0.2. The publication date is recorded on the GitHub release when the release workflow publishes this build.",
+      "summary": "Settings cleanup and UX repair: the removed controls are gone everywhere, the settings entry opens only when it is selected, OLED Black actually paints, and About reports the real installed version. Same package identity (io.github.twoarchiver.ytark), signing certificate, ARMv7 base and YouTube TV frontend as 2.4.",
+      "sections": [
+        {
+          "heading": "Added",
+          "items": [
+            "Installed-version resolution (features/appVersion.js). The installed YTArk package version is read through the platform bridge in the asynchronous shape the pinned Cobalt base really uses — callback, returned Promise or synchronous string — with bounded retries while the bridge binds late. This build's packaging metadata is embedded at build time (tools/build_buildinfo.py writes TizenTube/mods/assets/buildInfo.generated.js from release/version.properties) and is used as a labelled fallback, so a release build can always state its own version offline. Nothing derives the installed version from the latest GitHub release, from the YouTube frontend version or from a hardcoded label, and no network access is involved.",
+            "Separated About fields: \"YTArk version\", \"YouTube version\" (only when the running frontend publishes a recognizable client version) and \"Build details\" (versionName · versionCode · userscript tag · Android base tag) as their own lines, plus a \"Read the installed version again\" row while the platform has not answered. The panel re-renders in place — same popup id, updateAction — when the version arrives, so no second panel is created.",
+            "Explicit activation for the settings entry (ui/guideEntryActivation.js). An OK/Enter keydown or a click arms a single-use activation; the entry's own action is honoured only while one is armed. Both the frontend's command path and YTArk's own fallback open through one per-activation token.",
+            "Regression tests for the cleanup, the version path, the activation gate and OLED coverage."
+          ]
+        },
+        {
+          "heading": "Changed",
+          "items": [
+            "YTArk Settings categories are now Playback, Appearance, Privacy, Navigation, YTArk Updates, About YTArk and Support. The \"YTArk Quick Controls\" menu is dissolved: nine of its eleven rows duplicated rows that already existed elsewhere in the tree (theme, quality, related videos, guide entry, YouTube Settings layout, Shorts, previews), and the two that did not are moved to the category that describes them — Premium logo to Appearance, Hide end-screen cards to Appearance › Player. Every retained preference now has exactly one control.",
+            "The settings entry sits last in the sidebar, below every YouTube entry, and opens only on an explicit selection. Focusing, hovering or scrolling past it highlights it and does nothing else; no key is prevented or stopped, so unrelated remote input reaches the frontend untouched. Any other command the resolver sees (a modal Back button, a browse endpoint) spends the activation, so an OK used elsewhere cannot leak into a later focus event.",
+            "Back restores focus: leaving a YTArk submenu or panel returns to its parent with focus on the row that was used; Back from the root still returns to the previous sidebar position.",
+            "OLED Black now paints the app backdrop (html, body, #container), the browsing and search surfaces, the overlay/dialog surfaces the frontend renders YTArk's own panels into, and YouTube's own background variables. The focused sidebar entry is kept on a raised near-black (#262626) so selection stays visible against true black; the frontend's own focus pills are untouched. The theme is re-applied once the TV DOM exists (a startup step in ui/ui.js) and a narrowly scoped head observer restores the managed stylesheet if the frontend drops it, bounded to five restorations instead of scanning forever.",
+            "The root menu says whose settings these are: \"YTArk's own playback, appearance, privacy and update settings for this YouTube TV app\". YouTube's own Settings page keeps its rows, and \"Customize YouTube Settings\" stays in Navigation; no upstream account or privacy control was moved into the YTArk tree.",
+            "The Updates card reads the installed version through the same resolver as About and labels a build-metadata fallback as such. The architecture evidence and the update comparison keep using package metadata only, so build metadata can never fabricate an armeabi-v7a verdict.",
+            "\"What's new\" now waits for the asynchronous installed-version read instead of skipping the session, and never uses build metadata to claim an update was installed.",
+            "The one part of \"Fix UI\" that did real work — the frontend's long-press switch — is folded into normal UI initialization and follows the enableLongPress preference."
+          ]
+        },
+        {
+          "heading": "Removed",
+          "items": [
+            "User-Agent profile: the control, its descriptions, search entries, device profiles, the reset action and the userAgentProfile preference (features/userAgentSpoofing.js is gone). YTArk uses the platform's own Cobalt user agent and never builds or applies a substitute string. Installations that had chosen an experimental profile are migrated once (features/userAgentRetirement.js): the bridge is asked for its built-in user agent again (ResetUserAgent(), or the empty override), the legacy markers are cleared, and a one-shot marker prevents any repeat or reload loop. Installations that never chose a profile make no bridge call and reload nothing.",
+            "Presets, Undo Last Preset and Quick Quality: features/tvControls.js, the TV_APPLY_PRESET, TV_UNDO_PRESET and TV_SET_QUALITY actions, and the tvActivePreset, tvLastPresetSnapshot and tvQuickQuality preferences. Settings an applied preset had already changed stay exactly as the user left them — nothing is rolled back and no section is reset. SponsorBlock's \"Undo last manual skip\" and the per-section reset actions are untouched.",
+            "Fix UI: the enableFixedUI preference, its row, its search entries and the observer that stripped the frontend's app-quality-root body class. It only flipped YouTube's own animation and quality switches and defaulted to off on this build.",
+            "The retired videoPreferredCodec preference (its value is copied to preferredVideoCodec, which the player reads, before it is dropped), the fixUI label in all 32 translation files, and the stale \"quick access\" search alias of the guide entry."
+          ]
+        },
+        {
+          "heading": "Defaults and migration",
+          "items": [
+            "Settings schema 3. The retired keys are deleted from the stored configuration exactly once, and their previous values are reported through getConfigMeta().retiredValues so the user-agent retirement can finish its own cleanup. Every retained preference keeps its value; account, cookie and session storage is never read or written by the migration, and no other YTArk preference is reset.",
+            "Fresh installations are unchanged apart from the removed controls."
+          ]
+        },
+        {
+          "heading": "Fixed",
+          "items": [
+            "About YTArk reported \"Version unknown\" on every 2.4 build. GetVersion() is an asynchronous bridge call on the pinned base (h5vcc_tizentube.mojom declares GetVersion() as an asynchronous method answering with a version string, and the Java side returns the installed package's versionName), so the synchronous read produced nothing the strict version pattern accepted. The same defect made the Updates card report an unknown installed version, and a Promise-returning binding could be stringified into that card as \"[object Promise]\".",
+            "YTArk Settings opened while scrolling the sidebar. The injected guide entry carried TT_SETTINGS_SHOW as its navigationEndpoint, and the frontend resolves a guide entry's endpoint when the entry receives focus — which is how the sidebar browses. The entry now carries an action that is honoured only after an explicit activation.",
+            "OLED Black had no visible effect. Nothing re-applied the managed stylesheet once the TV DOM existed (updateStyle() ran only from the removed Quick Controls initialization and on preference changes), the frontend can drop injected head nodes, the overlay surfaces YTArk's own panels render into were not covered, and the near-black default left little visible difference.",
+            "Duplicate registrations: two rows wrote preferredVideoQuality and two wrote enableYtarkGuideEntry/ytSettingsLayout, so a change in one place could be shown stale in another."
+          ]
+        },
+        {
+          "heading": "Known limitations",
+          "items": [
+            "OLED Black styles the surfaces this build can reliably select. The overlay/dialog selectors follow the frontend's own naming convention, proven by the classes ui/ui.css already styles on device; a surface whose class this build does not render keeps YouTube's own colour. No rule targets video, images, thumbnails, artwork, captions or the player scrim, and no original style is permanently rewritten — turning OLED off restores the saved colours.",
+            "Whether a given frontend build resolves the guide entry's endpoint on focus or on OK cannot be observed from this repository; both paths are handled, and the bottom placement means a focus-resolving build still cannot open settings by scrolling alone.",
+            "When the platform never answers the version read, About reports this build's packaging metadata labelled \"(build metadata)\" instead of claiming package metadata, and the update comparison stays conservative."
+          ]
+        },
+        {
+          "heading": "Validation",
+          "items": [
+            "Automated: the userscript unit and integration tests (Node), the Python release, repacker, build-metadata and changelog tests, and the native updater Java contract tests.",
+            "NOT RUN on a physical TV: the visual OLED check on Home, the sidebar and Settings; remote OK/Back behaviour on the settings entry; the installed-version read on a device; and the upgrade path from a 2.4 installation. They stay tracked as NOT RUN in docs/RUNTIME-CHECKLIST.md and docs/DEVICE-ACCEPTANCE.md until a device run is recorded."
+          ]
+        }
+      ]
+    },
+    {
+      "version": "2.4.0",
+      "display": "2.4",
+      "status": "published",
+      "date": "2026-10-11",
+      "publishedAt": "2026-10-11T20:38Z",
       "tag": "v2.4.0",
       "versionCode": 2040000,
       "scriptTag": "s23",
       "title": "YTArk 2.4",
-      "releaseUrl": null,
-      "facts": "Not yet published. Planned tag v2.4.0 · versionCode 2040000 · userscript s23 · one ARMv7 APK (armeabi-v7a) on TizenTubeCobalt v2.0.2. The publication date is recorded on the GitHub release when the release workflow publishes this build.",
+      "releaseUrl": "https://github.com/2archiver/YTArk/releases/tag/v2.4.0",
+      "facts": "Published 2026-10-11 20:38 UTC as YTArk 2.4 · tag v2.4.0 · versionCode 2040000 · userscript s23 · one ARMv7 APK",
       "summary": "A safer updater and a tidier settings home. Same package, signing certificate, ARMv7 base and YouTube TV frontend as 2.3.",
       "sections": [
         {

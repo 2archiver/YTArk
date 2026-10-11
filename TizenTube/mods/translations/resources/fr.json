@@ -57,7 +57,6 @@
                             "enableWWOnExit": "Activer le menu Qui regarde à la fermeture de l'application"
                         }
                     },
-                    "fixUI": "Corriger l'interface utilisateur",
                     "hqThumbnails": "Activer les miniatures haute qualité",
                     "longPress": "Activer les actions par appui long",
                     "shorts": "Activer les Shorts",

@@ -1,7 +1,7 @@
 # YTArk feature inventory (regression checklist)
 
 Derived from the current source (`TizenTube/mods/config.js` defaults and
-`TizenTube/mods/features`, `ui`, `resolveCommand.js`) for the 2.4.0 candidate.
+`TizenTube/mods/features`, `ui`, `resolveCommand.js`) for the 2.5.0 candidate.
 "Code" means the feature is implemented in the bundled userscript and covered by
 a source-level test where noted. "Device" means a physical TV run is recorded;
 **no device run has been recorded for this candidate**, so every device column is
@@ -11,7 +11,7 @@ Base: TizenTubeCobalt `v2.0.2` (Cobalt runtime and YouTube TV frontend are the
 upstream ones, unchanged). YTArk adds the userscript layer and native updater.
 The complete version history is in [`CHANGELOG.md`](../CHANGELOG.md).
 
-## 2.4.0 candidate: what each claim is backed by
+## 2.5.0 candidate: what each claim is backed by
 
 Three separate columns, never merged. **Source implemented** means the code exists
 in this repository. **Packaged / CI verified** means a named CI gate or the candidate
@@ -20,12 +20,15 @@ APK. Only the first two can be true before a device run.
 
 | Claim | Source implemented | Packaged / CI verified | Device tested |
 |---|---|---|---|
-| Version 2.4.0 / versionCode 2040000 / `v2.4.0` / `s23` metadata | Yes (`release/version.properties`) | `ci.yml` grep checks, `validate_release.py`, release contract tests | NOT RUN |
+| Version 2.5.0 / versionCode 2050000 / `v2.5.0` / `s24` metadata | Yes (`release/version.properties`, generated `assets/buildInfo.generated.js`) | `ci.yml` grep checks, `build_buildinfo.py --check`, `validate_release.py`, release contract tests | NOT RUN |
+| Installed-version resolution for About and Updates (async bridge read, bounded retries, labelled build-metadata fallback) | Yes (`features/appVersion.js`, `features/updater.js`) | `app-version.test.mjs`, `updates-settings.test.mjs`; `build_buildinfo.py --check` in `ci.yml` and `build-apk.yml` | NOT RUN |
+| Guide entry opens only on an explicit activation (focus/scroll cannot open it; entry last; Back restores focus) | Yes (`ui/guideEntryActivation.js`, `ui/customGuideAction.js`, `resolveCommand.js`) | `guide-entry-activation.test.mjs`, `guide-entry.test.mjs` | NOT RUN |
+| User-Agent profile, presets/undo and Fix UI removed; retired keys migrated once | Yes (`config.js` `RETIRED_KEYS`, `features/userAgentRetirement.js`) | `settings-cleanup.test.mjs`, `config-migration.test.mjs`, `branding-guest-ua.test.mjs`; retired-symbol and bundle greps in `ci.yml` | NOT RUN |
 | Verdict-aware updater check (compatible / incompatible / unknown evidence, manual route + recovery) | Yes (`features/abiEvidence.js`, `features/updater.js`, `features/updateState.js`) | `abi-evidence.test.mjs`, `updates-settings.test.mjs`, `update-state.test.mjs` | NOT RUN |
-| Settings categories (Playback, Appearance, Privacy, Navigation) with preserved setting ids | Yes (`ui/settingsRegistry.js`) | `settings-search.test.mjs`, `guide-entry.test.mjs` | NOT RUN |
-| YTArk entry in the guide (default on, one per guide load, survives hiding/reordering) | Yes (`ui/customGuideAction.js`) | `guide-entry.test.mjs` | NOT RUN |
+| Settings categories (Playback, Appearance, Privacy, Navigation, YTArk Updates, About YTArk, Support) with one control per preference | Yes (`ui/settingsRegistry.js`) | `settings-search.test.mjs`, `settings-cleanup.test.mjs`, `guide-entry.test.mjs` | NOT RUN |
+| YTArk entry in the guide (default on, last in the sidebar, one per guide load, survives hiding/reordering) | Yes (`ui/customGuideAction.js`) | `guide-entry.test.mjs`, `guide-entry-activation.test.mjs` | NOT RUN |
 | Premium wordmark lifecycle (scoped observers, restored detached hosts, no duplicate mounts) | Yes (`features/premiumBranding.js`) | `premium-branding-lifecycle.test.mjs`, `premium-branding-a11y.test.mjs` | NOT RUN |
-| OLED Black theme; custom colours preserved; Premium wordmark composition | Yes (`ui/theme.js`, `ui/appearanceStyles.js`, `ui/themeTokens.js`) | `appearance-theme.test.mjs`; bundle grep | NOT RUN |
+| OLED Black theme (painted by a startup step, restored if the frontend drops it); custom colours preserved; Premium wordmark composition | Yes (`ui/theme.js`, `ui/appearanceStyles.js`, `ui/themeTokens.js`, `ui/ui.js`) | `appearance-theme.test.mjs`; bundle grep | NOT RUN |
 | Remove player dimming (scrim only; idle dimming independent) | Yes (`ui/appearanceStyles.js`) | `appearance-theme.test.mjs` | NOT RUN |
 | Hide channel watermark (renderer removal, recoverable original, player-scoped DOM net) | Yes (`features/playerWatermark.js`, `features/adblock.js`) | `player-watermark.test.mjs`; bundle grep | NOT RUN |
 | Shared settings registry; Search settings; D-pad/IME text entry | Yes (`ui/settingsRegistry.js`, `ui/settings.js`, `ui/settingsSearch.js`, `ui/textEntryOverlay.js`) | `settings-search.test.mjs`, `lifecycle.test.mjs` | NOT RUN |
@@ -80,15 +83,15 @@ reproducibility result verified for the released artefacts.
 | 12 | Auto frame rate (opt-in) | OFF | `features/autoFrameRate.js` | — | NOT RUN |
 | 13 | Picture-in-picture entry (when system feature present) | per device | `resolveCommand.js` | — | NOT RUN |
 | 14 | Video queuing | per feature | `features/videoQueuing.js` | — | NOT RUN |
-| 15 | Chapters, previous/next, long press, Shorts toggle | ON | `ui/chapters.js`, `config.js` | — | NOT RUN |
+| 15 | Chapters, previous/next, long press (initialized with the UI since 2.5, follows `enableLongPress`), Shorts toggle | ON | `ui/chapters.js`, `ui/ui.js`, `config.js` | — | NOT RUN |
 | 16 | Hide watched videos, end-screen cards | OFF | `config.js` | — | NOT RUN |
 | 17 | Clock overlay (opt-in) | OFF | `ui/clock.js` | — | NOT RUN |
 | 18 | Screen dimming (opt-in) | OFF | `config.js` | — | NOT RUN |
 | 19 | Sidebar customisation | per config | `ui/sidebarModification.js` | — | NOT RUN |
-| 20 | Experimental user-agent profiles | `native` | `features/userAgentSpoofing.js` | `branding-guest-ua.test.mjs` | NOT RUN |
-| 21 | TV controls and quick presets | per preset | `features/tvControls.js`, `ui/settings.js` | `tv-controls.test.mjs` | NOT RUN |
+| 20 | Platform Cobalt user agent only (the experimental profile control was removed in 2.5; a one-shot retirement hands the platform agent back) | platform default | `features/userAgentRetirement.js` | `branding-guest-ua.test.mjs`, `settings-cleanup.test.mjs` | NOT RUN |
+| 21 | Guide entry activation gate (explicit OK/Enter or click; no open on focus, hover or scroll) | armed by input only | `ui/guideEntryActivation.js`, `ui/customGuideAction.js` | `guide-entry-activation.test.mjs` | NOT RUN |
 | 22 | YTArk Settings (remote-accessible) | — | `ui/settings.js`, `ui/customYTSettings.js` | `updates-settings.test.mjs` | NOT RUN |
-| 23 | About YTArk and support QR codes | — | `ui/settings.js` | — | NOT RUN |
+| 23 | About YTArk (YTArk version, YouTube version, Build details) and support QR codes | installed version, else labelled build metadata | `ui/settingsRegistry.js` (`aboutPanel`), `features/appVersion.js`, `assets/buildInfo.generated.js` | `app-version.test.mjs`, `settings-cleanup.test.mjs` | NOT RUN |
 | 24 | YTArk Updates card and native updater | check ON (`enableUpdater`) | `features/updater.js`, `updateState.js`, `android-updater/` | `update-state.test.mjs` (26), `updates-settings.test.mjs` (13), Java contract tests in CI | NOT RUN |
 | 25 | Translations (32 locales, YTArk wording; new 2.3 strings in English with i18next fallback) | — | `translations/resources/*.json`, `translations/text.js` | — | NOT RUN |
 | 26 | OLED Black theme | OLED for fresh installs, YouTube default after an update | `ui/theme.js`, `ui/appearanceStyles.js`, `ui/themeTokens.js` | `appearance-theme.test.mjs` | NOT RUN |
@@ -98,6 +101,7 @@ reproducibility result verified for the released artefacts.
 | 30 | Customize YouTube Settings | stock layout | `features/ytSettingsLayout.js`, `ui/ytSettingsEditor.js` | `yt-settings-layout.test.mjs` | NOT RUN |
 | 31 | Changelog reader and What's new card | card once per update | `ui/changelogReader.js`, `features/whatsNew.js`, `CHANGELOG.md` | `changelog-whats-new.test.mjs`, `test_build_changelog.py` | NOT RUN |
 | 32 | Section resets with scoped confirmation | — | `ui/settings.js` | `settings-search.test.mjs` | NOT RUN |
+| 33 | Removed in 2.5: user-agent profiles, presets / Undo Last Preset / Quick Quality, Fix UI, `videoPreferredCodec` | gone | `config.js` (`RETIRED_KEYS`) | `settings-cleanup.test.mjs`, `config-migration.test.mjs` | n/a |
 
 ## Storage, preferences and data
 
@@ -117,6 +121,19 @@ All existing keys are kept; malformed values are repaired to their defaults
 instead of being reset wholesale, and Google/YouTube storage is never read or
 written (only the existence of YouTube's own key is checked to tell a fresh
 install from an upgrade).
+
+**Migration (2.5.0).** The schema marker moves to `configSchemaVersion` 3.
+The six retired keys (`userAgentProfile`, `enableFixedUI`, `tvActivePreset`,
+`tvLastPresetSnapshot`, `tvQuickQuality`, `videoPreferredCodec`) are deleted
+exactly once on the first launch of 2.5, and `videoPreferredCodec` is copied
+into `preferredVideoCodec` (the key the player reads) before it is dropped.
+Their previous values are reported through `getConfigMeta().retired` /
+`.retiredValues` so `features/userAgentRetirement.js` can hand the platform
+user agent back once and set the one-shot `ytark-user-agent-retired` marker
+(a separate `localStorage` key, so a repeat migration or a reload loop is
+impossible). Every retained preference keeps its value — nothing an applied
+preset had changed is rolled back and no section is reset — and Google/YouTube
+account, cookie and session storage is never read or written.
 
 | New key | Purpose |
 |---|---|

@@ -13,6 +13,7 @@ import {
 } from './settingsSearch.js';
 import { showChangelog, showChangelogVersion, showChangelogNote, showReleaseQr } from './changelogReader.js';
 import { dismissWhatsNew } from '../features/whatsNew.js';
+import { startVersionResolution } from '../features/appVersion.js';
 import {
   showYtSettingsEditor, showYtSettingsSection, moveYtSettingsSection, toggleYtSettingsSection,
   showYtSettingsRows, showYtSettingsRow, toggleYtSettingsRowPin, toggleYtSettingsRowHidden,
@@ -37,7 +38,14 @@ export function handleYtarkAction(action, parameters) {
       showSettingsMenu(p.menuId || 'root', { focusId: p.focusId, update: !!p.update, returnTo: p.returnTo });
       return true;
     case 'YTARK_PANEL_SHOW':
-      showPanel(p.id);
+      showPanel(p.id, { update: !!p.update });
+      return true;
+    case 'YTARK_VERSION_REREAD':
+      // Ask the platform for the installed package metadata again and show the
+      // About panel in place. This never invents a version: it either gets the
+      // installed one or keeps reporting this build's packaging metadata.
+      startVersionResolution({ force: true });
+      defer(() => showPanel('about', { update: true }));
       return true;
     case 'YTARK_SETTING_UNAVAILABLE': {
       const node = findNode(buildSettingsTree(), p.id);
@@ -92,7 +100,7 @@ export function handleYtarkAction(action, parameters) {
     case 'YTARK_WHATS_NEW_DISMISS':
       dismissWhatsNew();
       if (p.refresh === 'changelog') showChangelog({ update: true });
-      else showSettingsMenu('root', { update: true, focusId: 'quickControls' });
+      else showSettingsMenu('root', { update: true, focusId: 'search' });
       return true;
     case 'YTARK_YTS_EDITOR':
       showYtSettingsEditor({ update: !!p.update, focusId: p.focusId });

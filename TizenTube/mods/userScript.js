@@ -2,7 +2,8 @@ import initPatches from "./features/standaloneUserscript.js";
 if (window.location.hostname === 'localhost') {
     initPatches();
 }
-import "./features/userAgentSpoofing.js";
+import "./features/userAgentRetirement.js";
+import "./features/appVersion.js";
 import "whatwg-fetch";
 import "core-js/proposals/object-getownpropertydescriptors";
 

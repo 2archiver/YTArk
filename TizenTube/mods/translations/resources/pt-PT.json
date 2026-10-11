@@ -54,7 +54,6 @@
                             "enableWWOnExit": "Ativar menu 'Quem está a ver' ao sair da aplicação"
                         }
                     },
-                    "fixUI": "Corrigir interface",
                     "hqThumbnails": "Ativar miniaturas de alta qualidade",
                     "longPress": "Ativar ações com pressão longa",
                     "shorts": "Ativar Shorts",

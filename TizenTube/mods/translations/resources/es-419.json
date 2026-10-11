@@ -54,7 +54,6 @@
                             "enableWWOnExit": "Habilitar Menú de Quién Está Viendo al Salir de la Aplicación"
                         }
                     },
-                    "fixUI": "Arreglar UI",
                     "hqThumbnails": "Habilitar Miniaturas de Alta Calidad",
                     "longPress": "Habilitar Acciones de Pulsación Larga",
                     "shorts": "Habilitar Shorts",

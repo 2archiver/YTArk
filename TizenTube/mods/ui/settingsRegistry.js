@@ -24,8 +24,13 @@
 import { t } from 'i18next';
 import qrcode from 'qrcode-npm';
 import { configRead, configDefault } from '../config.js';
-import { PRESETS, QUALITY_LEVELS } from '../features/tvControls.js';
-import { overlayPanelItemListRenderer, scrollPaneRenderer, overlayMessageRenderer, QrCodeRenderer } from './ytUI.js';
+import {
+  installedVersionInfo, installedVersionLabel, buildDetails, youtubeFrontendVersion,
+  startVersionResolution, VERSION_SOURCES,
+} from '../features/appVersion.js';
+import {
+  overlayPanelItemListRenderer, scrollPaneRenderer, overlayMessageRenderer, QrCodeRenderer, buttonItem,
+} from './ytUI.js';
 import { tx } from '../translations/text.js';
 import { whatsNewState } from '../features/whatsNew.js';
 
@@ -52,28 +57,37 @@ export function runtimeCapabilities() {
   return {
     frameRate: !!(native && typeof native.SetFrameRate === 'function'),
     pictureInPicture: pip,
-    userAgent: !!(native && typeof native.SetUserAgent === 'function'),
+    /** True when the platform can answer "which YTArk package is installed". */
+    packageVersion: !!(native && typeof native.GetVersion === 'function'),
   };
 }
 
+/**
+ * The installed YTArk version to show: package metadata when the platform
+ * answered, this build's packaging metadata otherwise, labelled by source.
+ * Never the latest GitHub release and never the YouTube frontend version.
+ */
 export function ytarkDisplayVersion() {
-  try {
-    const getVersion = bridge() && bridge().GetVersion;
-    const version = typeof getVersion === 'function' ? String(getVersion()) : '';
-    const match = version.match(/^(\d+)\.(\d+)\.(\d+)(?:-(?:ytark|personal)\.[1-9]\d*)?$/);
-    if (match) return match[3] === '0' ? `${match[1]}.${match[2]}` : `${match[1]}.${match[2]}.${match[3]}`;
-  } catch (error) {
-    console.warn('[YTArk] Could not read display version for About YTArk:', error);
-  }
-  return 'unknown';
+  const label = installedVersionLabel();
+  return label || 'unknown';
+}
+
+/** True while the package read is still in flight (the row shows a loading state). */
+export function ytarkVersionLoading() {
+  return installedVersionInfo().loading;
 }
 
 export function ytarkUpdateSubtitle() {
-  const version = ytarkDisplayVersion();
-  if (version === 'unknown') {
+  const info = installedVersionInfo();
+  if (info.loading) {
+    return 'Reading the installed version · check the official stable release';
+  }
+  if (!info.version) {
     return 'Installed version: unknown · check the official YTArk release from here';
   }
-  return 'Installed version: ' + version + ' · check the official stable release';
+  const source = info.source === VERSION_SOURCES.package
+    ? '' : ' (build metadata)';
+  return `Installed version: ${info.display}${source} · check the official stable release`;
 }
 
 function qrFor(name, link) {
@@ -138,16 +152,46 @@ function startupDestination(id, titleKey, icon, endpoint) {
 }
 
 function aboutPanel() {
-  const version = ytarkDisplayVersion();
+  const info = installedVersionInfo();
+  const version = info.loading
+    ? tx('ytark.about.versionLoading', 'Reading the installed version…')
+    : ytarkDisplayVersion();
+  const youtube = youtubeFrontendVersion();
+  const items = [overlayMessageRenderer(`${tx('ytark.about.ytarkVersion', 'YTArk version')}: ${version}`)];
+  if (!info.loading && info.source !== VERSION_SOURCES.package) {
+    items.push(overlayMessageRenderer(tx(
+      'ytark.about.versionSource',
+      'Read from this build\'s packaging metadata: the platform did not report the installed package version.')));
+  }
+  // Only reported when the running frontend really publishes its own version;
+  // it is the YouTube TV app version, never the YTArk version.
+  if (youtube) {
+    items.push(overlayMessageRenderer(`${tx('ytark.about.youtubeVersion', 'YouTube version')}: ${youtube}`));
+  }
+  const details = buildDetails();
+  if (details) {
+    items.push(overlayMessageRenderer(`${tx('ytark.about.buildDetails', 'Build details')}: ${details}`));
+  }
+  items.push(
+    overlayMessageRenderer('YTArk is an independent Android TV application. YouTube and the YouTube TV app remain Google services.'),
+    overlayMessageRenderer('The optional YouTube Premium wordmark is a local visual only. It does not provide a subscription or account benefits.'),
+    overlayMessageRenderer('Third-party notices and source attribution are included in the release NOTICE.md, TizenTube/LICENSE, and upstream license files.'),
+    overlayMessageRenderer(tx('ytark.about.changelog', 'Version history: YTArk Settings › Changelog.')),
+  );
+  if (!info.loading && info.source !== VERSION_SOURCES.package) {
+    items.push(buttonItem(
+      {
+        title: tx('ytark.about.rereadVersion', 'Read the installed version again'),
+        subtitle: tx('ytark.about.rereadVersionDescription', 'Asks the platform for the installed YTArk package version'),
+      },
+      { icon: 'SYSTEM_UPDATE' },
+      [custom('YTARK_VERSION_REREAD', {})],
+    ));
+  }
   return {
     title: 'About YTArk',
-    subtitle: `Version ${version}`,
-    content: scrollPaneRenderer([
-      overlayMessageRenderer(`YTArk ${version} is an independent Android TV application.`),
-      overlayMessageRenderer('The optional YouTube Premium wordmark is a local visual only. It does not provide a subscription or account benefits.'),
-      overlayMessageRenderer('Third-party notices and source attribution are included in the release NOTICE.md, TizenTube/LICENSE, and upstream license files.'),
-      overlayMessageRenderer(tx('ytark.about.changelog', 'Version history: YTArk Settings › Changelog.')),
-    ]),
+    subtitle: `${tx('ytark.about.ytarkVersion', 'YTArk version')} ${version}`,
+    content: overlayPanelItemListRenderer(items, 0),
   };
 }
 
@@ -158,7 +202,7 @@ function colorsPanel() {
       focus: String(configRead('focusContainerColor')),
       route: String(configRead('routeColor')),
     }),
-    tx('ytark.appearance.colors.edit', 'Change them with the Midnight Blue and Classic Dark presets in YTArk Quick Controls, or in the colour panel opened with the remote\'s red button.'),
+    tx('ytark.appearance.colors.edit', 'Change them in the colour panel opened with the remote\'s red button, or with the focus and route colour settings.'),
     theme === 'oled'
       ? tx('ytark.appearance.colors.oled', 'OLED Black is active and draws true black instead; your colours are kept and come back with YouTube default.')
       : tx('ytark.appearance.colors.youtube', 'YouTube default is active, so these colours are in use.'),
@@ -224,140 +268,6 @@ export function buildSettingsTree() {
       command: [custom('YTARK_SEARCH_OPEN', {})],
     },
     ...whatsNewNodes(),
-    {
-      id: 'quickControls',
-      type: 'menu',
-      title: 'YTArk Quick Controls',
-      description: 'Presets, themes & quick quality',
-      icon: 'TV',
-      menuId: 'tt-tv-quick-controls',
-      keywords: ['quick', 'presets', 'shortcuts'],
-      header: { title: 'YTArk Quick Controls', subtitle: 'Presets, themes & quick quality' },
-      children: [
-        {
-          id: 'quickControls.presets',
-          type: 'menu',
-          title: 'Presets',
-          description: 'One-tap configurations',
-          icon: 'STAR',
-          menuId: 'tt-tv-presets',
-          keywords: ['clean tv', 'midnight blue', 'classic dark', 'preset'],
-          header: { title: 'Presets', subtitle: 'One-tap configurations' },
-          children: Object.entries(PRESETS).map(([key, preset]) => ({
-            id: `quickControls.presets.${key}`,
-            type: 'action',
-            title: preset.label,
-            description: preset.description,
-            icon: key === 'cleanTV' ? 'VISIBILITY_OFF' : key === 'midnightBlue' ? 'LENS_BLUE' : 'DARK_THEME',
-            keywords: ['preset'],
-            command: [custom('TV_APPLY_PRESET', key)],
-          })),
-        },
-        {
-          id: 'quickControls.undoPreset',
-          type: 'action',
-          title: 'Undo Last Preset',
-          description: 'Revert the most recently applied preset',
-          icon: 'UNDO',
-          keywords: ['undo', 'revert', 'preset'],
-          command: [custom('TV_UNDO_PRESET', [])],
-        },
-        {
-          id: 'quickControls.quality',
-          type: 'choice',
-          title: 'Quick Quality',
-          description: 'Preferred playback quality ceiling',
-          icon: 'VIDEO_QUALITY',
-          key: 'preferredVideoQuality',
-          menuId: 'tt-tv-quick-quality',
-          keywords: ['quality', 'resolution', '4k', 'hd', '1080p', '720p', '2160p'],
-          header: {
-            title: 'Quick Quality',
-            subtitle: `Selected: ${quality.selected || configRead('preferredVideoQuality')}; actual: ${quality.actual || 'not reported by player'}`,
-          },
-          options: QUALITY_LEVELS.map(level => ({
-            id: `quickControls.quality.${level}`,
-            title: level === 'auto' ? 'Auto' : `${level}p`,
-            icon: level === 'auto' ? 'PLAY_CIRCLE' : 'VIDEO_QUALITY',
-            value: level === 'auto' ? 'auto' : `${level}p`,
-          })),
-        },
-        {
-          id: 'quickControls.premiumLogo',
-          type: 'toggle',
-          title: 'Premium logo (cosmetic)',
-          description: 'Local wordmark only; it never grants or claims a paid YouTube subscription.',
-          icon: 'VIDEO_YOUTUBE',
-          key: 'enablePremiumLogo',
-          keywords: ['premium', 'logo', 'wordmark', 'header', 'branding'],
-        },
-        {
-          id: 'quickControls.userAgent',
-          type: 'choice',
-          title: 'User-Agent profile (experimental)',
-          description: 'Native Cobalt is recommended.',
-          icon: 'SETTINGS',
-          key: 'userAgentProfile',
-          menuId: 'ytark-user-agent-profile',
-          keywords: ['user agent', 'ua', 'device profile', 'spoof'],
-          unavailable: caps.userAgent ? undefined
-            : tx('ytark.unavailable.userAgent', 'Not available here: this runtime has no Cobalt user-agent bridge.'),
-          header: { title: 'User-Agent profile', subtitle: 'Does not change the updater APK architecture.' },
-          options: [
-            { id: 'quickControls.userAgent.native', title: 'Native Cobalt (recommended)', value: 'native' },
-            { id: 'quickControls.userAgent.androidTv32', title: 'Android TV 32-bit (experimental)', value: 'androidTv32' },
-            { id: 'quickControls.userAgent.androidTv64', title: 'Android TV 64-bit (experimental)', value: 'androidTv64' },
-            { id: 'quickControls.userAgent.tclTv32', title: 'TCL Android TV 32-bit (experimental)', value: 'tclTv32' },
-            { id: 'quickControls.userAgent.fireTv32', title: 'Fire TV 32-bit (experimental)', value: 'fireTv32' },
-          ],
-        },
-        {
-          id: 'quickControls.resetUserAgent',
-          type: 'action',
-          title: 'Reset User-Agent profile',
-          description: 'Recovery: restore native Cobalt behavior',
-          icon: 'UNDO',
-          keywords: ['user agent', 'reset', 'recovery'],
-          command: [custom('RESET_USER_AGENT_PROFILE')],
-        },
-        {
-          id: 'quickControls.hideShorts',
-          type: 'toggle',
-          title: 'Hide Shorts',
-          description: tx('ytark.quick.hideShorts', 'Removes Shorts shelves and tiles from feeds'),
-          icon: 'YOUTUBE_SHORTS_FILL_24',
-          key: 'enableShorts',
-          invert: true,
-          keywords: ['shorts', 'reels'],
-        },
-        {
-          id: 'quickControls.hidePreviews',
-          type: 'toggle',
-          title: 'Hide Previews',
-          description: tx('ytark.quick.hidePreviews', 'Stops video previews when a tile is focused'),
-          icon: 'VISIBILITY_OFF',
-          key: 'enablePreviews',
-          invert: true,
-          keywords: ['previews', 'autoplay previews', 'hover'],
-        },
-        {
-          id: 'quickControls.hideEndCards',
-          type: 'toggle',
-          title: 'Hide End Cards',
-          icon: 'VISIBILITY_OFF',
-          key: 'enableHideEndScreenCards',
-          keywords: ['end screen', 'end cards'],
-        },
-        {
-          id: 'quickControls.hideRelated',
-          type: 'toggle',
-          title: 'Hide Related in Player',
-          icon: 'VISIBILITY_OFF',
-          key: 'hideRelatedVideosPlayer',
-          keywords: ['related', 'suggestions', 'recommended'],
-        },
-      ],
-    },
     {
       id: 'playback',
       type: 'menu',
@@ -511,7 +421,7 @@ export function buildSettingsTree() {
       icon: 'DARK_THEME',
       menuId: 'ytark-appearance',
       keywords: ['appearance', 'look', 'theme', 'colours', 'colors'],
-      resetKeys: ['uiTheme', 'hidePlayerWatermark', 'removePlayerScrim', 'enableScreenDimming', 'dimmingTimeout', 'dimmingOpacity', 'enableHideWatchedVideos', 'hideWatchedVideosThreshold', 'hideWatchedVideosPages', 'enableClock', 'isClock12HourFormat', 'clockShowSeconds', 'clockHideWhenVideoPlaying', 'disableEnlargingThumbnails', 'enableShrinkingThumbnails', 'enableHqThumbnails', 'enableFixedUI'],
+      resetKeys: ['uiTheme', 'hidePlayerWatermark', 'removePlayerScrim', 'enableScreenDimming', 'dimmingTimeout', 'dimmingOpacity', 'enableHideWatchedVideos', 'hideWatchedVideosThreshold', 'hideWatchedVideosPages', 'enableClock', 'isClock12HourFormat', 'clockShowSeconds', 'clockHideWhenVideoPlaying', 'disableEnlargingThumbnails', 'enableShrinkingThumbnails', 'enableHqThumbnails'],
       children: [
         {
           id: 'appearance.theme',
@@ -565,6 +475,15 @@ export function buildSettingsTree() {
               keywords: ['dimming', 'dim', 'scrim', 'overlay', 'shadow', 'darken', 'darkening', 'brightness', 'controls', 'gradient'],
             },
             {
+              id: 'appearance.player.hideEndCards',
+              type: 'toggle',
+              title: tx('ytark.appearance.player.hideEndCards', 'Hide end-screen cards'),
+              description: tx('ytark.appearance.player.hideEndCardsDescription', 'Removes the clickable cards shown over the last seconds of a video.'),
+              icon: 'VISIBILITY_OFF',
+              key: 'enableHideEndScreenCards',
+              keywords: ['end screen', 'end cards', 'cards', 'overlay'],
+            },
+            {
               id: 'appearance.player.idleDimming',
               type: 'link',
               search: false,
@@ -574,6 +493,15 @@ export function buildSettingsTree() {
               icon: 'TIMER',
             },
           ],
+        },
+        {
+          id: 'appearance.premiumLogo',
+          type: 'toggle',
+          title: tx('ytark.appearance.premiumLogo.title', 'Premium logo (cosmetic)'),
+          description: tx('ytark.appearance.premiumLogo.description', 'Local wordmark only; it never grants or claims a paid YouTube subscription.'),
+          icon: 'VIDEO_YOUTUBE',
+          key: 'enablePremiumLogo',
+          keywords: ['premium', 'logo', 'wordmark', 'header', 'branding'],
         },
         {
           id: 'appearance.colors',
@@ -674,7 +602,6 @@ export function buildSettingsTree() {
             { id: 'ui.disableEnlargingThumbnails', type: 'toggle', title: t('settings.options.uiSettings.options.disableEnlargingThumbnails'), key: 'disableEnlargingThumbnails', keywords: ['thumbnails', 'enlarge', 'zoom'] },
             { id: 'ui.enableShrinkingThumbnails', type: 'toggle', title: t('settings.options.uiSettings.options.enableShrinkingThumbnails'), key: 'enableShrinkingThumbnails', keywords: ['thumbnails', 'shrink'] },
             { id: 'misc.hqThumbnails', type: 'toggle', title: t('settings.options.misc.options.hqThumbnails'), icon: 'VIDEO_QUALITY', key: 'enableHqThumbnails', keywords: ['thumbnails', 'high quality'] },
-            { id: 'misc.fixUi', type: 'toggle', title: t('settings.options.misc.options.fixUI'), icon: 'STAR', key: 'enableFixedUI', keywords: ['animations', 'fix ui', 'performance'] },
       ],
     },
     {
@@ -686,7 +613,7 @@ export function buildSettingsTree() {
       menuId: 'ytark-privacy',
       keywords: ['privacy', 'ads', 'adblock', 'sponsorblock', 'dearrow', 'filter', 'prompts'],
       header: { title: tx('ytark.categories.privacy.title', 'Privacy'), subtitle: tx('ytark.categories.privacy.description', 'Ads, content filtering and prompts') },
-      resetKeys: ['enableSponsorBlock', 'sponsorBlockManualSkips', 'enableSponsorBlockSponsor', 'enableSponsorBlockIntro', 'enableSponsorBlockOutro', 'enableSponsorBlockInteraction', 'enableSponsorBlockSelfPromo', 'enableSponsorBlockPreview', 'enableSponsorBlockFiller', 'enableSponsorBlockMusicOfftopic', 'enableSponsorBlockHighlight', 'enableSponsorBlockToasts', 'enableDeArrow', 'enableDeArrowThumbnails'],
+      resetKeys: ['enableSponsorBlock', 'sponsorBlockManualSkips', 'enableSponsorBlockSponsor', 'enableSponsorBlockIntro', 'enableSponsorBlockOutro', 'enableSponsorBlockInteraction', 'enableSponsorBlockSelfPromo', 'enableSponsorBlockPreview', 'enableSponsorBlockFiller', 'enableSponsorBlockMusicOfftopic', 'enableSponsorBlockHighlight', 'enableSponsorBlockToasts', 'enableDeArrow', 'enableDeArrowThumbnails', 'enableShorts', 'enablePreviews'],
       children: [
           {
             id: 'privacy.adBlock',
@@ -771,6 +698,30 @@ export function buildSettingsTree() {
           { id: 'dearrow.thumbnails', type: 'toggle', title: t('settings.options.dearrow.options.enableDAThumbnails'), icon: 'TV', key: 'enableDeArrowThumbnails', keywords: ['dearrow', 'thumbnails'], dependsOn: { key: 'enableDeArrow', title: t('settings.options.dearrow.options.enableDA') } },
         ],
       },
+      // Feed content filtering, relocated from the retired "YTArk Quick
+      // Controls" menu: one authoritative row per behaviour, in the category
+      // whose description already covers it ("Ads, content filtering and
+      // prompts"). The inverted labels match what turning them on does.
+      {
+        id: 'privacy.hideShorts',
+        type: 'toggle',
+        title: tx('ytark.privacy.hideShorts', 'Hide Shorts'),
+        description: tx('ytark.privacy.hideShortsDescription', 'Removes Shorts shelves and tiles from feeds'),
+        icon: 'YOUTUBE_SHORTS_FILL_24',
+        key: 'enableShorts',
+        invert: true,
+        keywords: ['shorts', 'reels', 'hide shorts', 'content filtering'],
+      },
+      {
+        id: 'privacy.hidePreviews',
+        type: 'toggle',
+        title: tx('ytark.privacy.hidePreviews', 'Hide video previews'),
+        description: tx('ytark.privacy.hidePreviewsDescription', 'Stops video previews when a tile is focused'),
+        icon: 'VISIBILITY_OFF',
+        key: 'enablePreviews',
+        invert: true,
+        keywords: ['previews', 'autoplay previews', 'hover', 'content filtering'],
+      },
           { id: 'misc.paidPromotion', type: 'toggle', title: t('settings.options.misc.options.paidPromoOverlay'), icon: 'MONEY_HAND', key: 'enablePaidPromotionOverlay', keywords: ['paid promotion', 'sponsored overlay'] },
           { id: 'misc.youThere', type: 'toggle', title: t('settings.options.misc.options.youThereRenderer'), icon: 'HELP', key: 'enableYouThereRenderer', keywords: ['still watching', 'are you there', 'pause prompt'] },
           { id: 'misc.signInReminder', type: 'toggle', title: t('settings.options.misc.options.guestSignInReminder'), key: 'enableSigninReminder', keywords: ['guest', 'sign in reminder'] },
@@ -835,10 +786,10 @@ export function buildSettingsTree() {
             id: 'nav.guideEntry',
             type: 'toggle',
             title: tx('ytark.navigation.guideEntry.title', 'YTArk entry in the guide'),
-            description: tx('ytark.navigation.guideEntry.description', 'Shows a YTArk Settings entry in the TV guide so settings stay reachable even with a minimal sidebar'),
+            description: tx('ytark.navigation.guideEntry.description', 'Adds a YTArk Settings entry at the bottom of the TV guide. Selecting it with OK opens the panel; scrolling past it only highlights it.'),
             icon: 'MENU',
             key: 'enableYtarkGuideEntry',
-            keywords: ['guide', 'sidebar', 'quick access', 'entry', 'shortcut', 'navigation'],
+            keywords: ['guide', 'sidebar', 'entry', 'shortcut', 'navigation', 'settings entry', 'bottom'],
           },
       {
         id: 'ytSettingsLayout',
@@ -898,10 +849,13 @@ export function buildSettingsTree() {
     {
       id: 'about',
       type: 'panel',
+      // Re-renders in place when the installed version arrives from the
+      // platform, so the panel never stays on a loading state.
+      versionAware: true,
       title: 'About YTArk',
-      description: `Version ${ytarkDisplayVersion()}`,
+      description: `YTArk version ${ytarkDisplayVersion()}`,
       icon: 'INFO',
-      keywords: ['about', 'version', 'licence', 'license', 'attribution'],
+      keywords: ['about', 'version', 'build', 'youtube version', 'licence', 'license', 'attribution'],
       panel: aboutPanel,
     },
     {
@@ -922,9 +876,9 @@ export function buildSettingsTree() {
     id: 'root',
     type: 'menu',
     title: 'YTArk Settings',
-    description: 'Playback, appearance, privacy and updates',
+    description: tx('ytark.root.subtitle', 'YTArk\'s own playback, appearance, privacy and update settings for this YouTube TV app'),
     menuId: 'tt-settings',
-    header: { title: 'YTArk Settings', subtitle: 'Playback, appearance, privacy and updates' },
+    header: { title: 'YTArk Settings', subtitle: tx('ytark.root.subtitle', 'YTArk\'s own playback, appearance, privacy and update settings for this YouTube TV app') },
     children,
   };
 }

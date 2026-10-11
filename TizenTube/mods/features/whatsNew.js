@@ -11,6 +11,7 @@
 
 import { configRead, configWrite, configWriteMany, LEGACY_VERSION_MARKER } from '../config.js';
 import { isNewerVersion, numericVersionKey } from './updateState.js';
+import { installedPackageVersion, onVersionResolved, VERSION_SOURCES } from './appVersion.js';
 import { YTARK_CHANGELOG } from '../assets/changelog.generated.js';
 
 const VERSION_PATTERN = /^\d+\.\d+\.\d+(?:-(?:ytark|personal)\.[1-9]\d*)?$/;
@@ -27,15 +28,29 @@ export function changelogEntryFor(version, changelog = YTARK_CHANGELOG) {
   return changelog.entries.find(entry => entry && entry.version === wanted) || null;
 }
 
+/**
+ * The installed YTArk package version, or '' when the platform has not
+ * answered yet.
+ *
+ * `GetVersion()` is asynchronous on the pinned Cobalt base, so the synchronous
+ * read below only succeeds on bindings that answer immediately; otherwise the
+ * resolver in features/appVersion.js (which handles the callback, Promise and
+ * synchronous shapes) provides the value. This build's packaging metadata is
+ * deliberately *not* used here: claiming an update was installed when only the
+ * bundle version is known would show a wrong What's new card.
+ */
 export function installedVersion() {
   try {
     const getVersion = typeof window !== 'undefined' && window.h5vcc && window.h5vcc.tizentube
       && window.h5vcc.tizentube.GetVersion;
-    if (typeof getVersion === 'function') return normalizeVersion(getVersion());
+    if (typeof getVersion === 'function') {
+      const sync = normalizeVersion(getVersion());
+      if (sync) return sync;
+    }
   } catch (error) {
     console.warn('[YTArk] Could not read the installed version:', error);
   }
-  return '';
+  return normalizeVersion(installedPackageVersion());
 }
 
 /**
@@ -100,6 +115,7 @@ export function isWatching() {
 let evaluated = false;
 let toastTimer = null;
 let waitingForRoute = null;
+let versionWaitUnsubscribe = null;
 
 function scheduleAnnouncement(announce) {
   if (typeof setTimeout !== 'function') return;
@@ -128,6 +144,22 @@ function scheduleAnnouncement(announce) {
  */
 export function initWhatsNew({ installed = installedVersion(), announce } = {}) {
   if (evaluated) return null;
+  if (!normalizeVersion(installed)) {
+    // The platform answers asynchronously: evaluate once the installed package
+    // version arrives instead of skipping this session's What's new card.
+    if (!versionWaitUnsubscribe) {
+      versionWaitUnsubscribe = onVersionResolved((info) => {
+        const resolved = info && info.source === VERSION_SOURCES.package ? normalizeVersion(info.version) : '';
+        if (!resolved || evaluated) return;
+        if (versionWaitUnsubscribe) {
+          versionWaitUnsubscribe();
+          versionWaitUnsubscribe = null;
+        }
+        initWhatsNew({ installed: resolved, announce });
+      });
+    }
+    return null;
+  }
   evaluated = true;
   const result = evaluateWhatsNew({
     installed,
@@ -142,6 +174,10 @@ export function initWhatsNew({ installed = installedVersion(), announce } = {}) 
 
 export function resetWhatsNewForTests() {
   evaluated = false;
+  if (versionWaitUnsubscribe) {
+    versionWaitUnsubscribe();
+    versionWaitUnsubscribe = null;
+  }
   if (toastTimer !== null) clearTimeout(toastTimer);
   toastTimer = null;
   if (waitingForRoute && typeof window !== 'undefined' && window.removeEventListener) {

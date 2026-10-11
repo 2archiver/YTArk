@@ -29,7 +29,7 @@ describe('fresh installation defaults', () => {
     assert.equal(config.configRead('lastSeenVersion'), '');
     // Persisted immediately: on the next launch YouTube's own storage exists,
     // and the marker keeps this install from being mistaken for an upgrade.
-    assert.equal(stored(storage).configSchemaVersion, 2);
+    assert.equal(stored(storage).configSchemaVersion, config.CONFIG_SCHEMA_VERSION);
     assert.equal(stored(storage).uiTheme, 'oled');
 
     storage['yt.leanback.default::recurring_actions'] = '{}';
@@ -62,7 +62,7 @@ describe('upgrade from YTArk 2.2 or earlier', () => {
     assert.equal(config.configRead('focusContainerColor'), '#0a1628');
     assert.deepEqual(config.configRead('sidebarContentsOrder'), ['FEwhat_to_watch', { browseId: 'UC123', title: 'Channel' }]);
     assert.equal(config.configRead('preferredVideoQuality'), '1080p');
-    assert.equal(stored(storage).configSchemaVersion, 2);
+    assert.equal(stored(storage).configSchemaVersion, config.CONFIG_SCHEMA_VERSION);
 
     // The user opts in later; the explicit choice wins on every restart.
     config.configWrite('uiTheme', 'oled');
@@ -138,9 +138,85 @@ describe('malformed saved settings', () => {
     const migrated = config.migrateConfig(null, { hasLeanbackHistory: false });
     assert.equal(migrated.freshInstall, true);
     assert.equal(migrated.config.uiTheme, 'oled');
-    const future = config.migrateConfig({ configSchemaVersion: 3, uiTheme: 'youtube' }, {});
-    assert.equal(future.config.configSchemaVersion, 3, 'a newer schema marker is never downgraded');
+    const future = config.migrateConfig({ configSchemaVersion: 99, uiTheme: 'youtube' }, {});
+    assert.equal(future.config.configSchemaVersion, 99, 'a newer schema marker is never downgraded');
     assert.equal(future.config.uiTheme, 'youtube');
+  });
+});
+
+describe('upgrade from YTArk 2.4: removed preferences are retired, nothing else moves', () => {
+  it('drops the retired keys, keeps every retained choice and reports what it retired', async () => {
+    const storage = propertyStorage({
+      [CONFIG_KEY]: JSON.stringify({
+        configSchemaVersion: 2,
+        // what a 2.4 install could have chosen
+        userAgentProfile: 'androidTv32',
+        enableFixedUI: true,
+        tvActivePreset: 'cleanTV',
+        tvLastPresetSnapshot: JSON.stringify({ presetKey: 'cleanTV', snapshot: { enableShorts: true } }),
+        tvQuickQuality: '1080',
+        videoPreferredCodec: 'vp9',
+        // and what those choices had already applied
+        enableShorts: false,
+        enablePreviews: false,
+        enableHideEndScreenCards: true,
+        hideRelatedVideosPlayer: true,
+        preferredVideoQuality: '1080p',
+        focusContainerColor: '#0a1628',
+        routeColor: '#0d1f3c',
+        uiTheme: 'oled',
+        enableAdBlock: false,
+        enablePremiumLogo: true,
+      }),
+    });
+    const config = await loadConfig(storage);
+    const meta = config.getConfigMeta();
+    assert.equal(meta.migratedFrom, 2);
+    assert.deepEqual(meta.retired.slice().sort(), [
+      'enableFixedUI', 'tvActivePreset', 'tvLastPresetSnapshot', 'tvQuickQuality',
+      'userAgentProfile', 'videoPreferredCodec',
+    ]);
+    // The removed user-agent override is reported once, so the retirement
+    // migration in features/userAgentRetirement.js can restore the platform UA.
+    assert.equal(meta.retiredValues.userAgentProfile, 'androidTv32');
+
+    const persisted = stored(storage);
+    for (const key of ['userAgentProfile', 'enableFixedUI', 'tvActivePreset', 'tvLastPresetSnapshot',
+      'tvQuickQuality', 'videoPreferredCodec']) {
+      assert.equal(Object.prototype.hasOwnProperty.call(persisted, key), false, `${key} is gone from storage`);
+    }
+    assert.equal(persisted.configSchemaVersion, config.CONFIG_SCHEMA_VERSION);
+
+    // An applied preset is not rolled back: the individual settings stay as
+    // the user left them, and so does every unrelated preference.
+    assert.equal(config.configRead('enableShorts'), false, 'no rollback of an applied configuration');
+    assert.equal(config.configRead('enablePreviews'), false);
+    assert.equal(config.configRead('enableHideEndScreenCards'), true);
+    assert.equal(config.configRead('hideRelatedVideosPlayer'), true);
+    assert.equal(config.configRead('preferredVideoQuality'), '1080p');
+    assert.equal(config.configRead('focusContainerColor'), '#0a1628');
+    assert.equal(config.configRead('routeColor'), '#0d1f3c');
+    assert.equal(config.configRead('uiTheme'), 'oled');
+    assert.equal(config.configRead('enableAdBlock'), false);
+    assert.equal(config.configRead('enablePremiumLogo'), true);
+    // The legacy codec value survives under the key the player reads.
+    assert.equal(config.configRead('preferredVideoCodec'), 'vp9');
+
+    const restarted = await loadConfig(storage);
+    assert.equal(restarted.getConfigMeta().migratedFrom, null, 'the migration ran exactly once');
+    assert.deepEqual(restarted.getConfigMeta().retired, []);
+    assert.equal(restarted.configRead('enableShorts'), false);
+  });
+
+  it('retires nothing on a fresh install and never resurrects a removed key', async () => {
+    const storage = propertyStorage();
+    const config = await loadConfig(storage);
+    assert.deepEqual(config.getConfigMeta().retired, []);
+    for (const key of ['userAgentProfile', 'enableFixedUI', 'tvActivePreset', 'tvLastPresetSnapshot',
+      'tvQuickQuality', 'videoPreferredCodec']) {
+      assert.equal(config.configKeys().includes(key), false, `${key} is not a setting any more`);
+      assert.equal(Object.prototype.hasOwnProperty.call(stored(storage), key), false, key);
+    }
   });
 });
 
