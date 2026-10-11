@@ -961,13 +961,23 @@ def edit_release(
     github: GitHub,
     release: dict[str, Any],
     *,
+    tag: str | None = None,
     title: str | None = None,
     notes_file: Path | None = None,
     draft: bool | None = None,
     prerelease: bool | None = None,
     make_latest: bool | None = None,
 ) -> None:
+    """Patch a release. ``tag`` must always be sent.
+
+    GitHub treats a PATCH on a *draft* that omits ``tag_name`` as "unbind the
+    tag": the release keeps its assets but its tag becomes a synthetic
+    ``untagged-<hash>`` that no tag lookup can resolve and that no later edit can
+    repair by omission. Every update therefore re-sends the release tag.
+    """
     fields: dict[str, Any] = {}
+    if tag is not None:
+        fields["tag_name"] = tag
     if title is not None:
         fields["name"] = title
     if notes_file is not None:
@@ -1285,9 +1295,11 @@ def publish_command(args: argparse.Namespace) -> int:
         return verify_published(github, candidate, config, args, release=release)
 
     # Refresh the draft's title and notes so the published body always carries
-    # this candidate's identity.
+    # this candidate's identity. The tag is re-sent: a PATCH that omits it
+    # unbinds the tag from a draft.
     edit_release(
         github, release,
+        tag=config["VERSION_TAG"],
         title=config["RELEASE_NAME"],
         notes_file=notes_with_identity,
     )
@@ -1309,6 +1321,7 @@ def publish_command(args: argparse.Namespace) -> int:
 
     edit_release(
         github, release, draft=False, prerelease=False, make_latest=True,
+        tag=config["VERSION_TAG"],
         title=config["RELEASE_NAME"], notes_file=notes_with_identity,
     )
     release = refresh_release(github, release)
@@ -1539,7 +1552,7 @@ def _shared_options(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--token", default=os.environ.get("GH_TOKEN", ""))
     parser.add_argument("--api-url", default=os.environ.get("GITHUB_API_URL", "https://api.github.com"))
     parser.add_argument(
-        "--tag-settle-seconds", type=float, default=90.0,
+        "--tag-settle-seconds", type=float, default=0.0,
         help="how long to let a release tag that was just created or moved settle "
              "before the release is created (GitHub rewrites the tag to "
              "untagged-<sha> when it cannot resolve it)",
