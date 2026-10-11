@@ -333,6 +333,13 @@ class GitHub:
             page += 1
         return releases
 
+    def release_by_id(self, release_id: Any) -> dict[str, Any] | None:
+        """Return a release by id; drafts are always visible on this route."""
+        payload = self.json(
+            "GET", f"/repos/{self.repository}/releases/{release_id}", allow_404=True
+        )
+        return payload if isinstance(payload, dict) and payload.get("id") else None
+
     def latest_release(self) -> dict[str, Any] | None:
         payload = self.json(
             "GET", f"/repos/{self.repository}/releases/latest", allow_404=True
@@ -803,8 +810,28 @@ def create_draft_release(
     commit: str,
     title: str,
     notes_file: Path,
-) -> None:
-    github.create_release(tag, commit, title, notes_file.read_text(encoding="utf-8"))
+) -> dict[str, Any]:
+    release = github.create_release(tag, commit, title, notes_file.read_text(encoding="utf-8"))
+    if not release.get("id"):
+        raise ReleaseError(f"Release creation for {tag} returned no release id")
+    return release
+
+
+def refresh_release(github: GitHub, release: dict[str, Any] | None) -> dict[str, Any] | None:
+    """Re-read a release by id.
+
+    A release that was just created or mutated is not guaranteed to appear in the
+    tag or list lookups immediately, but it is always readable by its id.
+    """
+    if not release:
+        return None
+    release_id = release.get("id")
+    if release_id:
+        refreshed = github.release_by_id(release_id)
+        if refreshed:
+            return refreshed
+    tag = release.get("tag_name")
+    return github.release_by_tag(tag) if tag else None
 
 
 def delete_draft(github: GitHub, release: dict[str, Any], tag: str) -> None:
@@ -1074,14 +1101,14 @@ def publish_command(args: argparse.Namespace) -> int:
                 f"Git tag {config['VERSION_TAG']} exists at {existing_tag}, not at the "
                 f"reviewed commit {args.commit}. Tags are never moved."
             )
-        create_draft_release(
+        release = create_draft_release(
             github,
             config["VERSION_TAG"],
             commit=args.commit,
             title=config["RELEASE_NAME"],
             notes_file=notes_with_identity,
         )
-        release = github.release_by_tag(config["VERSION_TAG"])
+        release = refresh_release(github, release)
         if release is None:
             raise ReleaseError(f"Draft release {config['VERSION_TAG']} was not created")
         plan = classify(release, config, head_sha=args.commit, candidate=candidate)
@@ -1103,7 +1130,7 @@ def publish_command(args: argparse.Namespace) -> int:
                 )
             to_upload.append((name, path))
         upload_assets(github, release, to_upload)
-        release = github.release_by_tag(config["VERSION_TAG"])
+        release = refresh_release(github, release)
         if release is None:
             raise ReleaseError(f"Release {config['VERSION_TAG']} disappeared after upload")
         plan = classify(release, config, head_sha=args.commit, candidate=candidate)
@@ -1111,7 +1138,7 @@ def publish_command(args: argparse.Namespace) -> int:
     if plan.action == ACTION_VERIFY_ONLY or not (release or {}).get("draft"):
         # Either it was already published (and now repaired/verified) or there was
         # nothing to do: the public state is verified below.
-        return verify_published(github, candidate, config, args)
+        return verify_published(github, candidate, config, args, release=release)
 
     # Refresh the draft's title and notes so the published body always carries
     # this candidate's identity.
@@ -1122,7 +1149,7 @@ def publish_command(args: argparse.Namespace) -> int:
     )
 
     # Verify the staged draft before it becomes public.
-    release = github.release_by_tag(config["VERSION_TAG"])
+    release = refresh_release(github, release)
     try:
         validate_release.verify_release_record(release, "draft")
     except ValueError as error:
@@ -1140,7 +1167,8 @@ def publish_command(args: argparse.Namespace) -> int:
         github, release, draft=False, prerelease=False, make_latest=True,
         title=config["RELEASE_NAME"], notes_file=notes_with_identity,
     )
-    return verify_published(github, candidate, config, args)
+    release = refresh_release(github, release)
+    return verify_published(github, candidate, config, args, release=release)
 
 
 def publish_script_tag(candidate: Candidate) -> None:
@@ -1275,10 +1303,11 @@ def verify_published(
     candidate: Candidate,
     config: dict[str, str],
     args: argparse.Namespace,
+    release: dict[str, Any] | None = None,
 ) -> int:
     """Verify the public release, then re-download and re-verify every asset."""
     tag = config["VERSION_TAG"]
-    release = github.release_by_tag(tag)
+    release = refresh_release(github, release) or github.release_by_tag(tag)
     if release is None:
         raise ReleaseError(f"Release {tag} does not exist after publication")
     latest = github.latest_release()
