@@ -7,7 +7,8 @@
 // read-only stable-release check so the page never shows a blank card or a
 // fabricated status.
 
-import { showModal, showToast, buttonItem, overlayPanelItemListRenderer, overlayMessageRenderer } from '../ui/ytUI.js';
+import { showModal, showToast, buttonItem, overlayPanelItemListRenderer, overlayMessageRenderer, QrCodeRenderer } from '../ui/ytUI.js';
+import qrcode from 'qrcode-npm';
 import {
   BRIDGE_NAME,
   buildCommand,
@@ -15,6 +16,7 @@ import {
   describeState,
   displayVersion,
   formatBytes,
+  officialReleasePageUrl,
   formatTimestamp,
   parseNativeState,
   validateReleasePayload,
@@ -88,6 +90,25 @@ export function nativeArchitecture() {
   return '';
 }
 
+const qrCache = new Map();
+
+/** Data URL of a QR code for an official https URL; '' when generation fails. */
+export function qrCodeDataUrl(url) {
+  if (qrCache.has(url)) return qrCache.get(url);
+  let dataUrl = '';
+  try {
+    const qr = qrcode.qrcode(6, 'M');
+    qr.addData(url);
+    qr.make();
+    const match = qr.createImgTag(6, 8).match(/src="([^"]+)"/);
+    dataUrl = match ? match[1] : '';
+  } catch (error) {
+    console.warn('[YTArk Updates] Could not draw the release page QR code:', error);
+  }
+  qrCache.set(url, dataUrl);
+  return dataUrl;
+}
+
 function openBestEffortDeepLink() {
   // The repacked manifest declares a `ytark://updates` VIEW/BROWSABLE activity
   // for the native screen. Chromium-based Cobalt builds do not always forward
@@ -158,6 +179,7 @@ export function createUpdateController(overrides = {}) {
     buttonItem,
     overlayPanelItemListRenderer,
     overlayMessageRenderer,
+    QrCodeRenderer,
     ...(overrides.ui || {}),
   };
   const bridge = overrides.bridge !== undefined ? adaptBridge(overrides.bridge) : makeBridge();
@@ -231,7 +253,7 @@ export function createUpdateController(overrides = {}) {
     lines.push(`Installed version: ${installed.display || installed.version || 'unknown'}`);
     if (installed.code) lines.push(`Android versionCode: ${installed.code}`);
     if (!bridge) {
-      lines.push('Download and installation run in the native YTArk updater; reload the app to connect it.');
+      lines.push('This card only checks for releases. Downloads and installation are done from the official release page below, or from the native YTArk Updates screen when it is available.');
     }
     if (model.available) {
       lines.push(`Available stable version: ${model.available.display} (${model.available.abi})`);
@@ -284,11 +306,14 @@ export function createUpdateController(overrides = {}) {
       ));
     }
     if (!bridge) {
-      items.push(ui.buttonItem(
-        { title: 'Reload the app to connect the updater', subtitle: 'Reconnect the native update engine' },
-        { icon: 'REFRESH' },
-        [{ customAction: { action: 'YTARK_UPDATE_RELOAD' } }],
-      ));
+      // Manual-install fallback: a scannable link to the official release page.
+      // The repacked build cannot connect the native engine to this card, so
+      // the page is offered instead of a reconnect control that cannot work.
+      const pageUrl = officialReleasePageUrl(model.available ? model.available.tag
+        : state.fallback ? state.fallback.tag : '');
+      items.push(ui.overlayMessageRenderer(`Official download page: ${pageUrl}`));
+      const qr = qrCodeDataUrl(pageUrl);
+      if (qr) items.push(ui.QrCodeRenderer(qr));
     }
 
     state.renderSignature = signature;
@@ -418,7 +443,7 @@ export function createUpdateController(overrides = {}) {
     const engineOnly = ['download', 'cancel', 'install', 'skip'];
     if (!bridge && engineOnly.includes(id)) {
       ui.showToast('YTArk Updates',
-        'That step runs in the native YTArk updater. Reload the app so it reconnects, then try again.');
+        'Downloads run in the native YTArk updater. Use the official download page to install manually.');
       return null;
     }
     switch (id) {

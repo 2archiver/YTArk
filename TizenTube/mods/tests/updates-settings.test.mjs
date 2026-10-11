@@ -194,14 +194,22 @@ describe('YTArk Updates card without a connected native engine', () => {
     assert.match(text, /Release notes/);
     assert.match(text, /Vector Premium wordmark/);
     assert.match(text, /Read-only release check/);
-    assert.match(text, /Download and installation run in the native YTArk updater/);
+    assert.match(text, /This card only checks for releases/);
+    assert.match(text, /Official download page: https:\/\/github\.com\/2archiver\/YTArk\/releases\/tag\/v2\.1\.2/);
+    assert.doesNotMatch(text, /Reload the app/, 'no reconnect control that cannot connect the engine');
     assert.deepEqual(actionIds(ui.modals.at(-1)), ['check', 'later', 'open']);
 
     // Without the native engine a download request must not pretend to start.
     await controller.handleAction('download');
     assert.match(ui.toasts.at(-1).subtitle, /native YTArk updater/);
-    assert.deepEqual(ui.modals.at(-1).content.items.length, 2 + 3 + 1,
-      'no download action is offered without an engine');
+    const items = ui.modals.at(-1).content.items;
+    assert.equal(items.filter(item => item.commands).length, 3,
+      'only check, later and open are offered without an engine');
+    assert.ok(items.some(item => item.text && item.text.startsWith('Official download page:')));
+    const qrItem = items.find(item => item.qrCodeRenderer);
+    assert.ok(qrItem, 'a QR code item is rendered in the fallback');
+    assert.match(qrItem.qrCodeRenderer.qrCodeImage.thumbnails[0].url, /^data:image\//,
+      'the QR code is a real image generated from the official page');
     controller.handleAction('open');
     assert.deepEqual(deepLinks, ['ytark://updates']);
     controller.dispose();
