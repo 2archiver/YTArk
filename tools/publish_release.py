@@ -1199,6 +1199,10 @@ def publish_command(args: argparse.Namespace) -> int:
             )
             release = stray
 
+    # Classify first: a run that only needs to verify an already published
+    # release may use that release's own bytes as the reference, because nothing
+    # is uploaded. Anything else needs the real build artefact.
+    preliminary = classify(release, config, head_sha=args.commit, candidate=None)
     if args.candidate_dir and args.manifest:
         candidate = load_candidate(
             Path(args.manifest),
@@ -1211,6 +1215,7 @@ def publish_command(args: argparse.Namespace) -> int:
         candidate = candidate_from_release(
             release, config, github, commit=args.commit, run_id=args.run_id,
             workdir=Path(args.workdir),
+            verify_only=preliminary.action == ACTION_VERIFY_ONLY,
         )
 
     plan = classify(release, config, head_sha=args.commit, candidate=candidate)
@@ -1397,24 +1402,32 @@ def candidate_from_release(
     commit: str,
     run_id: str,
     workdir: Path,
+    verify_only: bool = False,
 ) -> Candidate:
-    """Rebuild the candidate from a draft that already holds all of its assets."""
+    """Rebuild the candidate from a release that already holds all of its assets.
+
+    ``verify_only`` allows a *published* release to be its own reference: nothing
+    is uploaded in that case, so the run only re-downloads the public bytes and
+    checks them against the digests GitHub recorded for them. Any action that
+    would upload something still needs the real build artefact.
+    """
+    state = "published release" if not (release or {}).get("draft") else "draft"
     if release is None:
         raise ReleaseError(
             "No candidate artefact was supplied and no existing release holds one."
         )
-    if not release.get("draft"):
+    if not release.get("draft") and not verify_only:
         raise ReleaseError(
             "Refusing to treat a published release as its own candidate source; "
             "supply the verified build artefact."
         )
     identity = parse_identity(release)
-    if not identity:
+    if not identity and not verify_only:
         raise ReleaseError(
-            f"Draft {release.get('tag_name')} does not record a candidate identity; "
-            "re-run the build so the candidate artefact is available."
+            f"{state.capitalize()} {release.get('tag_name')} does not record a candidate "
+            "identity; re-run the build so the candidate artefact is available."
         )
-    if str(identity.get("commit")) != commit:
+    if identity and not verify_only and str(identity.get("commit")) != commit:
         raise ReleaseError(
             f"Draft {release.get('tag_name')} was staged from {identity.get('commit')}, "
             f"not {commit}."
@@ -1427,7 +1440,8 @@ def candidate_from_release(
         asset = assets.get(name)
         if asset is None:
             raise ReleaseError(
-                f"Draft {release.get('tag_name')} is missing {name}; a rebuild is required."
+                f"{state.capitalize()} {release.get('tag_name')} is missing {name}; "
+                "a rebuild is required."
             )
         destination = workdir / name
         github.download_asset(asset, destination)
@@ -1435,17 +1449,21 @@ def candidate_from_release(
         published = asset_sha256(asset)
         if published and digest != published:
             raise ReleaseError(
-                f"Downloaded draft asset {name} sha256 {digest} does not match the "
-                f"published digest {published}"
+                f"Downloaded {state} asset {name} sha256 {digest} does not match the "
+                f"digest GitHub recorded for it ({published})"
             )
         files[key] = CandidateFile(
             name=name, path=destination, sha256=digest, size=destination.stat().st_size
         )
-    candidate = Candidate(files=files, commit=commit, run_id=str(run_id), config=config,
-                          origin="draft-assets")
-    if not candidate.identity_matches(identity):
+    identity_commit = str((identity or {}).get("commit") or commit)
+    candidate = Candidate(
+        files=files, commit=identity_commit, run_id=str(run_id), config=config,
+        origin="release-assets" if not release.get("draft") else "draft-assets",
+    )
+    if identity and not candidate.identity_matches(identity):
         raise ReleaseConflict(
-            f"Draft {release.get('tag_name')} identity does not match its own assets."
+            f"{state.capitalize()} {release.get('tag_name')} identity does not match "
+            "its own assets."
         )
     return candidate
 

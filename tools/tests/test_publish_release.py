@@ -599,6 +599,32 @@ class PublicationTests(PublishReleaseTestCase):
         self.assertEqual(result, 0)
         self.assertEqual(scenario.calls, [])
 
+    def test_published_release_is_verified_without_the_build_artefact(self):
+        """A verify-only run has no artefact: it re-checks the public bytes only."""
+        published = release_payload(draft=False, body=identity_body(self.candidate))
+        result, scenario = self.run_publish(published, candidate_dir="", manifest="")
+        self.assertEqual(result, 0)
+        self.assertEqual(
+            [call for call in scenario.calls if call[0] in ("upload", "edit", "create")],
+            [],
+            "a complete release must not be touched",
+        )
+        self.assertEqual(len([call for call in scenario.calls if call[0] == "delete"]), 0)
+
+    def test_repair_still_refuses_to_take_bytes_from_the_release(self):
+        """Only a verify-only run may use the release as its own reference."""
+        incomplete = release_payload(
+            draft=False,
+            assets=[name for name in ALL_ASSETS if name != CONFIG["APK_ARMV7"]],
+            body=identity_body(self.candidate),
+        )
+        with self.assertRaises(publish_release.ReleaseError) as raised:
+            self.run_publish(incomplete, candidate_dir="", manifest="")
+        self.assertIn(
+            "Refusing to treat a published release as its own candidate source",
+            str(raised.exception),
+        )
+
     def test_stable_release_missing_apk_is_repaired_from_the_candidate(self):
         published = release_payload(
             draft=False, assets=[SCRIPT, SUMS, BASE_SUMS, NOTICE],
