@@ -68,7 +68,8 @@ and `repository.full_name == 2archiver/YTArk`, and unless the
 | `absent` | create a draft at the reviewed commit, upload every asset, promote | yes |
 | `draft-match` (draft carries this candidate's identity) | promote that same draft | no |
 | `draft-incomplete-match` | upload the genuinely missing assets, promote | yes |
-| `draft-mismatch` (staged from another candidate) | delete the unpublished draft, recreate, promote | yes |
+| `draft-mismatch` (staged from another candidate) | restage the unpublished draft in place (drop its staged assets, upload the verified ones, promote) | yes |
+| `draft-mismatch` with a rewritten tag (`untagged-…`) | delete that draft — it can never carry the version tag — and create a new one | yes |
 | `published-complete` | verify the public bytes and metadata; change nothing | no |
 | `published-incomplete` | upload only the missing assets from the verified candidate | yes |
 | `published-conflict` | fail with the next patch version to use; never overwrite | no |
@@ -79,6 +80,19 @@ Mutations are keyed by release **id**, never by tag: GitHub answers
 tag-keyed upload (for example `gh release upload v2.2.0 …`) cannot stage assets
 on an unpublished release. This bit the 2.2 release once; it is now covered by
 `test_assets_are_uploaded_by_release_id_not_by_tag`.
+
+The git tag is created and verified **before** the release, and a release whose
+tag GitHub rewrote is deleted so the next run can retry. Two failure modes made
+this necessary:
+
+- GitHub silently renames a release to `untagged-<sha>` when it cannot create
+  the requested tag, which breaks the immutable version binding without any
+  error. Deleting a release also deletes its tag, and recreating that tag
+  seconds later is what makes GitHub fall back to the synthetic name, so a
+  stale draft is now **restaged in place** instead of deleted and recreated.
+- A draft that no tag lookup can find any more (because its tag was rewritten)
+  is recovered by shape — the expected release name, or holding one of the
+  required asset names — so an interrupted run never leaves a duplicate draft.
 
 Rules that never change:
 

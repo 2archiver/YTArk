@@ -315,6 +315,9 @@ class GitHub:
     def delete_release(self, release_id: Any) -> None:
         self.request("DELETE", f"/repos/{self.repository}/releases/{release_id}")
 
+    def delete_asset(self, asset_id: Any) -> None:
+        self.request("DELETE", f"/repos/{self.repository}/releases/assets/{asset_id}")
+
     def upload_asset(self, release_id: Any, path: Path, name: str) -> dict[str, Any]:
         """Upload one asset by release id, streaming the file and never clobbering."""
         url = (
@@ -1140,16 +1143,46 @@ def publish_command(args: argparse.Namespace) -> int:
             raise ReleaseConflict(
                 "Refusing to replace a published release. " + plan.detail
             )
-        summarise([
-            "## Replacing an unpublished draft",
-            f"- Draft `{release.get('tag_name')}` (id {release.get('id')}) was staged from "
-            f"a different candidate: {plan.detail}",
-            "- The draft was never public, so its staged assets are discarded and "
-            "replaced with the currently verified candidate.",
-        ])
-        delete_draft(github, release, config["VERSION_TAG"])
-        release = None
-        plan = classify(None, config, head_sha=args.commit, candidate=candidate)
+        required = required_asset_names(config)
+        if release.get("tag_name") == config["VERSION_TAG"]:
+            # Reuse the draft in place. Deleting a release also deletes its tag,
+            # and recreating that tag moments later is exactly what makes GitHub
+            # fall back to a synthetic untagged-<sha> tag; a draft is never
+            # public, so its staged assets can simply be dropped and restaged.
+            stale = [asset for name, asset in release_assets(release).items()
+                     if name in required]
+            summarise([
+                "## Restaging an unpublished draft",
+                f"- Draft `{release.get('tag_name')}` (id {release.get('id')}) was staged "
+                f"from a different candidate: {plan.detail}",
+                f"- The draft was never public, so its {len(stale)} staged assets are "
+                "discarded in place and restaged from the verified candidate; the "
+                "release and its tag are kept.",
+            ])
+            for asset in stale:
+                github.delete_asset(asset["id"])
+            release = refresh_release(github, release)
+            plan = Plan(
+                state="draft-incomplete-match",
+                action=ACTION_RESUME,
+                build_needed=True,
+                release=release,
+                missing=list(required),
+                detail="The staged draft is being restaged from the verified candidate.",
+            )
+        else:
+            # The draft's tag can never become the release tag, so it is
+            # discarded and a new draft is created under the correct tag.
+            summarise([
+                "## Replacing an unpublished draft",
+                f"- Draft `{release.get('tag_name')}` (id {release.get('id')}) was staged "
+                f"from a different candidate: {plan.detail}",
+                "- The draft was never public, so its staged assets are discarded and "
+                "replaced with the currently verified candidate.",
+            ])
+            delete_draft(github, release, config["VERSION_TAG"])
+            release = None
+            plan = classify(None, config, head_sha=args.commit, candidate=candidate)
 
     if plan.action == ACTION_REPAIR:
         check_repair_compatibility(release, candidate, github, workdir=Path(args.workdir))
