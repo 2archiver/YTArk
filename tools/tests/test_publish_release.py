@@ -215,6 +215,10 @@ class Scenario:
         # GitHub does not always surface a freshly created draft in the tag or
         # list lookups; the by-id route always works.
         self.list_visibility = True
+        # tag name -> commit sha, as GitHub's git refs API would report it.
+        self.tags: dict[str, str] = {}
+        # Simulate GitHub rewriting a release tag to untagged-<sha>.
+        self.rewrite_tag = False
 
     # -- GitHub REST ------------------------------------------------------- #
 
@@ -243,7 +247,19 @@ class Scenario:
                 return Response(200, public(self.release))
             return Response(404, {"message": "Not Found"})
         if "/git/matching-refs/tags/" in url:
-            return Response(200, [])
+            wanted = urllib.parse.unquote(url.rsplit("/", 1)[-1])
+            return Response(200, [
+                {"ref": f"refs/tags/{name}", "object": {"type": "commit", "sha": sha}}
+                for name, sha in self.tags.items() if name.startswith(wanted)
+            ])
+        if "/git/ref/tags/" in url:  # singular route: one ref, or 404
+            name = urllib.parse.unquote(url.rsplit("/", 1)[-1])
+            if name in self.tags:
+                return Response(200, {
+                    "ref": f"refs/tags/{name}",
+                    "object": {"type": "commit", "sha": self.tags[name]},
+                })
+            return Response(404, {"message": "Not Found"})
         if "/releases/assets/" in url:
             asset_id = int(url.rsplit("/", 1)[-1])
             for asset in (self.release or {}).get("assets", []):
@@ -292,6 +308,7 @@ class Scenario:
             )
             self.release = release_payload(
                 draft=True, assets=[], body=body["body"], name=body["name"],
+                tag="untagged-7b746ba5cc9cc9db7e5e" if self.rewrite_tag else body["tag_name"],
             )
             return Response(201, public(self.release))
         if method == "PATCH" and "/releases/" in url:
@@ -304,8 +321,29 @@ class Scenario:
                     continue
                 self.release[key] = value
             return Response(200, public(self.release))
+        if method == "POST" and url.endswith("/git/refs"):
+            body = json.loads((request.data or b"{}").decode())
+            name = body["ref"].removeprefix("refs/tags/")
+            if name in self.tags:
+                return Response(422, {"message": "Reference already exists"})
+            self.tags[name] = body["sha"]
+            self.calls.append(["create-tag", name, body["sha"]])
+            return Response(
+                201, {"ref": body["ref"], "object": {"type": "commit", "sha": body["sha"]}}
+            )
+        if method == "PATCH" and "/git/refs/tags/" in url:
+            body = json.loads((request.data or b"{}").decode())
+            name = urllib.parse.unquote(url.rsplit("/", 1)[-1])
+            self.tags[name] = body["sha"]
+            self.calls.append(["move-tag", name, body["sha"]])
+            return Response(
+                200, {"ref": f"refs/tags/{name}", "object": {"type": "commit", "sha": body["sha"]}}
+            )
         if method == "DELETE" and "/releases/" in url:
             self.calls.append(["delete", url.rsplit("/", 1)[-1]])
+            # GitHub removes a tag that the deleted release had created.
+            if self.release:
+                self.tags.pop(self.release.get("tag_name"), None)
             self.release = None
             return Response(204, b"")
         return None
@@ -638,6 +676,30 @@ class PublicationTests(PublishReleaseTestCase):
         self.assertEqual(result, 0)
         self.assertFalse(scenario.release["draft"])
         self.assertEqual(len(scenario.release["assets"]), len(ALL_ASSETS))
+
+    def test_the_release_tag_is_created_before_the_release(self):
+        result, scenario = self.run_publish(None)
+        self.assertEqual(result, 0)
+        self.assertEqual(scenario.tags.get(CONFIG["VERSION_TAG"]), COMMIT)
+        self.assertTrue(scenario.called_with("create-tag"))
+
+    def test_a_rewritten_tag_is_rejected_and_the_draft_is_discarded(self):
+        """GitHub silently renames a release to untagged-<sha>; that must fail."""
+        scenario = Scenario(None)
+        scenario.rewrite_tag = True
+        with self.assertRaises(publish_release.ReleaseError) as raised:
+            self.run_publish(None, scenario=scenario)
+        self.assertIn("untagged-7b746ba5cc9cc9db7e5e", str(raised.exception))
+        # The unusable draft is deleted so the next run starts from scratch.
+        self.assertIsNone(scenario.release)
+
+    def test_a_stray_untagged_draft_is_recovered_and_replaced(self):
+        """A draft no tag lookup can find must still be replaced, not duplicated."""
+        stray = release_payload(tag="untagged-7b746ba5cc9cc9db7e5e", draft=True)
+        result, scenario = self.run_publish(stray)
+        self.assertEqual(result, 0)
+        self.assertFalse(scenario.release["draft"])
+        self.assertEqual(scenario.release["tag_name"], CONFIG["VERSION_TAG"])
 
     def test_assets_are_uploaded_by_release_id_not_by_tag(self):
         """Drafts 404 on /releases/tags/{tag}, so uploads must use the release id."""
