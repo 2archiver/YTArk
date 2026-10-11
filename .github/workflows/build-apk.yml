@@ -27,11 +27,61 @@ env:
   BUILD_TOOLS: "34.0.0"
 
 jobs:
+  release-guard:
+    name: Skip when this version is already published
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    if: github.repository == '2archiver/YTArk'
+    permissions:
+      contents: read
+    outputs:
+      needed: ${{ steps.check.outputs.needed }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Load release version
+        run: python3 tools/validate_release.py emit-env --file "$GITHUB_ENV"
+
+      - name: Detect an already-published release for this version tag
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          state=absent
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$VERSION_TAG" \
+              > "$RUNNER_TEMP/existing-release.json" 2>/dev/null; then
+            state="$(python3 -c 'import json,sys; print("draft" if json.load(open(sys.argv[1])).get("draft") else "published")' \
+              "$RUNNER_TEMP/existing-release.json")"
+          fi
+          echo "Existing release state for $VERSION_TAG: $state"
+          {
+            echo "## YTArk release $VERSION_TAG"
+            echo "- Configured versionCode: $VERSION_CODE"
+            echo "- Existing release state: $state"
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$state" = "published" ]; then
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+            {
+              echo "- **Nothing to build.** This version is already published; published assets and"
+              echo "  its immutable userscript tag are never rebuilt or moved."
+              echo "- Bump \`release/version.properties\` (and \`scriptTag\` when the bundle bytes change)"
+              echo "  to release again."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+            echo "- Building and validating this version." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   publish-userscript-tag:
     name: Build userscript and publish immutable tag
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    if: github.repository == '2archiver/YTArk'
+    needs: release-guard
+    if: github.repository == '2archiver/YTArk' && needs.release-guard.outputs.needed == 'true'
     permissions:
       contents: write
     outputs:
@@ -105,8 +155,10 @@ jobs:
     name: Build, package-check both APKs
     runs-on: ubuntu-latest
     timeout-minutes: 150
-    needs: publish-userscript-tag
-    if: github.repository == '2archiver/YTArk'
+    needs:
+      - release-guard
+      - publish-userscript-tag
+    if: github.repository == '2archiver/YTArk' && needs.release-guard.outputs.needed == 'true'
     permissions:
       contents: read
     steps:
@@ -290,8 +342,10 @@ jobs:
     name: Create validated draft release
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    needs: build-apk-candidates
-    if: github.repository == '2archiver/YTArk'
+    needs:
+      - release-guard
+      - build-apk-candidates
+    if: github.repository == '2archiver/YTArk' && needs.release-guard.outputs.needed == 'true'
     permissions:
       contents: write
     steps:
@@ -353,11 +407,14 @@ jobs:
     name: Promote validated candidate to stable release
     runs-on: ubuntu-latest
     timeout-minutes: 45
-    needs: publish-draft-release
+    needs:
+      - release-guard
+      - publish-draft-release
     # A manual candidate run keeps the validated draft unpublished unless
     # `publish: true` is requested; pushes to main promote as before.
     if: >-
       github.repository == '2archiver/YTArk'
+      && needs.release-guard.outputs.needed == 'true'
       && (github.event_name == 'push' || inputs.publish)
 
     permissions:
