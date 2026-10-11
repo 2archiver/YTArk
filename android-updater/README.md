@@ -11,11 +11,11 @@ replaced.
 The updater requests GitHub's canonical
 `https://api.github.com/repos/2archiver/YTArk/releases/latest` endpoint and
 accepts only releases with explicit `draft=false` and `prerelease=false` flags.
-For YTArk 2.1, the stable tag is `v2.1.0`, the release title is `YTArk 2.1`,
-the display version is `2.1`, and Android uses versionName `2.1.0` with
-versionCode `2010000`. The version code is checked against every published
+For YTArk 2.1.1, the stable tag is `v2.1.1`, the release title is `YTArk 2.1.1`,
+the display version is `2.1.1`, and Android uses versionName `2.1.1` with
+versionCode `2010100`. The version code is checked against every published
 stable release, including historical tags. Release assets are named
-`YTArk-v2.1.0-armv7.apk` and `YTArk-v2.1.0-arm64.apk`.
+`YTArk-v2.1.1-armv7.apk` and `YTArk-v2.1.1-arm64.apk`.
 
 The updater selects only the APK matching the ABI embedded in the installed
 YTArk APK. It verifies the exact official asset URL, release flags, tag and
