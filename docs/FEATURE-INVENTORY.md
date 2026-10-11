@@ -1,16 +1,17 @@
 # YTArk feature inventory (regression checklist)
 
 Derived from the current source (`TizenTube/mods/config.js` defaults and
-`TizenTube/mods/features`, `ui`, `resolveCommand.js`) on branch
-`arena/a39bb08d-ytark`. "Code" means the feature is implemented in the bundled
-userscript and covered by a source-level test where noted. "Device" means a
-physical TV run is recorded; **no device run has been recorded for this
-candidate**, so every device column is NOT RUN.
+`TizenTube/mods/features`, `ui`, `resolveCommand.js`) for the 2.3.0 candidate.
+"Code" means the feature is implemented in the bundled userscript and covered by
+a source-level test where noted. "Device" means a physical TV run is recorded;
+**no device run has been recorded for this candidate**, so every device column is
+NOT RUN.
 
 Base: TizenTubeCobalt `v2.0.2` (Cobalt runtime and YouTube TV frontend are the
 upstream ones, unchanged). YTArk adds the userscript layer and native updater.
+The complete version history is in [`CHANGELOG.md`](../CHANGELOG.md).
 
-## 2.2.0 candidate: what each claim is backed by
+## 2.3.0 candidate: what each claim is backed by
 
 Three separate columns, never merged. **Source implemented** means the code exists
 in this repository. **Packaged / CI verified** means a named CI gate or the candidate
@@ -19,11 +20,18 @@ APK. Only the first two can be true before a device run.
 
 | Claim | Source implemented | Packaged / CI verified | Device tested |
 |---|---|---|---|
-| Version 2.2.0 / versionCode 2020000 / `v2.2.0` / `s21` metadata | Yes (`release/version.properties`) | `ci.yml` grep checks, `validate_release.py`, release contract tests | NOT RUN |
+| Version 2.3.0 / versionCode 2030000 / `v2.3.0` / `s22` metadata | Yes (`release/version.properties`) | `ci.yml` grep checks, `validate_release.py`, release contract tests | NOT RUN |
+| OLED Black theme; custom colours preserved; Premium wordmark composition | Yes (`ui/theme.js`, `ui/appearanceStyles.js`, `ui/themeTokens.js`) | `appearance-theme.test.mjs`; bundle grep | NOT RUN |
+| Remove player dimming (scrim only; idle dimming independent) | Yes (`ui/appearanceStyles.js`) | `appearance-theme.test.mjs` | NOT RUN |
+| Hide channel watermark (renderer removal, recoverable original, player-scoped DOM net) | Yes (`features/playerWatermark.js`, `features/adblock.js`) | `player-watermark.test.mjs`; bundle grep | NOT RUN |
+| Shared settings registry; Search settings; D-pad/IME text entry | Yes (`ui/settingsRegistry.js`, `ui/settings.js`, `ui/settingsSearch.js`, `ui/textEntryOverlay.js`) | `settings-search.test.mjs`, `lifecycle.test.mjs` | NOT RUN |
+| Customize YouTube Settings (order/hide/pin, protected entries, restore) | Yes (`features/ytSettingsLayout.js`, `ui/ytSettingsEditor.js`, `ui/customYTSettings.js`) | `yt-settings-layout.test.mjs` | NOT RUN |
+| CHANGELOG.md, bundled reader, What's new, changelog-driven release notes | Yes (`tools/build_changelog.py`, `ui/changelogReader.js`, `features/whatsNew.js`, `tools/render_release_notes.sh`) | `build_changelog.py --check`; `test_build_changelog.py`; `changelog-whats-new.test.mjs` | NOT RUN |
+| Settings schema migration (fresh vs. upgrade defaults), malformed-value repair | Yes (`config.js`) | `config-migration.test.mjs` | NOT RUN |
 | SponsorBlock bounded lookup, strict validation, late-result discard | Yes (`features/settlementDeadline.js`, `sponsorblock*.js`) | `ci.yml` Node tests (28 SponsorBlock tests) | NOT RUN |
-| Settings → YTArk Updates card (Installed / Latest / Status / QR fallback) | Yes (`features/updater.js`, `ui/settings.js`) | Node tests (`updates-settings.test.mjs`) | NOT RUN |
+| Settings → YTArk Updates card (Installed / Latest / Status / QR fallback / changelog link) | Yes (`features/updater.js`) | Node tests (`updates-settings.test.mjs`, `changelog-whats-new.test.mjs`) | NOT RUN |
 | Bundled native updater (Java ABI and release contracts) | Yes (`android-updater/`) | `ci.yml` Java tests; DEX compiled in `build-apk.yml` | NOT RUN |
-| `ytark://updates` → native `UpdateActivity` | Manifest intent-filter declared by the repacker; **the 2.2 card does not trigger it** | `check-apk` (manifest validation) | **NOT RUN — native integration pending** |
+| `ytark://updates` → native `UpdateActivity` | Manifest intent-filter declared by the repacker; **the card does not trigger it** | `check-apk` (manifest validation) | **NOT RUN — native integration pending** |
 | ARMv7-only APK, signer, versionCode, checksums | Yes | `build-apk.yml` candidate build and `publish-release` job verify; public assets re-downloaded | NOT RUN |
 | Workflow least privilege (PR read-only, build read-only, publish job alone writes) | Yes | `tools/check_workflow_policy.py` in `ci.yml` | n/a |
 | Automatic publication from a successful `main` build; resumable repair | Yes | `tools/publish_release.py`, covered by `tools/tests/test_publish_release.py` | n/a |
@@ -78,7 +86,14 @@ reproducibility result verified for the released artefacts.
 | 22 | YTArk Settings (remote-accessible) | — | `ui/settings.js`, `ui/customYTSettings.js` | `updates-settings.test.mjs` | NOT RUN |
 | 23 | About YTArk and support QR codes | — | `ui/settings.js` | — | NOT RUN |
 | 24 | YTArk Updates card and native updater | check ON (`enableUpdater`) | `features/updater.js`, `updateState.js`, `android-updater/` | `update-state.test.mjs` (26), `updates-settings.test.mjs` (13), Java contract tests in CI | NOT RUN |
-| 25 | Translations (32 locales, YTArk wording) | — | `translations/resources/*.json` | — | NOT RUN |
+| 25 | Translations (32 locales, YTArk wording; new 2.3 strings in English with i18next fallback) | — | `translations/resources/*.json`, `translations/text.js` | — | NOT RUN |
+| 26 | OLED Black theme | OLED for fresh installs, YouTube default after an update | `ui/theme.js`, `ui/appearanceStyles.js`, `ui/themeTokens.js` | `appearance-theme.test.mjs` | NOT RUN |
+| 27 | Hide channel watermark | ON for fresh installs, OFF after an update | `features/playerWatermark.js` | `player-watermark.test.mjs` | NOT RUN |
+| 28 | Remove player dimming | ON for fresh installs, OFF after an update | `ui/appearanceStyles.js` | `appearance-theme.test.mjs` | NOT RUN |
+| 29 | Search settings | — | `ui/settingsSearch.js`, `ui/textEntryOverlay.js`, `ui/settingsRegistry.js` | `settings-search.test.mjs` | NOT RUN |
+| 30 | Customize YouTube Settings | stock layout | `features/ytSettingsLayout.js`, `ui/ytSettingsEditor.js` | `yt-settings-layout.test.mjs` | NOT RUN |
+| 31 | Changelog reader and What's new card | card once per update | `ui/changelogReader.js`, `features/whatsNew.js`, `CHANGELOG.md` | `changelog-whats-new.test.mjs`, `test_build_changelog.py` | NOT RUN |
+| 32 | Section resets with scoped confirmation | — | `ui/settings.js` | `settings-search.test.mjs` | NOT RUN |
 
 ## Storage, preferences and data
 
@@ -88,8 +103,26 @@ reproducibility result verified for the released artefacts.
 | Google / Cobalt account storage | Cobalt's app data directory, unchanged by YTArk | not verified against the APK |
 | Pending update metadata and partial downloads | app-private storage, matched to release metadata before reuse | source (`YtarkUpdater.java`) |
 
-No migration is performed by this change. The userscript configuration keeps
-its existing keys, so saved preferences are not overwritten.
+**Migration (2.3.0).** The configuration gains an explicit
+`configSchemaVersion` (2). On the first launch of 2.3 an installation with
+existing YTArk settings (or YouTube TV history) keeps its appearance —
+`uiTheme: youtube`, `hidePlayerWatermark: false`, `removePlayerScrim: false` —
+while a fresh installation starts with OLED Black and both player cleanup
+options on. The marker is written once, so explicit choices win from then on.
+All existing keys are kept; malformed values are repaired to their defaults
+instead of being reset wholesale, and Google/YouTube storage is never read or
+written (only the existence of YouTube's own key is checked to tell a fresh
+install from an upgrade).
+
+| New key | Purpose |
+|---|---|
+| `uiTheme` | `youtube` or `oled` |
+| `hidePlayerWatermark`, `removePlayerScrim` | Appearance → Player toggles |
+| `preferredVideoCodec` | Default for the key the player already read (previously missing) |
+| `ytSettingsLayout` | YouTube Settings order/hidden sections, pinned/hidden entries (stable ids) |
+| `ytSettingsCatalog` | Sections detected on the YouTube Settings page (no account identity) |
+| `lastSeenVersion`, `whatsNewVersion`, `whatsNewDismissedVersion` | What's new bookkeeping (version strings only) |
+| `configSchemaVersion` | Settings schema marker |
 
 ## Branding audit (visible strings)
 

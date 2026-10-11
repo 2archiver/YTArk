@@ -12,28 +12,54 @@ native updater that always hands installation to Android for user confirmation.
 |---|---|
 | Android package | `io.github.twoarchiver.ytark` (unchanged; same signing certificate) |
 | Launcher label | `YTArk` |
-| Version | `2.2` (Android versionName `2.2.0`, release title `YTArk 2.2`) |
-| versionCode | `2020000` (above every published YTArk APK; 2.1.2 stays `2010200`) |
-| APK (the only architecture) | `YTArk-v2.2.0-armv7.apk` — `armeabi-v7a` |
-| Userscript revision | `s21` (the immutable tag `s20` is never moved) |
+| Version | `2.3` (Android versionName `2.3.0`, release title `YTArk 2.3`) |
+| versionCode | `2030000` (above every published YTArk APK; 2.2.0 stays `2020000`) |
+| APK (the only architecture) | `YTArk-v2.3.0-armv7.apk` — `armeabi-v7a` |
+| Userscript revision | `s22` (the immutable tags `s21` and earlier are never moved) |
 | Android base | TizenTubeCobalt `v2.0.2` ARMv7 APK |
 
-**YTArk 2.2 is a maintenance and UX release on the TizenTubeCobalt `v2.0.2` base.**
-It is **not** a source-built Cobalt fork, **not** a newer Cobalt engine, **not** a
-newer YouTube client, and **not** an official YouTube upgrade. It keeps the 2.1.2
-runtime and the existing repack pipeline, and changes four things:
+**YTArk 2.3 is a feature release on the same TizenTubeCobalt `v2.0.2` base.** It
+is **not** a newer Cobalt engine, **not** a newer YouTube client, and **not** an
+official YouTube upgrade. It keeps the package, the signing certificate, stored
+preferences and the YouTube TV frontend, and adds:
 
-- SponsorBlock segment lookups have a real deadline that covers the response and
-  its body. Malformed or late results are discarded and cannot touch the playing
-  video.
-- The Settings **YTArk Updates** card shows the installed version, the latest
-  stable release and a plain status. Where this build cannot install updates
-  itself, it shows the official release page with a QR code.
-- Release tooling is retargeted to 2.2.0, and the pipeline publishes itself: a
-  successful `main` build verifies and then publishes the same verified bytes as
-  the stable GitHub release (see [`docs/RELEASE-PIPELINE.md`](docs/RELEASE-PIPELINE.md)).
-- Documentation is corrected to separate what is implemented, what CI verifies
-  and what a device has run.
+- **OLED Black theme** (YTArk Settings → Appearance → Theme): true black
+  (`#000000`) for the supported Home, Search and Subscriptions surfaces, the
+  sidebar, the YouTube Settings background, YTArk Settings, dialogs and the
+  changelog reader, through one managed stylesheet and shared design tokens.
+  Images, thumbnails, video and subtitles are never recoloured; "YouTube default"
+  brings back the previous look including saved custom colours.
+- **Hide channel watermark** (Appearance → Player): removes the clickable
+  channel branding watermark (`playerAnnotationsExpandedRenderer.featuredChannel`)
+  from player responses before the frontend reads them, with a player-scoped,
+  exact-URL safety net for a watermark already on screen. Fully reversible.
+- **Remove player dimming** (Appearance → Player): clears only the dark scrim
+  behind playback controls (`.ytLrWatchDefaultShadow`,
+  `.ytLrWatchDefault2025Shadow`, `[idomkey="shadow"]`) and keeps controls
+  readable with a light text shadow. No filter touches the video; the inactivity
+  screen dimming stays a separate setting.
+- **Search settings** at the top of YTArk Settings: every YTArk setting
+  (nested ones included) by name, description, category or alias; results show
+  the current value and breadcrumb and open the real control. D-pad keyboard,
+  suggested searches and the TV's own keyboard; searches never leave the TV.
+- **Customize YouTube Settings**: reorder/hide sections of the native YouTube
+  Settings page, pin entries into a Pinned section, hide optional entries, with
+  protected account/sign-in/About/Help/YTArk entries and a scoped "Restore
+  default layout".
+- **Changelog / What's new**: `CHANGELOG.md` is bundled for offline reading
+  from YTArk Settings and YTArk Updates; a dismissible What's new card appears
+  once per installed version after an update.
+- Fixes found along the way (inverted Hide Shorts/Hide Previews switches, the
+  codec setting's missing default, malformed-settings repair, duplicate start-up
+  initialisation, a clock timer leak, over-broad settings-page detection) — see
+  [`CHANGELOG.md`](CHANGELOG.md).
+
+**Defaults and migration.** Fresh installations start with OLED Black, Hide
+channel watermark and Remove player dimming on. Installations updated from 2.2 or
+earlier keep their current appearance: the three options stay off until chosen.
+A settings schema marker (`configSchemaVersion` 2) makes this a one-time step;
+explicit choices win afterwards, and Google account data, cookies and other
+preferences are never touched.
 
 ### Capability status
 
@@ -42,17 +68,25 @@ imply the earlier ones are complete.
 
 | Capability | Source implemented | Packaged / CI verified | Device tested |
 |---|---|---|---|
+| OLED Black theme (managed stylesheet, root class, custom colours preserved) | Yes (`ui/theme.js`, `ui/appearanceStyles.js`, `ui/themeTokens.js`) | Node tests (`appearance-theme.test.mjs`); bundle grep in `ci.yml` | NOT RUN |
+| Hide channel watermark (renderer removal + player-scoped DOM safety net) | Yes (`features/playerWatermark.js`) | Node tests (`player-watermark.test.mjs`) | NOT RUN — the current TV frontend may not draw the watermark at all |
+| Remove player dimming (scrim only, independent of idle dimming) | Yes (`ui/appearanceStyles.js`) | Node tests (`appearance-theme.test.mjs`) | NOT RUN |
+| Search settings (shared registry, local search, D-pad + IME text entry) | Yes (`ui/settingsRegistry.js`, `ui/settingsSearch.js`, `ui/textEntryOverlay.js`) | Node tests (`settings-search.test.mjs`) | NOT RUN |
+| Customize YouTube Settings (order, hide, pin, protected entries, restore) | Yes (`features/ytSettingsLayout.js`, `ui/ytSettingsEditor.js`, `ui/customYTSettings.js`) | Node tests (`yt-settings-layout.test.mjs`) | NOT RUN |
+| Changelog reader, What's new card, changelog-driven release notes | Yes (`CHANGELOG.md`, `tools/build_changelog.py`, `ui/changelogReader.js`, `features/whatsNew.js`) | `build_changelog.py --check`, Python + Node tests | NOT RUN |
+| Settings schema migration and malformed-value repair | Yes (`config.js`) | Node tests (`config-migration.test.mjs`) | NOT RUN |
 | SponsorBlock bounded lookup, strict validation, late-result discard | Yes (`TizenTube/mods/features/sponsorblock*.js`) | Node tests in `ci.yml` | NOT RUN |
-| Settings → YTArk Updates card (installed / latest / status / QR fallback) | Yes (`features/updater.js`, `ui/settings.js`) | Node tests; `ytark` userscript built in `ci.yml` | NOT RUN |
+| Settings → YTArk Updates card (installed / latest / status / QR fallback) | Yes (`features/updater.js`) | Node tests; `ytark` userscript built in `ci.yml` | NOT RUN |
 | Bundled native updater (Java: ABI check, verified download, PackageInstaller hand-off) | Yes (`android-updater/`) | Java contract tests and DEX compiled in `build-apk.yml` | **NOT RUN** — no device install or in-place update recorded |
-| `ytark://updates` → native `UpdateActivity` | Manifest intent-filter declared by the repacker; **the 2.2 card does not trigger it** | Manifest checked by `validate_release.py check-apk` | **NOT RUN — native integration pending** — whether the WebView hands this link to Android is unverified. Labelled **native integration pending** |
+| `ytark://updates` → native `UpdateActivity` | Manifest intent-filter declared by the repacker; **the card does not trigger it** | Manifest checked by `validate_release.py check-apk` | **NOT RUN — native integration pending** |
 | ARMv7-only APK, signer, versionCode, checksums | Yes (`tools/`) | Candidate build and `check-apk` in `build-apk.yml` | NOT RUN |
 | Premium header wordmark (cosmetic) | Yes (bundled vector) | Provenance, vector-only and build checks in `ci.yml` | NOT RUN |
 | Ad blocking, sign-in, playback, remote keys | Upstream v2.0.2, kept stock | Not re-tested by CI | NOT RUN |
-| Install over 2.1.2 without uninstalling; session preserved | Not a source property | Not a CI property | **NOT RUN** — see `docs/DEVICE-ACCEPTANCE.md` |
+| Install over 2.2 without uninstalling; session preserved | Not a source property | Not a CI property | **NOT RUN** — see `docs/DEVICE-ACCEPTANCE.md` |
 
-The release checklist and the 25-item feature inventory are in
-[`docs/FEATURE-INVENTORY.md`](docs/FEATURE-INVENTORY.md). The earlier 3.0 feasibility
+The full version history is in [`CHANGELOG.md`](CHANGELOG.md) (also readable in
+the app: YTArk Settings → Changelog). The release checklist and the feature
+inventory are in [`docs/FEATURE-INVENTORY.md`](docs/FEATURE-INVENTORY.md). The earlier 3.0 feasibility
 note is kept as a dated snapshot: [`docs/YTARK-3.0-FEASIBILITY.md`](docs/YTARK-3.0-FEASIBILITY.md).
 
 From 2.1.2 onwards YTArk **builds, signs, verifies and publishes exactly one
@@ -114,7 +148,7 @@ simply not an update target any more.
 ## Remote-friendly installation
 
 1. From the official release page, download the versioned ARMv7 APK
-   (`YTArk-v2.2.0-armv7.apk`, once published; 2.1.2 remains available as `YTArk-v2.1.2-armv7.apk`). Download `SHA256SUMS.txt` too.
+   (`YTArk-v2.3.0-armv7.apk`, once published; 2.2 remains available as `YTArk-v2.2.0-armv7.apk`). Download `SHA256SUMS.txt` too.
 2. Verify the selected file on the computer, for example:
 
    ```sh
@@ -149,9 +183,14 @@ an update unless you understand that uninstalling can erase app data.
 | DeArrow titles/thumbnails | On by default (title only unless thumbnails enabled) |
 | Quality selection | Auto default, manual ceiling; no resolution promises |
 | Cosmetic "YT Premium" header wordmark | **On by default**, bundled 2024 vector artwork, off-able local visual only — **never** a subscription or entitlement |
-| Settings → YTArk Updates | Source implemented: installed version, latest stable check, plain status, official-page QR fallback. Device NOT RUN |
+| OLED Black theme | **Default for fresh installs**; existing installs keep their look until chosen. Device NOT RUN |
+| Hide channel watermark / Remove player dimming | **On for fresh installs**, off after an update until chosen; independent toggles under Appearance → Player. Device NOT RUN |
+| Search settings | Every YTArk setting, local only; D-pad keyboard, suggestions and the TV keyboard. Device NOT RUN |
+| Customize YouTube Settings | Order/hide sections, pin/hide entries by stable ids; protected entries; scoped restore. Device NOT RUN |
+| Changelog and What's new | Bundled history (offline), dismissible card once per installed version. Device NOT RUN |
+| Settings → YTArk Updates | Source implemented: installed version, latest stable check, plain status, official-page QR fallback, changelog link. Device NOT RUN |
 | Native updater | Source and packaged-CI verified (SHA-256, signer, ABI, manual Android installer). **Device NOT RUN; native entry pending** |
-| ARMv7 (`armeabi-v7a`) APK | **The only published architecture** from 2.1.2; 2.2.0 is a candidate until device acceptance is recorded |
+| ARMv7 (`armeabi-v7a`) APK | **The only published architecture** from 2.1.2; 2.3.0 publishes from `main` like 2.2.0, and device acceptance stays NOT RUN until recorded |
 | 64-bit-only Android userspace (`arm64-v8a` only) | **Not supported** by this release line; documented exclusion, no ARM64 asset |
 | Background playback, PiP, casting, downloads, system-wide ad blocking | **Not claimed** |
 
@@ -243,23 +282,23 @@ Bytes shown are the bytes actually transferred; when the server sends no
 `Content-Length` the progress bar is honestly indeterminate instead of being
 filled with an invented percentage.
 
-**What YTArk Settings → YTArk Updates shows (2.2).** The card reports the
+**What YTArk Settings → YTArk Updates shows (2.2 and later).** The card reports the
 installed version, the latest stable release, and one plain status: checking,
 up to date, update available, or couldn't check. It never reports a failure as
 "up to date". When this build has no in-app install bridge, it shows the official
 release page as a QR code and URL, with the fallback text *"Check here, then
-download the ARMv7 APK from the official page."* The card's **Check again** and
-**Close** actions are the only controls. The native screen's download progress and installer hand-off are not reached from
-this card in 2.2. The repacker declares a `ytark://updates` intent-filter for the
-native `UpdateActivity`, but the 2.2 card does **not** trigger that link: earlier
+download the ARMv7 APK from the official page."* The card's **Check again**,
+**What's new and changelog** and **Close** actions are its only controls. The native screen's download progress and installer hand-off are not reached from
+this card. The repacker declares a `ytark://updates` intent-filter for the
+native `UpdateActivity`, but the card does **not** trigger that link: earlier
 builds used a link click that could not be verified without a bridge, and it was
 removed rather than faked. Native entry from the card is therefore **native
 integration pending**. Device status: NOT RUN.
 
-**Release rules (native updater; source implemented, device NOT RUN for 2.2).**
+**Release rules (native updater; source implemented, device NOT RUN for 2.3).**
 The bundled native updater is written to check the official GitHub stable release
 over HTTPS to `api.github.com`, with a 24-hour **Later** snooze. Its periodic
-checks are **not** device-verified for 2.2 and this release does **not** advertise
+checks are **not** device-verified for 2.3 and this release does **not** advertise
 automatic update prompts. Settings → YTArk Updates runs a manual check instead. It ignores draft and prerelease entries, requires the
 published release body to confirm the same Android versionCode as the tag, and
 selects an APK matching the **installed** native ABI (4K branding is not an
@@ -295,7 +334,9 @@ SponsorBlock/DeArrow (`sponsor.ajay.app` — video ID hash prefixes only),
 GitHub (update metadata and APK downloads), and jsDelivr (userscript bytes).
 Google sign-in, token refresh, playback, subscriptions, and search use the
 stock upstream YouTube TV stack over its normal Google endpoints — ad blocking
-and SponsorBlock never intercept or redirect them. The full inventory,
+and SponsorBlock never intercept or redirect them. Settings search runs
+entirely on the TV, and the YouTube Settings layout stores only stable section and
+entry ids (never account names or e-mail addresses). The full inventory,
 storage details, and honest limitations (this is **not** anonymity and it does
 **not** block Google's own tracking) are in [`docs/PRIVACY.md`](docs/PRIVACY.md).
 
@@ -312,6 +353,19 @@ is ever committed here; CI scans the tree and full history for secret material.
 
 ## Known limitations
 
+- **Channel watermark:** current YouTube TV frontends may not draw the branding
+  watermark at all; then "Hide channel watermark" has nothing to remove.
+  Watermarks burned into the video picture cannot be removed.
+- **OLED Black** covers the YouTube TV surfaces verified by class name (browse,
+  search, account selector, sidebar, side-sheet dialogs, the app root). Surfaces
+  the frontend adds later keep YouTube's colours until supported. It is a visual
+  mode and can only save power on emissive (OLED) panels.
+- **YouTube Settings customization** applies the next time the page loads from
+  YouTube and only to sections/entries with a stable section id, entry id or
+  client setting; protected account, sign-in, About, Help and YTArk entries can't
+  be hidden.
+- **Settings search typing** uses the TV's input method when it appears; the
+  built-in D-pad keyboard covers Latin letters and digits.
 - Physical Google TV acceptance (install, sign-in, playback, D-pad, same-ABI
   update) is recorded per device; source and CI checks are not hardware tests.
 - A server-side Google token invalidation or upstream auth change can require
@@ -388,6 +442,16 @@ node --test tests/*.test.mjs
 npm run build
 ```
 
+Changelog: edit [`CHANGELOG.md`](CHANGELOG.md) only, then regenerate the bundled
+reader data (CI fails when it is stale). The same file feeds the "What changed"
+section of the release notes:
+
+```sh
+python3 tools/build_changelog.py --write       # regenerate TizenTube/mods/assets/changelog.generated.js
+python3 tools/build_changelog.py --check       # what CI runs
+python3 tools/build_changelog.py release-notes --version 2.3.0
+```
+
 Python release/repacker contract tests:
 
 ```sh
@@ -398,6 +462,7 @@ python3 tools/render_launcher_art.py --check   # branding artifacts match the ge
 python3 tools/check_no_secrets.py --history    # no key material in tree or history
 python3 tools/fetch_premium_logo.py --verify-only --out-dir TizenTube/mods/assets
 python3 tools/build_logo_asset.py --check      # bundled wordmark matches its verified source
+python3 tools/build_changelog.py --check       # bundled changelog matches CHANGELOG.md
 ```
 
 A complete APK build additionally needs Java 17, Android SDK platform/build
@@ -417,7 +482,7 @@ refuses any candidate that is not above every published installable build.
 - `build-apk.yml` runs on push to `main` or manual dispatch. It builds, signs and
   package-checks the ARMv7 candidate APK, uploads it as an Actions artefact, and
   then — in the same run, in a separate job that depends on the build succeeding
-  — publishes the immutable `s21` userscript tag and the stable GitHub release
+  — publishes the immutable `s22` userscript tag and the stable GitHub release
   from those exact bytes. Only that publish job holds `contents: write`; the build
   job stays read-only and is the only job that sees the signing key.
 - `publish-release.yml` is the manual recovery path. It takes
@@ -437,8 +502,8 @@ procedure: [`docs/RELEASE-PIPELINE.md`](docs/RELEASE-PIPELINE.md).
 **Script delivery dependency.** The APK loads its script from the immutable tag
 named in `scriptTag`. The pipeline publishes that tag from the candidate's bytes
 before it promotes the release, and refuses to move a tag that already serves
-different bytes. Existing tags are never moved, and `s20` (2.1.2) is never
-touched.
+different bytes. Existing tags are never moved: `s21` (2.2.0), `s20` (2.1.2) and
+every earlier `sNN` tag stay untouched.
 
 The updater ignores drafts and prereleases, so a staged draft is never offered
 as an update. Static packaging checks are not device tests:

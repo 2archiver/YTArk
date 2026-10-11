@@ -7,15 +7,25 @@ configChangeEmitter.addEventListener('configChange', (e) => {
 });
 
 let actualClock;
+// Exactly one ticking timer exists while the clock is shown; turning the clock
+// off clears it, so toggling never leaves timers behind.
+let clockTimer = null;
+
+function stopClockTimer() {
+    if (clockTimer !== null) clearInterval(clockTimer);
+    clockTimer = null;
+}
 
 function toggleClock(value) {
     const existingClock = document.getElementById('tizentube-clock');
     if (value && existingClock) return;
     if (!value && existingClock) {
+        stopClockTimer();
         existingClock.remove();
         return;
     }
     if (!value && !existingClock) {
+        stopClockTimer();
         return;
     } else {
         const clock = document.createElement('div');
@@ -64,8 +74,14 @@ function toggleClock(value) {
         }
 
         updateClock();
-        setInterval(updateClock, 1000);
+        stopClockTimer();
+        clockTimer = setInterval(updateClock, 1000);
     }
 }
 
 toggleClock(configRead('enableClock'));
+
+export { toggleClock, stopClockTimer };
+export function clockTimerActive() {
+    return clockTimer !== null;
+}

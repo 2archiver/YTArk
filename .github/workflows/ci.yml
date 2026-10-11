@@ -45,6 +45,14 @@ jobs:
             --out-dir TizenTube/mods/assets
           python3 tools/build_logo_asset.py --check
 
+      - name: Verify CHANGELOG.md and the bundled changelog data
+        run: |
+          set -euo pipefail
+          # CHANGELOG.md is the single source for the in-app reader and the
+          # release notes; a stale or hand-edited generated module fails here.
+          python3 tools/build_changelog.py --check
+          python3 tools/build_changelog.py release-notes --version "$(sed -n 's/^versionName=//p' release/version.properties)" > /dev/null
+
       - name: Test and build the YTArk userscript
         working-directory: TizenTube/mods
         run: |
@@ -55,6 +63,11 @@ jobs:
           node --check ../dist/userScript.js
           grep -q "YTArk Quick Controls" ../dist/userScript.js
           grep -q "YouTube Premium" ../dist/userScript.js
+          # 2.3 features and the bundled changelog must be in the artefact.
+          for needle in ytark-theme-oled ytark-no-player-scrim featuredChannel YTARK_SEARCH_OPEN \
+              YTARK_YTS_EDITOR YTARK_CHANGELOG_SHOW v2.0.2-personal.14 configSchemaVersion; do
+            grep -q "$needle" ../dist/userScript.js || { echo "Bundle is missing $needle" >&2; exit 1; }
+          done
           # The bundled wordmark is real vector geometry: no <text> node, no
           # <image>, no external href to an image host, and no runtime fetch.
           if grep -Eqi '<text|<image|href="http|url\(https?:' ../dist/userScript.js; then
@@ -78,12 +91,12 @@ jobs:
           python3 tools/check_no_secrets.py --history
           python3 tools/check_workflow_policy.py
           python3 tools/validate_release.py emit-env --file "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'VERSION_NAME=2.2.0' "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'DISPLAY_VERSION=2.2' "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'VERSION_CODE=2020000' "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'VERSION_TAG=v2.2.0' "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'SCRIPT_TAG=s21' "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'APK_ARMV7=YTArk-v2.2.0-armv7.apk' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'VERSION_NAME=2.3.0' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'DISPLAY_VERSION=2.3' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'VERSION_CODE=2030000' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'VERSION_TAG=v2.3.0' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'SCRIPT_TAG=s22' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'APK_ARMV7=YTArk-v2.3.0-armv7.apk' "$RUNNER_TEMP/ytark-release.env"
           # ARMv7 is the only published architecture; an ARM64 asset name must
           # not exist anywhere in the release environment or the active pipeline.
           if grep -q 'ARM64' "$RUNNER_TEMP/ytark-release.env"; then

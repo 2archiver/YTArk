@@ -18,11 +18,19 @@ def translation_values(value):
         yield value
 
 
+def settings_sources():
+    """YTArk Settings: the renderer plus the shared registry it is built from."""
+    return "\n".join(
+        (MODS / "ui" / name).read_text(encoding="utf-8")
+        for name in ("settings.js", "settingsRegistry.js")
+    )
+
+
 class YTArkUiBrandingTests(unittest.TestCase):
     def test_welcome_toast_triggers_and_flag_are_retired_without_resetting_other_defaults(self):
         config = (MODS / "config.js").read_text(encoding="utf-8")
         ui = (MODS / "ui" / "ui.js").read_text(encoding="utf-8")
-        settings = (MODS / "ui" / "settings.js").read_text(encoding="utf-8")
+        settings = settings_sources()
 
         for source in (config, ui, settings):
             self.assertNotIn("showWelcomeToast", source)
@@ -40,12 +48,11 @@ class YTArkUiBrandingTests(unittest.TestCase):
             self.assertNotIn("welcomeMsg", serialized, resource_path.name)
 
     def test_product_titles_are_exact_and_translation_values_are_rebranded(self):
-        settings = (MODS / "ui" / "settings.js").read_text(encoding="utf-8")
+        settings = settings_sources()
         self.assertIn("title: 'YTArk Settings'", settings)
         self.assertIn("title: 'YTArk Updates'", settings)
-        self.assertIn("name: 'YTArk Updates'", settings)
-        self.assertIn("name: 'About YTArk'", settings)
         self.assertIn("title: 'About YTArk'", settings)
+        self.assertIn("title: 'YTArk Quick Controls'", settings)
         resolve_command = (MODS / "resolveCommand.js").read_text(encoding="utf-8")
         subtitle_mod = (MODS / "features" / "moreSubtitles.js").read_text(encoding="utf-8")
         self.assertNotIn("TizenTube:", resolve_command)
@@ -61,7 +68,7 @@ class YTArkUiBrandingTests(unittest.TestCase):
                 self.assertNotIn("TizenTube", value, f"{resource_path.name}: {value}")
 
     def test_about_attribution_and_support_links_remain_correct(self):
-        settings = (MODS / "ui" / "settings.js").read_text(encoding="utf-8")
+        settings = settings_sources()
         self.assertIn("TizenTube/LICENSE", settings)
         self.assertIn("https://github.com/2archiver/YTArk", settings)
         self.assertIn("https://ko-fi.com/2archiver", settings)
@@ -92,13 +99,24 @@ class YTArkUiBrandingTests(unittest.TestCase):
             "enablePremiumLogo:!0",
             "YTARK_UPDATE_COMMAND",         # settings card -> update engine actions
             "api.github.com/repos/2archiver/YTArk/releases/latest",
+            # 2.3 features must ship in the artefact, not only in the source.
+            "ytark-theme-oled",             # OLED Black root class
+            "ytark-no-player-scrim",        # Remove player dimming root class
+            "featuredChannel",              # channel watermark renderer identity
+            "Hide channel watermark",
+            "Remove player dimming",
+            "YTARK_SEARCH_OPEN",            # Search settings
+            "YTARK_YTS_EDITOR",             # Customize YouTube Settings
+            "YTARK_CHANGELOG_SHOW",         # in-app changelog reader
+            "v2.0.2-personal.14",           # oldest published release in the bundled history
+            "configSchemaVersion",          # explicit settings migration marker
         ):
             self.assertIn(needle, built)
         self.assertNotIn("Personal Tube TV", built, "deprecated branding in the bundle")
 
     def test_cosmetic_logo_module_stays_local_and_never_calls_out(self):
         branding = (MODS / "features" / "premiumBranding.js").read_text(encoding="utf-8")
-        settings = (MODS / "ui" / "settings.js").read_text(encoding="utf-8")
+        settings = settings_sources()
         self.assertNotIn("fetch(", branding, "the cosmetic wordmark must never use the network")
         self.assertNotIn("innerHTML", branding)
         for guard in (
@@ -110,7 +128,7 @@ class YTArkUiBrandingTests(unittest.TestCase):
             self.assertIn(guard, branding)
         # The cosmetic nature has to be explained once, in Settings.
         self.assertIn("it never grants or claims a paid YouTube subscription", settings)
-        self.assertIn("name: 'Premium logo (cosmetic)'", settings)
+        self.assertIn("title: 'Premium logo (cosmetic)'", settings)
 
 
 if __name__ == "__main__":

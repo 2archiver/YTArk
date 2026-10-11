@@ -5,6 +5,8 @@ import resolveCommand from '../resolveCommand.js';
 import { timelyAction, longPressData, MenuServiceItemRenderer, ShelfRenderer, TileRenderer, ButtonRenderer } from '../ui/ytUI.js';
 import { findFeedbackToken } from '../utils/innerTubeCalls.js';
 import { PatchSettings } from '../ui/customYTSettings.js';
+import { isSettingsResponse } from './ytSettingsLayout.js';
+import { filterWatermarkAnnotations } from './playerWatermark.js';
 import { t } from 'i18next';
 
 function codecAvailableInCurrentBrowser(format) {
@@ -121,9 +123,14 @@ JSON.parse = function () {
       );
     }
 
-    // Patch settings
+    // Channel branding watermark (Appearance > Player > Hide channel watermark).
+    if (Array.isArray(r.annotations) || (r.playerResponse && typeof r.playerResponse === 'object')) {
+      filterWatermarkAnnotations(r);
+    }
 
-    if (r?.title?.runs) {
+    // Native YouTube Settings page: identified by its structure (an `items`
+    // list of settingCategoryCollectionRenderer), not by any titled response.
+    if (isSettingsResponse(r)) {
       PatchSettings(r);
     }
 

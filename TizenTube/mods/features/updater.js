@@ -273,6 +273,15 @@ export function createUpdateController(overrides = {}) {
     return lines;
   }
 
+  // The bundled changelog is readable offline from the Updates screen too.
+  function changelogButton() {
+    return ui.buttonItem(
+      { title: 'What\'s new and changelog', subtitle: 'Version history bundled with this build' },
+      { icon: 'BOOKMARK_BORDER' },
+      [{ customAction: { action: 'YTARK_CHANGELOG_SHOW', parameters: {} } }],
+    );
+  }
+
   function statusLabel(model) {
     switch (model.state) {
       case 'checking': return 'Checking the official YTArk release…';
@@ -318,6 +327,7 @@ export function createUpdateController(overrides = {}) {
       { icon: 'SYSTEM_UPDATE' },
       [{ customAction: { action: 'YTARK_UPDATE_COMMAND', parameters: 'check' } }],
     ));
+    items.push(changelogButton());
     items.push(ui.buttonItem(
       { title: 'Close' },
       { icon: 'CLOSE' },
@@ -367,6 +377,7 @@ export function createUpdateController(overrides = {}) {
         [{ customAction: { action: 'YTARK_UPDATE_COMMAND', parameters: action.id } }],
       ));
     }
+    items.push(changelogButton());
 
     state.renderSignature = signature;
     try {

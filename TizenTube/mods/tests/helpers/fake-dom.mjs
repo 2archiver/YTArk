@@ -54,12 +54,18 @@ export class FakeElement {
     this.textContent = '';
     this.__rectHeight = 0;
     this.__rectWidth = 0;
+    this.listeners = new Map();
+    this.value = '';
     this.classList = {
       add: (name) => this.addClass(name),
       remove: (name) => this.removeClass(name),
       contains: (name) => this.hasClass(name),
     };
   }
+
+  get id() { return this.getAttribute('id') || ''; }
+
+  set id(value) { this.setAttribute('id', value); }
 
   addClass(name) {
     const current = String(this.getAttribute('class') || '').split(/\s+/).filter(Boolean);
@@ -159,6 +165,58 @@ export class FakeElement {
     this.isConnected = false;
     return this;
   }
+
+  remove() {
+    this.detach();
+  }
+
+  addEventListener(type, listener) {
+    if (!this.listeners.has(type)) this.listeners.set(type, []);
+    if (!this.listeners.get(type).includes(listener)) this.listeners.get(type).push(listener);
+  }
+
+  removeEventListener(type, listener) {
+    this.listeners.set(type, (this.listeners.get(type) || []).filter(item => item !== listener));
+  }
+
+  dispatchEvent(event) {
+    const dispatched = event || {};
+    if (!dispatched.target) dispatched.target = this;
+    for (const listener of [...(this.listeners.get(dispatched.type) || [])]) listener(dispatched);
+    return true;
+  }
+
+  listenerCount(type) {
+    return (this.listeners.get(type) || []).length;
+  }
+
+  focus() {
+    const doc = this.ownerDocument || globalThis.document;
+    if (doc) doc.activeElement = this;
+  }
+
+  blur() {
+    const doc = this.ownerDocument || globalThis.document;
+    if (doc && doc.activeElement === this) doc.activeElement = doc.body || null;
+  }
+}
+
+/** A keyboard event double that records propagation/default handling. */
+export function keyEvent(type, keyCode, target, extra = {}) {
+  return {
+    type,
+    keyCode,
+    which: keyCode,
+    key: extra.key,
+    target,
+    repeat: false,
+    defaultPrevented: false,
+    propagationStopped: false,
+    preventDefault() { this.defaultPrevented = true; },
+    stopPropagation() { this.propagationStopped = true; },
+    stopImmediatePropagation() { this.propagationStopped = true; },
+    ...extra,
+  };
 }
 
 export class FakeMutationObserver {
@@ -212,6 +270,7 @@ export function createDocument() {
   doc.body = new FakeElement('body', doc);
   doc.documentElement.appendChild(doc.head);
   doc.documentElement.appendChild(doc.body);
+  doc.activeElement = doc.body;
   return doc;
 }
 

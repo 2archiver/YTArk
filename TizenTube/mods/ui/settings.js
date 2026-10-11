@@ -1,1130 +1,340 @@
+/**
+ * YTArk Settings menus, rendered from the shared registry (settingsRegistry.js).
+ *
+ * Every menu is addressed by its stable registry id. Rows read the current
+ * configuration at render time and change it through the same
+ * setClientSettingEndpoint path that the rest of YTArk uses, then re-render in
+ * place with focus kept on the row that was used.
+ */
+
 import { configRead } from '../config.js';
-import { showModal, buttonItem, overlayPanelItemListRenderer, scrollPaneRenderer, overlayMessageRenderer, QrCodeRenderer } from './ytUI.js';
-import qrcode from 'qrcode-npm';
+import { showModal, buttonItem, overlayPanelItemListRenderer, overlayMessageRenderer } from './ytUI.js';
 import { t } from 'i18next';
 import resolveCommand from '../resolveCommand.js';
-import { PRESETS, QUALITY_LEVELS } from '../features/tvControls.js';
+import {
+  buildSettingsTree, findNode, parentOf, valueText, dependencyNote, toggleDisplayValue, selectedOption,
+  defaultValueText, walkTree, ytarkDisplayVersion, ytarkUpdateSubtitle,
+} from './settingsRegistry.js';
+import { tx } from '../translations/text.js';
 
-const qrcodes = {};
+export { ytarkDisplayVersion, ytarkUpdateSubtitle };
 
-function ytarkDisplayVersion() {
-    try {
-        const getVersion = window.h5vcc?.tizentube?.GetVersion;
-        const version = typeof getVersion === 'function' ? String(getVersion()) : '';
-        const match = version.match(/^(\d+)\.(\d+)\.(\d+)(?:-(?:ytark|personal)\.[1-9]\d*)?$/);
-        if (match) return match[3] === '0' ? `${match[1]}.${match[2]}` : `${match[1]}.${match[2]}.${match[3]}`;
-    } catch (error) {
-        console.warn('[YTArk] Could not read display version for About YTArk:', error);
-    }
-    return 'unknown';
+const custom = (action, parameters) => ({ customAction: { action, parameters } });
+const POPUP_BACK = { signalAction: { signal: 'POPUP_BACK' } };
+
+/** Labels for reset keys that have no row of their own. */
+const KEY_LABELS = {
+  videoSpeed: () => tx('ytark.reset.videoSpeed', 'Playback speed'),
+};
+
+export function menuCommand(menuId, options = {}) {
+  const parameters = { menuId };
+  if (options.focusId) parameters.focusId = options.focusId;
+  if (options.update) parameters.update = true;
+  if (options.returnTo) parameters.returnTo = options.returnTo;
+  return custom('YTARK_MENU_SHOW', parameters);
 }
 
-function ytarkUpdateSubtitle() {
-    const version = ytarkDisplayVersion();
-    if (version === 'unknown') {
-        return 'Installed version: unknown · check the official YTArk release from here';
-    }
-    return 'Installed version: ' + version + ' · check the official stable release';
+export function settingCommand(key, valueField, value) {
+  return {
+    setClientSettingEndpoint: {
+      settingDatas: [{ clientSettingEnum: { item: key }, [valueField]: value }],
+    },
+  };
 }
 
+export function subtitleFor(node) {
+  if (node.unavailable) return node.unavailable;
+  const parts = [];
+  const value = valueText(node);
+  if ((node.type === 'choice' || node.type === 'multi') && value) {
+    parts.push(tx('ytark.value.current', 'Current: {{value}}', { value }));
+  }
+  if (node.description) parts.push(node.description);
+  const dependency = dependencyNote(node);
+  if (dependency) parts.push(dependency);
+  return parts.join(' · ');
+}
+
+/** One row for a registry node inside its parent menu. */
+export function rowForNode(node, ctx) {
+  const subtitle = subtitleFor(node);
+  const title = subtitle ? { title: node.title, subtitle } : { title: node.title };
+  if (node.unavailable) {
+    return buttonItem(title, { icon: node.icon || 'INFO', secondaryIcon: 'INFO' },
+      [custom('YTARK_SETTING_UNAVAILABLE', { id: node.id })]);
+  }
+  switch (node.type) {
+    case 'toggle': {
+      const current = configRead(node.key) === true;
+      return buttonItem(title, {
+        icon: node.icon || 'CHEVRON_DOWN',
+        secondaryIcon: toggleDisplayValue(node) ? 'CHECK_BOX' : 'CHECK_BOX_OUTLINE_BLANK',
+      }, [settingCommand(node.key, 'boolValue', !current), ctx.refresh(node.id)]);
+    }
+    case 'action':
+      return buttonItem(title, { icon: node.icon || 'CHEVRON_DOWN' }, node.command || []);
+    case 'panel':
+      return buttonItem(title, { icon: node.icon || 'INFO', secondaryIcon: 'CHEVRON_RIGHT' },
+        [custom('YTARK_PANEL_SHOW', { id: node.id })]);
+    case 'link':
+      return buttonItem(title, { icon: node.icon || 'CHEVRON_DOWN', secondaryIcon: 'CHEVRON_RIGHT' },
+        [menuCommand(node.target)]);
+    default:
+      return buttonItem(title, { icon: node.icon || 'CHEVRON_DOWN', secondaryIcon: 'CHEVRON_RIGHT' },
+        [menuCommand(node.id)]);
+  }
+}
+
+function optionRow(node, option, ctx, selected) {
+  const title = option.description ? { title: option.title, subtitle: option.description } : { title: option.title };
+  return buttonItem(title, {
+    icon: option.icon || node.icon || 'CHEVRON_DOWN',
+    secondaryIcon: selected ? 'RADIO_BUTTON_CHECKED' : 'RADIO_BUTTON_UNCHECKED',
+  }, [settingCommand(node.key, 'stringValue', option.value), ctx.refresh(option.id)]);
+}
+
+function multiRow(node, option, ctx) {
+  const current = configRead(node.key);
+  const checked = Array.isArray(current) && current.includes(option.value);
+  return buttonItem({ title: option.title }, {
+    icon: option.icon || 'CHEVRON_DOWN',
+    secondaryIcon: checked ? 'CHECK_BOX' : 'CHECK_BOX_OUTLINE_BLANK',
+  }, [settingCommand(node.key, 'arrayValue', option.value), ctx.refresh(option.id)]);
+}
+
+function resetRow(node) {
+  return buttonItem(
+    {
+      title: tx('ytark.reset.title', 'Reset {{section}}', { section: node.title }),
+      subtitle: tx('ytark.reset.subtitle', 'Restore this section\'s settings to their defaults'),
+    },
+    { icon: 'UNDO' },
+    [custom('YTARK_RESET_SECTION_CONFIRM', { menuId: node.id })],
+  );
+}
+
+function backToSearchRow() {
+  return buttonItem(
+    { title: tx('ytark.search.backToResults', 'Back to search results') },
+    { icon: 'SEARCH' },
+    [POPUP_BACK, custom('YTARK_DEFERRED', { action: 'YTARK_SEARCH_SHOW', parameters: { update: true } })],
+  );
+}
+
+/** Rows and their ids for a menu-like node, in display order. */
+export function menuRows(node, options = {}) {
+  const returnTo = options.returnTo || null;
+  const ctx = {
+    returnTo,
+    refresh: focusId => menuCommand(node.id, { focusId, update: true, returnTo }),
+  };
+  const rows = [];
+  const ids = [];
+  if (node.type === 'choice') {
+    const selected = selectedOption(node);
+    for (const option of node.options || []) {
+      rows.push(optionRow(node, option, ctx, option === selected));
+      ids.push(option.id);
+    }
+  } else if (node.type === 'multi') {
+    for (const option of node.options || []) {
+      rows.push(multiRow(node, option, ctx));
+      ids.push(option.id);
+    }
+  } else {
+    for (const child of node.children || []) {
+      rows.push(rowForNode(child, ctx));
+      ids.push(child.id);
+    }
+  }
+  if (Array.isArray(node.resetKeys) && node.resetKeys.length) {
+    rows.push(resetRow(node));
+    ids.push(`${node.id}.__reset`);
+  }
+  if (returnTo === 'search') {
+    rows.push(backToSearchRow());
+    ids.push('__backToSearch');
+  }
+  return { rows, ids };
+}
+
+/**
+ * Open (or re-render in place) the menu with registry id `menuId`.
+ * options: { focusId, focusIndex, update, returnTo }
+ */
+export function showSettingsMenu(menuId = 'root', options = {}) {
+  const tree = buildSettingsTree();
+  let node = menuId === 'root' ? tree : findNode(tree, menuId);
+  if (!node) node = tree;
+  if (node.unavailable) {
+    resolveCommand(custom('YTARK_SETTING_UNAVAILABLE', { id: node.id }));
+    return null;
+  }
+  if (node.type === 'panel') return showPanel(node.id);
+  if (node.type === 'link') return showSettingsMenu(node.target, options);
+  if (node.type === 'toggle' || node.type === 'action') {
+    const parent = parentOf(tree, node.id) || tree;
+    return showSettingsMenu(parent.id, { ...options, focusId: node.id });
+  }
+
+  const { rows, ids } = menuRows(node, options);
+  let selectedIndex = 0;
+  if (options.focusId && ids.includes(options.focusId)) {
+    selectedIndex = ids.indexOf(options.focusId);
+  } else if (Number.isInteger(Number(options.focusIndex)) && Number(options.focusIndex) >= 0
+      && Number(options.focusIndex) < rows.length) {
+    selectedIndex = Number(options.focusIndex);
+  } else if (node.type === 'choice') {
+    const selected = selectedOption(node);
+    if (selected) selectedIndex = node.options.indexOf(selected);
+  }
+  const header = node.header || { title: node.title, subtitle: node.description || '' };
+  const onDismiss = options.returnTo === 'search'
+    ? [custom('YTARK_DEFERRED', { action: 'YTARK_SEARCH_SHOW', parameters: { update: true } })]
+    : undefined;
+  return showModal(header, overlayPanelItemListRenderer(rows, selectedIndex),
+    node.menuId || `ytark-menu-${node.id}`, !!options.update, { onDismiss });
+}
+
+export function showPanel(id) {
+  const tree = buildSettingsTree();
+  const node = findNode(tree, id);
+  if (!node || typeof node.panel !== 'function') return null;
+  const panel = node.panel();
+  return showModal({ title: panel.title, subtitle: panel.subtitle }, panel.content, `ytark-panel-${node.id}`, false);
+}
+
+function ownerOf(node, key) {
+  let owner = null;
+  walkTree(node, (candidate) => {
+    if (!owner && candidate.key === key) owner = candidate;
+  });
+  return owner;
+}
+
+/** What a section reset changes, as "title: default" lines. */
+export function resetScope(menuId) {
+  const tree = buildSettingsTree();
+  const node = findNode(tree, menuId);
+  if (!node || !Array.isArray(node.resetKeys)) return null;
+  const lines = [];
+  for (const key of node.resetKeys) {
+    const owner = ownerOf(node, key);
+    const label = owner ? owner.title : (KEY_LABELS[key] ? KEY_LABELS[key]() : null);
+    if (!label) continue;
+    const line = `${label}: ${defaultValueText(owner, key)}`;
+    if (!lines.includes(line)) lines.push(line);
+  }
+  return { node, keys: node.resetKeys.slice(), lines };
+}
+
+export function showResetConfirm(menuId) {
+  const scope = resetScope(menuId);
+  if (!scope) return null;
+  const items = [
+    overlayMessageRenderer(`${tx('ytark.reset.listIntro', 'These settings return to their defaults:')}\n${scope.lines.join('\n')}`),
+    buttonItem({ title: tx('ytark.reset.confirm', 'Reset') }, { icon: 'UNDO' },
+      [POPUP_BACK, custom('YTARK_RESET_SECTION', { menuId })]),
+    buttonItem({ title: tx('ytark.reset.cancel', 'Cancel') }, { icon: 'CLOSE' }, [POPUP_BACK]),
+  ];
+  return showModal(
+    {
+      title: tx('ytark.reset.confirmTitle', 'Reset {{section}}?', { section: scope.node.title }),
+      subtitle: tx('ytark.reset.confirmScope', 'Only these YTArk settings change. Your Google account, app data and other settings stay as they are.'),
+    },
+    overlayPanelItemListRenderer(items, 2),
+    'ytark-reset-confirm',
+    false,
+  );
+}
+
+/** Legacy entry point: YTArk Settings root (also used by the red/green keys). */
 export default function modernUI(update, parameters) {
-    const settings = [
-        // ---- YTArk Quick Controls (first item) ----
-        {
-            name: 'YTArk Quick Controls',
-            icon: 'TV',
-            value: null,
-            menuId: 'tt-tv-quick-controls',
-            menuHeader: {
-                title: 'YTArk Quick Controls',
-                subtitle: 'Presets, themes & quick quality'
-            },
-            options: [
-                // --- Presets submenu ---
-                {
-                    name: 'Presets',
-                    icon: 'STAR',
-                    value: null,
-                    menuId: 'tt-tv-presets',
-                    menuHeader: {
-                        title: 'Presets',
-                        subtitle: 'One-tap configurations'
-                    },
-                    options: Object.entries(PRESETS).map(([key, preset]) =>
-                        buttonItem(
-                            { title: preset.label },
-                            { icon: key === 'cleanTV' ? 'VISIBILITY_OFF' : key === 'midnightBlue' ? 'LENS_BLUE' : 'DARK_THEME' },
-                            [{
-                                customAction: {
-                                    action: 'TV_APPLY_PRESET',
-                                    parameters: key
-                                }
-                            }]
-                        )
-                    )
-                },
-                // --- Undo last preset ---
-                buttonItem(
-                    { title: 'Undo Last Preset', subtitle: 'Revert the most recently applied preset' },
-                    { icon: 'UNDO' },
-                    [{
-                        customAction: {
-                            action: 'TV_UNDO_PRESET',
-                            parameters: []
-                        }
-                    }]
-                ),
-                // --- Quick Quality submenu ---
-                {
-                    name: 'Quick Quality',
-                    icon: 'VIDEO_QUALITY',
-                    value: null,
-                    menuId: 'tt-tv-quick-quality',
-                    menuHeader: {
-                        title: 'Quick Quality',
-                        subtitle: `Selected: ${window.__ytarkQualityStatus?.selected || configRead('preferredVideoQuality')}; actual: ${window.__ytarkQualityStatus?.actual || 'not reported by player'}`
-                    },
-                    options: QUALITY_LEVELS.map(level => ({
-                        name: level === 'auto' ? 'Auto' : level + 'p',
-                        icon: level === 'auto' ? 'PLAY_CIRCLE' : 'VIDEO_QUALITY',
-                        key: 'preferredVideoQuality',
-                        value: level === 'auto' ? 'auto' : level + 'p'
-                    }))
-                },
-                // --- Independent client-side controls ---
-                {
-                    name: 'Ad blocking',
-                    subtitle: `Currently ${configRead('enableAdBlock') ? 'ON' : 'OFF'}; enabled by default. Independent of SponsorBlock and the logo.`,
-                    icon: 'DOLLAR_SIGN',
-                    value: 'enableAdBlock'
-                },
-                {
-                    name: 'Premium logo (cosmetic)',
-                    subtitle: 'Local wordmark only; it never grants or claims a paid YouTube subscription.',
-                    icon: 'VIDEO_YOUTUBE',
-                    value: 'enablePremiumLogo'
-                },
-                {
-                    name: 'User-Agent profile (experimental)',
-                    subtitle: `Selected: ${configRead('userAgentProfile') || 'native'}; native Cobalt is recommended.`,
-                    icon: 'SETTINGS',
-                    value: null,
-                    menuId: 'ytark-user-agent-profile',
-                    menuHeader: {
-                        title: 'User-Agent profile',
-                        subtitle: 'Does not change the updater APK architecture.'
-                    },
-                    options: [
-                        { name: 'Native Cobalt (recommended)', key: 'userAgentProfile', value: 'native' },
-                        { name: 'Android TV 32-bit (experimental)', key: 'userAgentProfile', value: 'androidTv32' },
-                        { name: 'Android TV 64-bit (experimental)', key: 'userAgentProfile', value: 'androidTv64' },
-                        { name: 'TCL Android TV 32-bit (experimental)', key: 'userAgentProfile', value: 'tclTv32' },
-                        { name: 'Fire TV 32-bit (experimental)', key: 'userAgentProfile', value: 'fireTv32' }
-                    ]
-                },
-                buttonItem(
-                    { title: 'Reset User-Agent profile', subtitle: 'Recovery: restore native Cobalt behavior' },
-                    { icon: 'UNDO' },
-                    [{ customAction: { action: 'RESET_USER_AGENT_PROFILE' } }]
-                ),
-                // --- Individual quick toggles ---
-                {
-                    name: 'Hide Shorts',
-                    icon: 'YOUTUBE_SHORTS_FILL_24',
-                    value: 'enableShorts'
-                },
-                {
-                    name: 'Hide Previews',
-                    icon: 'VISIBILITY_OFF',
-                    value: 'enablePreviews'
-                },
-                {
-                    name: 'Hide End Cards',
-                    icon: 'VISIBILITY_OFF',
-                    value: 'enableHideEndScreenCards'
-                },
-                {
-                    name: 'Hide Related in Player',
-                    icon: 'VISIBILITY_OFF',
-                    value: 'hideRelatedVideosPlayer'
-                }
-            ]
-        },
-        // ---- End YTArk Quick Controls ----
-        {
-            name: 'About YTArk',
-            icon: 'INFO',
-            value: null,
-            options: {
-                title: 'About YTArk',
-                subtitle: `Version ${ytarkDisplayVersion()}`,
-                content: scrollPaneRenderer([
-                    overlayMessageRenderer(`YTArk ${ytarkDisplayVersion()} is an independent Android TV application.`),
-                    overlayMessageRenderer('The optional YouTube Premium wordmark is a local visual only. It does not provide a subscription or account benefits.'),
-                    overlayMessageRenderer('Third-party notices and source attribution are included in the release NOTICE.md, TizenTube/LICENSE, and upstream license files.')
-                ])
-            }
-        },
-        {
-            name: 'Support YTArk',
-            icon: 'PRIVACY_UNLISTED',
-            value: null,
-            options: [
-                {
-                    name: 'YTArk on GitHub',
-                    link: 'https://github.com/2archiver/YTArk',
-                },
-                {
-                    name: 'Support YTArk on Ko-fi',
-                    link: 'https://ko-fi.com/2archiver',
-                }
-            ].map((option) => {
-                if (!qrcodes[option.name]) {
-                    const qr = qrcode.qrcode(6, 'H');
-                    qr.addData(option.link);
-                    qr.make();
-
-                    const qrDataImgTag = qr.createImgTag(8, 8);
-                    const qrDataUrl = qrDataImgTag.match(/src="([^"]+)"/)[1];
-                    qrcodes[option.name] = qrDataUrl;
-                }
-                return {
-                    name: option.name,
-                    icon: 'OPEN_IN_NEW',
-                    value: null,
-                    options: {
-                        title: option.name,
-                        subtitle: option.link,
-                        content: overlayPanelItemListRenderer([
-                            overlayMessageRenderer(t('settings.options.socialMedia.qrCodeScanMessage', { name: option.name })),
-                            QrCodeRenderer(qrcodes[option.name])
-                        ])
-                    }
-                }
-            })
-        },
-        {
-            name: t('settings.options.sponsorblock.title'),
-            icon: 'MONEY_HAND',
-            value: null,
-            menuId: 'tt-sponsorblock-settings',
-            menuHeader: {
-                title: t('settings.options.sponsorblock.title'),
-                subtitle: `Currently ${configRead('enableSponsorBlock') ? 'ON' : 'OFF'} · https://sponsor.ajay.app/`
-            },
-            options: [
-                buttonItem(
-                    { title: 'Undo last manual skip', subtitle: window.__ytarkLastSponsorBlockSkip && Date.now() < window.__ytarkLastSponsorBlockSkip.expiresAt ? 'Undo the most recent SponsorBlock skip' : 'No recent manual skip to undo' },
-                    { icon: 'UNDO' },
-                    [{ customAction: { action: 'SPONSORBLOCK_UNDO_SKIP' } }]
-                ),
-                {
-                    name: t('settings.options.sponsorblock.options.enableSB'),
-                    icon: 'MONEY_HAND',
-                    value: 'enableSponsorBlock'
-                },
-                {
-                    name: t('settings.options.sponsorblock.options.manualSkip'),
-                    icon: 'DOLLAR_SIGN',
-                    value: null,
-                    arrayToEdit: 'sponsorBlockManualSkips',
-                    menuId: 'tt-sponsorblock-manual-segment-skip',
-                    options: [
-                        {
-                            name: t('settings.options.sponsorblock.options.categories.sponsor'),
-                            icon: 'MONEY_HEART',
-                            value: 'sponsor'
-                        },
-                        {
-                            name: t('settings.options.sponsorblock.options.categories.intro'),
-                            icon: 'PLAY_CIRCLE',
-                            value: 'intro'
-                        },
-                        {
-                            name: t('settings.options.sponsorblock.options.categories.outro'),
-                            value: 'outro'
-                        },
-                        {
-                            name: t('settings.options.sponsorblock.options.categories.interaction'),
-                            value: 'interaction'
-                        },
-                        {
-                            name: t('settings.options.sponsorblock.options.categories.selfpromo'),
-                            value: 'selfpromo'
-                        },
-                        {
-                            name: t('settings.options.sponsorblock.options.categories.preview'),
-                            value: 'preview'
-                        },
-                        {
-                            name: t('settings.options.sponsorblock.options.categories.filler'),
-                            value: 'filler'
-                        },
-                        {
-                            name: t('settings.options.sponsorblock.options.categories.music_offtopic'),
-                            value: 'music_offtopic'
-                        }
-                    ]
-                },
-                {
-                    name: t('settings.options.sponsorblock.options.segments'),
-                    icon: 'SETTINGS',
-                    value: null,
-                    menuId: 'tt-sponsorblock-segments',
-                    options: [
-                        {
-                            name: t('settings.options.sponsorblock.options.categories.sponsor'),
-                            icon: 'MONEY_HEART',
-                            value: 'enableSponsorBlockSponsor'
-                        },
-                        {
-                            name: t('settings.options.sponsorblock.options.categories.intro'),
-                            icon: 'PLAY_CIRCLE',
-                            value: 'enableSponsorBlockIntro'
-                        },
-                        {
-                            name: t('settings.options.sponsorblock.options.categories.outro'),
-                            value: 'enableSponsorBlockOutro'
-                        },
-                        {
-                            name: t('settings.options.sponsorblock.options.categories.interaction'),
-                            value: 'enableSponsorBlockInteraction'
-                        },
-                        {
-                            name: t('settings.options.sponsorblock.options.categories.selfpromo'),
-                            value: 'enableSponsorBlockSelfPromo'
-                        },
-                        {
-                            name: t('settings.options.sponsorblock.options.categories.preview'),
-                            value: 'enableSponsorBlockPreview'
-                        },
-                        {
-                            name: t('settings.options.sponsorblock.options.categories.filler'),
-                            value: 'enableSponsorBlockFiller'
-                        },
-                        {
-                            name: t('settings.options.sponsorblock.options.categories.music_offtopic'),
-                            value: 'enableSponsorBlockMusicOfftopic'
-                        },
-                        {
-                            name: t('settings.options.sponsorblock.options.categories.highlights'),
-                            icon: 'LOCATION_POINT',
-                            value: 'enableSponsorBlockHighlight'
-                        }
-                    ]
-                },
-                {
-                    name: t('settings.options.sponsorblock.options.showSBToasts'),
-                    value: 'enableSponsorBlockToasts'
-                }
-            ]
-        },
-        {
-            name: t('settings.options.dearrow.title'),
-            icon: 'VISIBILITY_OFF',
-            value: null,
-            menuHeader: {
-                title: t('settings.options.dearrow.title'),
-                subtitle: 'https://dearrow.ajay.app/'
-            },
-            options: [
-                {
-                    name: t('settings.options.dearrow.options.enableDA'),
-
-                    icon: 'VISIBILITY_OFF',
-                    value: 'enableDeArrow'
-                },
-                {
-                    name: t('settings.options.dearrow.options.enableDAThumbnails'),
-                    icon: 'TV',
-                    value: 'enableDeArrowThumbnails'
-                }
-            ]
-        },
-        {
-            name: t('settings.options.misc.title'),
-            icon: 'SETTINGS',
-            value: null,
-            options: [
-                {
-                    name: t('settings.options.misc.options.endScreenCards'),
-
-                    icon: 'VISIBILITY_OFF',
-                    value: 'enableHideEndScreenCards'
-                },
-                {
-                    name: t('settings.options.misc.options.youThereRenderer'),
-                    icon: 'HELP',
-                    value: 'enableYouThereRenderer'
-                },
-                {
-                    name: t('settings.options.misc.options.paidPromoOverlay'),
-                    icon: 'MONEY_HAND',
-                    value: 'enablePaidPromotionOverlay'
-                },
-                {
-                    name: t('settings.options.misc.options.whosWatching.title'),
-                    icon: 'ACCOUNT_CIRCLE',
-                    menuId: 'tt-whos-watching-menu-settings',
-                    value: null,
-                    options: [
-                        {
-                            name: t('settings.options.misc.options.whosWatching.options.enableWW'),
-                            value: 'enableWhoIsWatchingMenu'
-                        },
-                        {
-                            name: t('settings.options.misc.options.whosWatching.options.permaEnableWW'),
-                            value: 'permanentlyEnableWhoIsWatchingMenu'
-                        },
-                        {
-                            name: t('settings.options.misc.options.whosWatching.options.enableWWOnExit'),
-                            value: 'enableWhosWatchingMenuOnAppExit'
-                        }
-                    ]
-                },
-                {
-                    name: t('settings.options.misc.options.fixUI'),
-                    icon: 'STAR',
-                    value: 'enableFixedUI'
-                },
-                {
-                    name: t('settings.options.misc.options.hqThumbnails'),
-                    icon: 'VIDEO_QUALITY',
-                    value: 'enableHqThumbnails'
-                },
-                /*{
-                    name: 'Chapters',
-                    icon: 'BOOKMARK_BORDER',
-                    value: 'enableChapters'
-                },*/
-                {
-                    name: t('settings.options.misc.options.longPress'),
-                    value: 'enableLongPress'
-                },
-                {
-                    name: t('settings.options.misc.options.shorts'),
-                    icon: 'YOUTUBE_SHORTS_FILL_24',
-                    value: 'enableShorts'
-                },
-                {
-                    name: t('settings.options.misc.options.videoPreviews'),
-                    value: 'enablePreviews'
-                },
-                {
-                    name: t('settings.options.misc.options.guestSignInReminder'),
-                    value: 'enableSigninReminder'
-                },
-                {
-                    name: t('settings.options.misc.options.reloadHomeOnStartup'),
-                    value: 'reloadHomeOnStartup'
-                }
-            ]
-        },
-        {
-            name: t('settings.options.subtitles.title'),
-            icon: 'TRANSLATE',
-            value: null,
-            options: [
-                {
-                    name: t('settings.options.subtitles.options.showLocalSubtitle'),
-                    value: 'enableShowUserLanguage'
-                },
-                {
-                    name: t('settings.options.subtitles.options.showHiddenSubtitles'),
-                    value: 'enableShowOtherLanguages'
-                }
-            ]
-        },
-        {
-            name: t('settings.options.videoPlayer.title'),
-            icon: 'VIDEO_YOUTUBE',
-            value: null,
-            menuHeader: {
-                title: t('settings.options.videoPlayer.title'),
-                subtitle: t('settings.options.videoPlayer.subtitle')
-            },
-            options: [
-                {
-                    name: t('settings.options.videoPlayer.options.patching.title'),
-                    icon: 'SETTINGS',
-                    value: null,
-                    menuId: 'tt-video-player-ui-patching',
-                    options: [
-                        {
-                            name: t('settings.options.videoPlayer.options.patching.options.enableVPUIPatching'),
-                            icon: 'SETTINGS',
-                            value: 'enablePatchingVideoPlayer'
-                        },
-                        {
-                            name: t('settings.options.videoPlayer.options.patching.options.previousNextBtns'),
-                            icon: 'SKIP_NEXT',
-                            value: 'enablePreviousNextButtons'
-                        },
-                        {
-                            name: t('settings.options.videoPlayer.options.patching.options.showSuperThxBtn'),
-                            icon: 'MONEY_HEART',
-                            value: 'enableSuperThanksButton'
-                        },
-                        {
-                            name: t('settings.options.videoPlayer.options.patching.options.showAIAskBtn'),
-                            icon: 'SPARK',
-                            value: 'enableAIAskButton'
-                        },
-                        {
-                            name: t('settings.options.videoPlayer.options.patching.options.showSpeedCtrlBtn'),
-                            icon: 'SLOW_MOTION_VIDEO',
-                            value: 'enableSpeedControlsButton'
-                        },
-                        {
-                            name: t('settings.options.videoPlayer.options.patching.options.addMPBtn'),
-                            icon: 'CLEAR_COOKIES',
-                            value: 'enableMPButton'
-                        },
-                        {
-                            name: t('settings.options.videoPlayer.options.patching.options.swapMPWithPIP'),
-                            icon: 'CLEAR_COOKIES',
-                            value: 'enableSwapMPWithPIP'
-                        }
-                    ]
-                },
-                {
-                    name: t('settings.options.videoPlayer.options.preferredVideoQuality.title'),
-                    icon: 'VIDEO_QUALITY',
-                    value: null,
-                    menuId: 'tt-preferred-video-quality',
-                    menuHeader: {
-                        title: t('settings.options.videoPlayer.options.preferredVideoQuality.title'),
-                        subtitle: t('settings.options.videoPlayer.options.preferredVideoQuality.subtitle')
-                    },
-                    options:
-                        ['Auto', '2160p', '1440p', '1080p', '720p', '480p', '360p', '240p', '144p'].map((quality) => {
-                            return {
-                                name: quality === 'Auto' ? t('settings.options.videoPlayer.options.qualityAuto') : quality,
-                                key: 'preferredVideoQuality',
-                                value: quality.toLowerCase()
-                            }
-                        })
-
-                },
-                {
-                    name: t('settings.options.videoPlayer.options.speedSettings.title'),
-                    icon: 'SLOW_MOTION_VIDEO',
-                    value: null,
-                    menuId: 'tt-speed-settings-increments',
-                    menuHeader: {
-                        title: t('settings.options.videoPlayer.options.speedSettings.title'),
-                        subtitle: t('settings.options.videoPlayer.options.speedSettings.subtitle')
-                    },
-                    options: [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5].map((increment) => {
-                        return {
-                            name: `${increment}x`,
-                            key: 'speedSettingsIncrement',
-                            value: increment
-                        }
-                    })
-                },
-                {
-                    name: t('settings.options.videoPlayer.options.hideRelatedVideosPlayer'),
-                    icon: 'VISIBILITY_OFF',
-                    value: 'hideRelatedVideosPlayer'
-                },
-                {
-                    name: t('settings.options.videoPlayer.options.preferredVideoCodec.title'),
-                    icon: 'VIDEO_QUALITY',
-                    value: null,
-                    menuId: 'tt-preferred-video-codec',
-                    menuHeader: {
-                        title: t('settings.options.videoPlayer.options.preferredVideoCodec.title'),
-                        subtitle: t('settings.options.videoPlayer.options.preferredVideoCodec.subtitle'),
-                    },
-                    options: ['any', 'vp9', 'av01', 'avc1'].map((codec) => {
-                        return {
-                            name: codec === 'any' ? t('settings.options.videoPlayer.options.codecAny') : codec.toUpperCase(),
-                            key: 'preferredVideoCodec',
-                            value: codec
-                        }
-                    })
-                },
-                window.h5vcc && window.h5vcc.tizentube && window.h5vcc.tizentube.SetFrameRate ? {
-                    name: t('settings.options.videoPlayer.options.afr'),
-                    icon: 'SLOW_MOTION_VIDEO',
-                    value: 'autoFrameRate'
-                } : null,
-                window.h5vcc && window.h5vcc.tizentube && window.h5vcc.tizentube.SetFrameRate ? {
-                    name: t('settings.options.videoPlayer.options.afrPauseDuration.title'),
-                    icon: 'TIMER',
-                    value: null,
-                    menuId: 'tt-auto-frame-rate-pause-duration',
-                    menuHeader: {
-                        title: t('settings.options.videoPlayer.options.afrPauseDuration.title'),
-                        subtitle: t('settings.options.videoPlayer.options.afrPauseDuration.subtitle')
-                    },
-                    options: [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5].map((seconds) => {
-                        return {
-                            name: t(seconds === 1 ? 'settings.options.time.second' : 'settings.options.time.seconds', { count: seconds }),
-                            key: 'autoFrameRatePauseVideoFor',
-                            value: seconds * 1000
-                        }
-                    })
-                } : null
-            ]
-        },
-        {
-            name: t('settings.options.uiSettings.title'),
-            icon: 'SETTINGS',
-            value: null,
-            menuHeader: {
-                title: t('settings.options.uiSettings.title'),
-                subtitle: t('settings.options.uiSettings.subtitle')
-            },
-            options: [
-                {
-                    name: t('settings.options.uiSettings.options.hideWatchedVideos.title'),
-                    icon: 'VISIBILITY_OFF',
-                    value: null,
-                    menuId: 'tt-hide-watched-videos-settings',
-                    options: [
-                        {
-                            name: t('settings.options.uiSettings.options.hideWatchedVideos.options.enableHideWatchedVideos'),
-                            icon: 'VISIBILITY_OFF',
-                            value: 'enableHideWatchedVideos'
-                        },
-                        {
-                            name: t('settings.options.uiSettings.options.hideWatchedVideos.options.watchedVideosThreshold.title'),
-                            value: null,
-                            menuId: 'tt-hide-watched-videos-threshold',
-                            menuHeader: {
-                                title: t('settings.options.uiSettings.options.hideWatchedVideos.options.watchedVideosThreshold.title'),
-                                subtitle: t('settings.options.uiSettings.options.hideWatchedVideos.options.watchedVideosThreshold.subtitle')
-                            },
-                            options: [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map((percent) => {
-                                return {
-                                    name: `${percent}%`,
-                                    key: 'hideWatchedVideosThreshold',
-                                    value: percent
-                                }
-                            })
-                        },
-                        {
-                            name: t('settings.options.uiSettings.options.hideWatchedVideos.options.setPagesToHideWatchedVideos'),
-                            value: null,
-                            arrayToEdit: 'hideWatchedVideosPages',
-                            menuId: 'tt-hide-watched-videos-pages',
-                            options: [
-                                {
-                                    name: t('settings.options.uiSettings.options.categories.searchResults'),
-                                    value: 'search'
-                                },
-                                {
-                                    name: t('settings.options.uiSettings.options.categories.home'),
-                                    value: 'home'
-                                },
-                                {
-                                    name: t('settings.options.uiSettings.options.categories.music'),
-                                    value: 'music'
-                                },
-                                {
-                                    name: t('settings.options.uiSettings.options.categories.gaming'),
-                                    value: 'gaming'
-                                },
-                                {
-                                    name: t('settings.options.uiSettings.options.categories.subscriptions'),
-                                    value: 'subscriptions'
-                                },
-                                {
-                                    name: t('settings.options.uiSettings.options.categories.library'),
-                                    value: 'library'
-                                },
-                                {
-                                    name: t('settings.options.uiSettings.options.categories.more'),
-                                    value: 'more'
-                                }
-                            ]
-                        }
-                    ]
-                },
-                {
-                    name: t('settings.options.uiSettings.options.screenDimming.title'),
-                    icon: 'EYE_OFF',
-                    value: null,
-                    menuId: 'tt-screen-dimming-settings',
-                    options: [
-                        {
-                            name: t('settings.options.uiSettings.options.screenDimming.options.enableScreenDimming'),
-                            icon: 'EYE_OFF',
-                            value: 'enableScreenDimming'
-                        },
-                        {
-                            name: t('settings.options.uiSettings.options.screenDimming.options.dimmingTimeout.title'),
-                            icon: 'TIMER',
-                            value: null,
-                            menuId: 'tt-dimming-timeout',
-                            menuHeader: {
-                                title: t('settings.options.uiSettings.options.screenDimming.options.dimmingTimeout.title'),
-                                subtitle: t('settings.options.uiSettings.options.screenDimming.options.dimmingTimeout.subtitle')
-                            },
-                            options: [10, 20, 30, 60, 120, 180, 240, 300].map((seconds) => {
-                                const title = seconds >= 60 ? t(`settings.options.time.minute${seconds / 60 > 1 ? 's' : ''}`, { count: seconds / 60 }) : t('settings.options.time.seconds', { count: seconds });
-                                return {
-                                    name: title,
-                                    key: 'dimmingTimeout',
-                                    value: seconds
-                                }
-                            })
-                        },
-                        {
-                            name: t('settings.options.uiSettings.options.screenDimming.options.dimmingOpacity.title'),
-                            icon: 'LENS_BLUE',
-                            value: null,
-                            menuId: 'tt-dimming-opacity',
-                            menuHeader: {
-                                title: t('settings.options.uiSettings.options.screenDimming.options.dimmingOpacity.title'),
-                                subtitle: t('settings.options.uiSettings.options.screenDimming.options.dimmingOpacity.subtitle')
-                            },
-                            options: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0].map((opacity) => {
-                                return {
-                                    name: `${Math.round(opacity * 100)}%`,
-                                    key: 'dimmingOpacity',
-                                    value: opacity
-                                }
-                            })
-                        }
-                    ]
-                },
-                {
-                    name: t('settings.options.uiSettings.options.disableSidebarContents.title'),
-                    icon: 'MENU',
-                    value: null,
-                    action: {
-                        customAction: {
-                            action: 'SHOW_GUIDE_SETTINGS',
-                            parameters: 'disabledSidebarContents'
-                        }
-                    }
-                },
-                {
-                    name: t('settings.options.uiSettings.options.sortSidebarContents.title'),
-                    icon: 'MENU',
-                    value: null,
-                    action: {
-                        customAction: {
-                            action: 'SHOW_GUIDE_SETTINGS',
-                            parameters: 'sortSidebarContents'
-                        }
-                    }
-                },
-                {
-                    name: t('settings.options.uiSettings.options.launchToOnStartup.title'),
-                    icon: 'TV',
-                    value: null,
-                    menuId: 'tt-launch-to-on-startup',
-                    menuHeader: {
-                        title: t('settings.options.uiSettings.options.launchToOnStartup.title'),
-                        subtitle: t('settings.options.uiSettings.options.launchToOnStartup.subtitle')
-                    },
-                    options: [
-                        {
-                            name: t('settings.options.uiSettings.options.categories.search'),
-                            icon: 'SEARCH',
-                            key: 'launchToOnStartup',
-                            value: JSON.stringify({
-                                searchEndpoint: { query: '' }
-                            })
-                        },
-                        {
-                            name: t('settings.options.uiSettings.options.categories.home'),
-                            icon: 'WHAT_TO_WATCH',
-                            key: 'launchToOnStartup',
-                            value: JSON.stringify({
-                                browseEndpoint: { browseId: 'FEtopics' }
-                            })
-                        },
-                        {
-                            name: t('settings.options.uiSettings.options.categories.sports'),
-                            icon: 'TROPHY',
-                            key: 'launchToOnStartup',
-                            value: JSON.stringify({
-                                browseEndpoint: { browseId: 'FEtopics_sports' }
-                            })
-                        },
-                        {
-                            name: t('settings.options.uiSettings.options.categories.news'),
-                            icon: 'NEWS',
-                            key: 'launchToOnStartup',
-                            value: JSON.stringify({
-                                browseEndpoint: { browseId: 'FEtopics_news' }
-                            })
-                        },
-                        {
-                            name: t('settings.options.uiSettings.options.categories.music'),
-                            icon: 'YOUTUBE_MUSIC',
-                            key: 'launchToOnStartup',
-                            value: JSON.stringify({
-                                browseEndpoint: { browseId: 'FEtopics_music' }
-                            })
-                        },
-                        {
-                            name: t('settings.options.uiSettings.options.categories.podcasts'),
-                            icon: 'BROADCAST',
-                            key: 'launchToOnStartup',
-                            value: JSON.stringify({
-                                browseEndpoint: { browseId: 'FEtopics_podcasts' }
-                            })
-                        },
-                        {
-                            name: t('settings.options.uiSettings.options.categories.moviesAndTv'),
-                            icon: 'CLAPPERBOARD',
-                            key: 'launchToOnStartup',
-                            value: JSON.stringify({
-                                browseEndpoint: { browseId: 'FEtopics_movies' }
-                            })
-                        },
-                        {
-                            name: t('settings.options.uiSettings.options.categories.gaming'),
-                            icon: 'GAMING',
-                            key: 'launchToOnStartup',
-                            value: JSON.stringify({
-                                browseEndpoint: { browseId: 'FEtopics_gaming' }
-                            })
-                        },
-                        {
-                            name: t('settings.options.uiSettings.options.categories.live'),
-                            icon: 'LIVE',
-                            key: 'launchToOnStartup',
-                            value: JSON.stringify({
-                                browseEndpoint: { browseId: 'FEtopics_live' }
-                            })
-                        },
-                        {
-                            name: t('settings.options.uiSettings.options.categories.subscriptions'),
-                            icon: 'SUBSCRIPTIONS',
-                            key: 'launchToOnStartup',
-                            value: JSON.stringify({
-                                browseEndpoint: { browseId: 'FEsubscriptions' }
-                            })
-                        },
-                        {
-                            name: t('settings.options.uiSettings.options.categories.library'),
-                            icon: 'TAB_LIBRARY',
-                            key: 'launchToOnStartup',
-                            value: JSON.stringify({
-                                browseEndpoint: { browseId: 'FElibrary' }
-                            })
-                        },
-                        {
-                            name: t('settings.options.uiSettings.options.categories.more'),
-                            icon: 'TAB_MORE',
-                            key: 'launchToOnStartup',
-                            value: JSON.stringify({
-                                browseEndpoint: { browseId: 'FEtopics_more' }
-                            })
-                        }
-                    ]
-                },
-                {
-                    name: t('settings.options.uiSettings.options.sortSubscriptionsByAlphabet'),
-                    icon: 'SUBSCRIPTIONS',
-                    value: 'sortSubscriptionsByAlphabet'
-                },
-                {
-                    name: t('settings.options.uiSettings.options.disableChannelsOnSidebar'),
-                    value: 'disableChannelsOnSidebar'
-                },
-                {
-                    name: t('settings.options.uiSettings.options.clock.title'),
-                    value: null,
-                    icon: 'TIMER',
-                    menuId: 'tt-clock-settings',
-                    menuHeader: {
-                        title: t('settings.options.uiSettings.options.clock.title'),
-                        subtitle: t('settings.options.uiSettings.options.clock.subtitle')
-                    },
-                    options: [
-                        {
-                            name: t('settings.options.uiSettings.options.clock.options.enableClock'),
-                            icon: 'TIMER',
-                            value: 'enableClock'
-                        },
-                        {
-                            name: t('settings.options.uiSettings.options.clock.options.isClock12HourFormat'),
-                            icon: 'TIMER',
-                            value: 'isClock12HourFormat'
-                        },
-                        {
-                            name: t('settings.options.uiSettings.options.clock.options.clockShowSeconds'),
-                            icon: 'TIMER',
-                            value: 'clockShowSeconds'
-                        },
-                        {
-                            name: t('settings.options.uiSettings.options.clock.options.clockHideWhenVideoPlaying'),
-                            icon: 'EYE_OFF',
-                            value: 'clockHideWhenVideoPlaying'
-                        }
-                    ]
-                },
-                {
-                    name: t('settings.options.uiSettings.options.disableEnlargingThumbnails'),
-                    value: 'disableEnlargingThumbnails',
-                    icon: null,
-                },
-                {
-                    name: t('settings.options.uiSettings.options.enableShrinkingThumbnails'),
-                    value: 'enableShrinkingThumbnails',
-                    icon: null,
-                }
-            ]
-        },
-        {
-            name: 'YTArk Updates',
-            icon: 'SYSTEM_UPDATE',
-            value: null,
-            menuHeader: {
-                title: 'YTArk Updates',
-                subtitle: ytarkUpdateSubtitle()
-            },
-            subtitle: ytarkUpdateSubtitle(),
-            options: [
-                buttonItem(
-                    { title: 'Check for YTArk updates', subtitle: 'Opens the official release check and download page' },
-                    { icon: 'SYSTEM_UPDATE' },
-                    [
-                        {
-                            customAction: {
-                                action: 'CHECK_FOR_UPDATES',
-                            }
-                        }
-                    ]
-                )
-            ]
-        }
-    ];
-
-    const buttons = [];
-
-    let index = 0;
-    for (const setting of settings) {
-        if (!setting) continue;
-        const currentVal = setting.value ? configRead(setting.value) : null;
-        buttons.push(
-            buttonItem(
-                { title: setting.name, subtitle: setting.subtitle },
-                {
-                    icon: setting.icon ? setting.icon : 'CHEVRON_DOWN',
-                    secondaryIcon:
-                        currentVal === null ? 'CHEVRON_RIGHT' : currentVal ? 'CHECK_BOX' : 'CHECK_BOX_OUTLINE_BLANK'
-                },
-                currentVal !== null
-                    ? [
-                        {
-                            setClientSettingEndpoint: {
-                                settingDatas: [
-                                    {
-                                        clientSettingEnum: {
-                                            item: setting.value
-                                        },
-                                        boolValue: !configRead(setting.value)
-                                    }
-                                ]
-                            }
-                        },
-                        {
-                            customAction: {
-                                action: 'SETTINGS_UPDATE',
-                                parameters: [index]
-                            }
-                        }
-                    ]
-                    : [
-                        {
-                            customAction: {
-                                action: 'OPTIONS_SHOW',
-                                parameters: {
-                                    options: setting.options,
-                                    selectedIndex: 0,
-                                    update: setting.options?.title ? 'customUI' : false,
-                                    menuId: setting.menuId,
-                                    arrayToEdit: setting.arrayToEdit,
-                                    menuHeader: setting.menuHeader,
-                                    action: setting.action
-                                }
-                            }
-                        }
-                    ]
-            )
-        );
-        index++;
-    }
-
-    showModal(
-        {
-            title: 'YTArk Settings',
-            subtitle: 'Playback, appearance and update controls'
-        },
-        overlayPanelItemListRenderer(buttons, parameters && parameters.length > 0 ? parameters[0] : 0),
-        'tt-settings',
-        update
-    );
+  return showSettingsMenu('root', {
+    update: !!update,
+    focusIndex: Array.isArray(parameters) && parameters.length > 0 ? parameters[0] : undefined,
+  });
 }
 
+/**
+ * Legacy renderer kept for `OPTIONS_SHOW` commands issued by older builds or
+ * cached frontend state. New menus use showSettingsMenu().
+ */
 export function optionShow(parameters, update) {
-    if (update === 'customUI') {
-        const option = parameters.options;
-        showModal(
-            {
-                title: option.title,
-                subtitle: option.subtitle
-            },
-            option.content,
-            'tt-settings-support',
-            false
-        );
-        return;
+  if (update === 'customUI') {
+    const option = parameters.options;
+    showModal({ title: option.title, subtitle: option.subtitle }, option.content, 'tt-settings-support', false);
+    return;
+  }
+  const buttons = [];
+  const isArrayBasedOptions = parameters.arrayToEdit !== undefined;
+
+  if (parameters.action) {
+    return resolveCommand(parameters.action);
+  }
+
+  if (isArrayBasedOptions) {
+    const value = configRead(parameters.arrayToEdit);
+    for (const option of parameters.options) {
+      buttons.push(buttonItem(
+        { title: option.name, subtitle: option.subtitle },
+        { icon: option.icon ? option.icon : 'CHEVRON_DOWN', secondaryIcon: value.includes(option.value) ? 'CHECK_BOX' : 'CHECK_BOX_OUTLINE_BLANK' },
+        [
+          settingCommand(parameters.arrayToEdit, 'arrayValue', option.value),
+          custom('OPTIONS_SHOW', { ...parameters, selectedIndex: parameters.options.indexOf(option), update: true }),
+        ],
+      ));
     }
-    const buttons = [];
-
-    // Check if this is the legacy sponsorBlockManualSkips (array-based) or new boolean-based options
-    const isArrayBasedOptions = parameters.arrayToEdit !== undefined;
-
-    if (parameters.action) {
-        return resolveCommand(parameters.action);
+  } else {
+    let index = 0;
+    for (const option of parameters.options) {
+      if (!option) continue;
+      if (option.compactLinkRenderer) {
+        buttons.push(option);
+        index++;
+        continue;
+      }
+      const isRadioChoice = option.key !== null && option.key !== undefined;
+      const currentVal = option.value === null ? undefined : configRead(isRadioChoice ? option.key : option.value);
+      const reopen = custom('OPTIONS_SHOW', {
+        options: parameters.options,
+        selectedIndex: index,
+        update: parameters.options?.title ? 'customUI' : true,
+        menuId: parameters.menuId,
+        arrayToEdit: parameters.arrayToEdit,
+        menuHeader: parameters.menuHeader,
+        action: parameters.action,
+      });
+      let commands;
+      if (option.value === null) {
+        commands = [custom('OPTIONS_SHOW', {
+          options: option.options,
+          selectedIndex: 0,
+          update: option.options?.title ? 'customUI' : false,
+          menuId: option.menuId,
+          arrayToEdit: option.arrayToEdit,
+          menuHeader: option.menuHeader,
+          action: option.action,
+        })];
+      } else if (isRadioChoice) {
+        commands = [settingCommand(option.key, 'stringValue', option.value), reopen];
+      } else {
+        commands = [settingCommand(option.value, 'boolValue', !currentVal), reopen];
+      }
+      buttons.push(buttonItem(
+        { title: option.name, subtitle: option.subtitle },
+        {
+          icon: option.icon ? option.icon : 'CHEVRON_DOWN',
+          secondaryIcon: isRadioChoice ? (currentVal === option.value ? 'RADIO_BUTTON_CHECKED' : 'RADIO_BUTTON_UNCHECKED')
+            : option.value === null ? 'CHEVRON_RIGHT' : currentVal ? 'CHECK_BOX' : 'CHECK_BOX_OUTLINE_BLANK',
+        },
+        commands,
+      ));
+      index++;
     }
+  }
 
-    if (isArrayBasedOptions) {
-        // Legacy handling for sponsorBlockManualSkips
-        const value = configRead(parameters.arrayToEdit);
-        for (const option of parameters.options) {
-            buttons.push(
-                buttonItem(
-                    { title: option.name, subtitle: option.subtitle },
-                    {
-                        icon: option.icon ? option.icon : 'CHEVRON_DOWN',
-                        secondaryIcon: value.includes(option.value) ? 'CHECK_BOX' : 'CHECK_BOX_OUTLINE_BLANK'
-                    },
-                    [
-                        {
-                            setClientSettingEndpoint: {
-                                settingDatas: [
-                                    {
-                                        clientSettingEnum: {
-                                            item: parameters.arrayToEdit
-                                        },
-                                        arrayValue: option.value
-                                    }
-                                ]
-                            }
-                        },
-                        {
-                            customAction: {
-                                action: 'OPTIONS_SHOW',
-                                parameters: {
-                                    options: parameters.options,
-                                    selectedIndex: parameters.options.indexOf(option),
-                                    update: true,
-                                    menuId: parameters.menuId,
-                                    arrayToEdit: parameters.arrayToEdit,
-                                    menuHeader: parameters.menuHeader,
-                                    action: parameters.action
-                                }
-                            }
-                        }
-                    ]
-                )
-            );
-        }
-    } else {
-        // New handling for boolean-based options (like subtitle localization)
-        let index = 0;
-        for (const option of parameters.options) {
-            if (!option) continue;
-            if (option.compactLinkRenderer) {
-                buttons.push(option);
-                index++;
-                continue;
-            }
-            const isRadioChoice = option.key !== null && option.key !== undefined;
-            const currentVal = option.value === null ? undefined : configRead(isRadioChoice ? option.key : option.value);
-            buttons.push(
-                buttonItem(
-                    { title: option.name, subtitle: option.subtitle },
-                    {
-                        icon: option.icon ? option.icon : 'CHEVRON_DOWN',
-                        secondaryIcon: isRadioChoice ? currentVal === option.value ? 'RADIO_BUTTON_CHECKED' : 'RADIO_BUTTON_UNCHECKED' : option.value === null ? 'CHEVRON_RIGHT' : currentVal ? 'CHECK_BOX' : 'CHECK_BOX_OUTLINE_BLANK'
-                    },
-                    option.value === null ? [
-                        {
-                            customAction: {
-                                action: 'OPTIONS_SHOW',
-                                parameters: {
-                                    options: option.options,
-                                    selectedIndex: 0,
-                                    update: option.options?.title ? 'customUI' : false,
-                                    menuId: option.menuId,
-                                    arrayToEdit: option.arrayToEdit,
-                                    menuHeader: option.menuHeader,
-                                    action: option.action
-                                }
-                            }
-                        }
-                    ] : option.key !== null && option.key !== undefined ? [
-                        {
-                            setClientSettingEndpoint: {
-                                settingDatas: [
-                                    {
-                                        clientSettingEnum: {
-                                            item: option.key
-                                        },
-                                        stringValue: option.value
-                                    }
-                                ]
-                            }
-                        },
-                        {
-                            customAction: {
-                                action: 'OPTIONS_SHOW',
-                                parameters: {
-                                    options: parameters.options,
-                                    selectedIndex: index,
-                                    update: parameters.options?.title ? 'customUI' : true,
-                                    menuId: parameters.menuId,
-                                    arrayToEdit: parameters.arrayToEdit,
-                                    menuHeader: parameters.menuHeader,
-                                    action: parameters.action
-                                }
-                            }
-                        }
-                    ] : [
-                        {
-                            setClientSettingEndpoint: {
-                                settingDatas: [
-                                    {
-                                        clientSettingEnum: {
-                                            item: option.value
-                                        },
-                                        boolValue: !currentVal
-                                    }
-                                ]
-                            }
-                        },
-                        {
-                            customAction: {
-                                action: 'OPTIONS_SHOW',
-                                parameters: {
-                                    options: parameters.options,
-                                    selectedIndex: index,
-                                    update: parameters.options?.title ? 'customUI' : true,
-                                    menuId: parameters.menuId,
-                                    arrayToEdit: parameters.arrayToEdit,
-                                    menuHeader: parameters.menuHeader,
-                                    action: parameters.action
-                                }
-                            }
-                        }
-                    ]
-                )
-            );
-            index++;
-        }
-    }
-
-    showModal(parameters.menuHeader ? parameters.menuHeader : t('settings.ttSettings.title'), overlayPanelItemListRenderer(buttons, parameters.selectedIndex), parameters.menuId || 'tt-settings-options', update);
+  showModal(parameters.menuHeader ? parameters.menuHeader : t('settings.ttSettings.title'),
+    overlayPanelItemListRenderer(buttons, parameters.selectedIndex), parameters.menuId || 'tt-settings-options', update);
 }

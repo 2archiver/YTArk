@@ -8,16 +8,20 @@
  * preferences alone. Native Android update controls are provided by YTArk.
  */
 
-import { configRead, configWrite } from '../config.js';
+import { configRead, configWrite, configWriteMany } from '../config.js';
 import updateStyle from '../ui/theme.js';
 
 // ---------------------------------------------------------------------------
 // Preset definitions
 // ---------------------------------------------------------------------------
 
+// Colour presets also select the "YouTube default" theme: OLED Black draws
+// true black over the custom colours, so a colour preset would otherwise have
+// no visible effect. Undo Last Preset restores the previous theme too.
 const PRESETS = {
   cleanTV: {
     label: 'Clean TV',
+    description: 'Hides Shorts, previews, end cards and related videos',
     changes: {
       enableShorts: false,
       enablePreviews: false,
@@ -29,16 +33,20 @@ const PRESETS = {
   },
   midnightBlue: {
     label: 'Midnight Blue',
+    description: 'Dark blue navigation and content colours (YouTube default theme)',
     changes: {
       focusContainerColor: '#0a1628',
       routeColor: '#0d1f3c',
+      uiTheme: 'youtube',
     },
   },
   classicDark: {
     label: 'Classic Dark',
+    description: 'YouTube\'s dark grey colours (YouTube default theme)',
     changes: {
       focusContainerColor: '#0f0f0f',
       routeColor: '#0f0f0f',
+      uiTheme: 'youtube',
     },
   },
 };
@@ -63,14 +71,12 @@ function applyPreset(presetKey) {
   const keys = Object.keys(preset.changes);
   const snapshot = takeSnapshot(keys);
 
-  // Save snapshot for undo
-  configWrite('tvLastPresetSnapshot', JSON.stringify({ presetKey, snapshot }));
-  configWrite('tvActivePreset', presetKey);
-
-  // Apply each change
-  for (const [k, v] of Object.entries(preset.changes)) {
-    configWrite(k, v);
-  }
+  // Save the snapshot for undo and apply every change with one storage write.
+  configWriteMany({
+    tvLastPresetSnapshot: JSON.stringify({ presetKey, snapshot }),
+    tvActivePreset: presetKey,
+    ...preset.changes,
+  });
 
   // Update theme stylesheet if colors changed
   if (preset.changes.focusContainerColor || preset.changes.routeColor) {
@@ -92,15 +98,14 @@ function undoLastPreset() {
   const { snapshot } = parsed;
   if (!snapshot || typeof snapshot !== 'object') return false;
 
-  for (const [k, v] of Object.entries(snapshot)) {
-    configWrite(k, v);
-  }
+  configWriteMany({
+    ...snapshot,
+    tvActivePreset: null,
+    tvLastPresetSnapshot: null,
+  });
 
-  configWrite('tvActivePreset', null);
-  configWrite('tvLastPresetSnapshot', null);
-
-  // Update theme stylesheet if colors were restored
-  if (snapshot.focusContainerColor !== undefined || snapshot.routeColor !== undefined) {
+  // Update theme stylesheet if colors or the theme were restored
+  if (snapshot.focusContainerColor !== undefined || snapshot.routeColor !== undefined || snapshot.uiTheme !== undefined) {
     updateThemeStylesheet();
   }
 

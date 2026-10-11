@@ -40,7 +40,12 @@ function OverlayPanelHeaderRenderer(title, subtitle, thumbnails) {
     }
 }
 
-function Modal(header, content, id, update) {
+/**
+ * Build an openPopupAction for a YTArk modal.
+ * `options.onDismiss`: commands run after the modal closes with Back (or the
+ * on-screen back button), for example to refresh the list underneath it.
+ */
+function Modal(header, content, id, update, options) {
     const titleSubtitleObj = typeof header === 'string' ? { title: header, subtitle: '' } : header;
     const overlayPanelHeaderRenderer = header.overlayPanelHeaderRenderer || {
         title: {
@@ -69,20 +74,12 @@ function Modal(header, content, id, update) {
                                             label: 'Back'
                                         }
                                     },
-                                    command: {
-                                        signalAction: {
-                                            signal: 'POPUP_BACK'
-                                        }
-                                    }
+                                    command: backCommand(options)
                                 }
                             }
                         }
                     },
-                    dismissalCommand: {
-                        signalAction: {
-                            signal: 'POPUP_BACK'
-                        }
-                    }
+                    dismissalCommand: backCommand(options)
                 }
             },
             uniqueId: id
@@ -103,10 +100,27 @@ function Modal(header, content, id, update) {
     return modalCmd;
 }
 
-function showModal(header, content, id, update) {
-    const modalCmd = Modal(header, content, id, update);
+function backCommand(options) {
+    const extra = options && Array.isArray(options.onDismiss) ? options.onDismiss.filter(Boolean) : [];
+    if (!extra.length) {
+        return {
+            signalAction: {
+                signal: 'POPUP_BACK'
+            }
+        };
+    }
+    return {
+        commandExecutorCommand: {
+            commands: [{ signalAction: { signal: 'POPUP_BACK' } }].concat(extra)
+        }
+    };
+}
+
+function showModal(header, content, id, update, options) {
+    const modalCmd = Modal(header, content, id, update, options);
 
     resolveCommand(modalCmd);
+    return modalCmd;
 }
 
 function overlayPanelItemListRenderer(items, selectedIndex) {

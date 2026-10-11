@@ -1,9 +1,11 @@
 /*global navigate*/
 import '../spatial-navigation-polyfill.js';
 import css from './ui.css';
-import { configRead, configWrite } from '../config.js';
+import { configRead, configWrite, configWriteMany, configChangeEmitter } from '../config.js';
 import updateStyle from './theme.js';
 import { showToast } from './ytUI.js';
+import { initWhatsNew, changelogEntryFor } from '../features/whatsNew.js';
+import { tx } from '../translations/text.js';
 import modernUI from './settings.js';
 import resolveCommand, { patchResolveCommand } from '../resolveCommand.js';
 import { pipToFullscreen } from '../features/pictureInPicture.js';
@@ -45,6 +47,49 @@ const startupInterval = setInterval(() => {
 
 let keyTimeout = null;
 
+// Start-up work is split into idempotent steps so that a failure part-way
+// through (and the retry that follows) can never inject styles, panels, key
+// handlers or start-up navigation twice.
+const startupSteps = {
+  css: false,
+  panel: false,
+  listeners: false,
+  navigation: false,
+  observer: false,
+};
+
+// One notice per session when settings cannot be saved (no toast spam).
+configChangeEmitter.addEventListener('configPersistError', () => {
+  try {
+    showToast('YTArk', tx('ytark.storage.saveFailed', 'Settings could not be saved on this TV. Changes apply until the app restarts.'));
+  } catch (_) {
+    /* the toast is best effort */
+  }
+});
+
+/** Custom colours only show with the YouTube default theme. */
+function saveCustomColor(key, value) {
+  if (configRead('uiTheme') === 'oled') {
+    configWriteMany({ [key]: value, uiTheme: 'youtube' });
+    showToast('YTArk', tx('ytark.appearance.colorsSwitched', 'Theme set to YouTube default so your colours are visible.'));
+  } else {
+    configWrite(key, value);
+  }
+  updateStyle();
+}
+
+function startupDestination() {
+  const raw = configRead('launchToOnStartup');
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+  } catch (error) {
+    console.warn('[YTArk] Ignoring an invalid startup destination:', error);
+    return null;
+  }
+}
+
 const keys = {
   49: 1,
   50: 2,
@@ -60,15 +105,17 @@ const keys = {
 
 function execute_once_dom_loaded() {
 
-  // Add CSS to head.
-
-  const existingStyle = document.querySelector('style[nonce]');
-  if (existingStyle) {
-    existingStyle.textContent += css;
-  } else {
-    const style = document.createElement('style');
-    style.textContent = css;
-    document.head.appendChild(style);
+  // Add CSS to head (once).
+  if (!startupSteps.css) {
+    const existingStyle = document.querySelector('style[nonce]');
+    if (existingStyle) {
+      existingStyle.textContent += css;
+    } else {
+      const style = document.createElement('style');
+      style.textContent = css;
+      document.head.appendChild(style);
+    }
+    startupSteps.css = true;
   }
 
   // Fix UI issues.
@@ -85,7 +132,7 @@ function execute_once_dom_loaded() {
   }
 
   // We handle key events ourselves.
-  window.__spatialNavigation__.keyMode = 'NONE';
+  if (window.__spatialNavigation__) window.__spatialNavigation__.keyMode = 'NONE';
 
   var ARROW_KEY_CODE = { 37: 'left', 38: 'up', 39: 'right', 40: 'down' };
 
@@ -146,7 +193,7 @@ function execute_once_dom_loaded() {
     }
   }, true);
 
-  try {
+  if (!startupSteps.panel) try {
     uiContainer.innerHTML = `
 <h1>YTArk Settings</h1>
 <label for="__barColor">Navigation Bar Color: <input type="text" id="__barColor"/></label>
@@ -157,15 +204,14 @@ function execute_once_dom_loaded() {
 
     uiContainer.querySelector('#__barColor').value = configRead('focusContainerColor');
     uiContainer.querySelector('#__barColor').addEventListener('change', (evt) => {
-      configWrite('focusContainerColor', evt.target.value);
-      updateStyle();
+      saveCustomColor('focusContainerColor', evt.target.value);
     });
 
     uiContainer.querySelector('#__routeColor').value = configRead('routeColor');
     uiContainer.querySelector('#__routeColor').addEventListener('change', (evt) => {
-      configWrite('routeColor', evt.target.value);
-      updateStyle();
+      saveCustomColor('routeColor', evt.target.value);
     });
+    startupSteps.panel = true;
   } catch (e) { }
 
   const handledRemoteKeys = new Set();
@@ -246,13 +292,16 @@ function execute_once_dom_loaded() {
     return true;
   };
 
-  document.addEventListener('keydown', eventHandler, true);
-  document.addEventListener('keyup', (evt) => handledRemoteKeys.delete(evt.keyCode), true);
-  if (configRead('reloadHomeOnStartup')) {
-    if (configRead('launchToOnStartup')) {
-      resolveCommand(JSON.parse(configRead('launchToOnStartup')));
-    } else {
-      resolveCommand({
+  if (!startupSteps.listeners) {
+    document.addEventListener('keydown', eventHandler, true);
+    document.addEventListener('keyup', (evt) => handledRemoteKeys.delete(evt.keyCode), true);
+    startupSteps.listeners = true;
+  }
+  if (!startupSteps.navigation) {
+    startupSteps.navigation = true;
+    if (configRead('reloadHomeOnStartup')) {
+      const destination = startupDestination();
+      resolveCommand(destination || {
         signalAction: {
           signal: 'SOFT_RELOAD_PAGE'
         }
@@ -267,7 +316,8 @@ function execute_once_dom_loaded() {
 
   // Fix UI issues, again. Love, Googol.
 
-  if (configRead('enableFixedUI')) {
+  if (configRead('enableFixedUI') && !startupSteps.observer) {
+    startupSteps.observer = true;
     try {
       const observer = new MutationObserver((_, _2) => {
         const body = document.body;
@@ -277,5 +327,20 @@ function execute_once_dom_loaded() {
       });
       observer.observe(document.body, { attributes: true, childList: false, subtree: false });
     } catch (e) { }
+  }
+
+  // Post-update What's new: evaluated once, announced once, never over playback.
+  try {
+    initWhatsNew({
+      announce: (version) => {
+        const entry = changelogEntryFor(version);
+        showToast(
+          tx('ytark.whatsNew.toastTitle', 'YTArk updated to {{version}}', { version: entry ? entry.display : version }),
+          tx('ytark.whatsNew.toastBody', 'See What\'s new at the top of YTArk Settings.'),
+        );
+      },
+    });
+  } catch (error) {
+    console.warn('[YTArk] What\'s new could not be evaluated:', error);
   }
 }

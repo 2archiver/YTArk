@@ -14,6 +14,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
 
+import build_changelog
 import fetch_base_apks
 import prepare_update_smoke
 import repack_apk
@@ -23,12 +24,12 @@ import validate_release
 class Armv7OnlyReleaseContractTests(unittest.TestCase):
     def test_expected_clean_semver_version_and_asset_names(self):
         config = validate_release.load_config()
-        self.assertEqual(config["VERSION_NAME"], "2.2.0")
-        self.assertEqual(config["DISPLAY_VERSION"], "2.2")
-        self.assertEqual(config["VERSION_CODE"], "2020000")
-        self.assertEqual(config["VERSION_TAG"], "v2.2.0")
-        self.assertEqual(config["RELEASE_NAME"], "YTArk 2.2")
-        self.assertEqual(config["APK_ARMV7"], "YTArk-v2.2.0-armv7.apk")
+        self.assertEqual(config["VERSION_NAME"], "2.3.0")
+        self.assertEqual(config["DISPLAY_VERSION"], "2.3")
+        self.assertEqual(config["VERSION_CODE"], "2030000")
+        self.assertEqual(config["VERSION_TAG"], "v2.3.0")
+        self.assertEqual(config["RELEASE_NAME"], "YTArk 2.3")
+        self.assertEqual(config["APK_ARMV7"], "YTArk-v2.3.0-armv7.apk")
         self.assertEqual(validate_release.apk_filename(config["VERSION_NAME"], "armv7"), config["APK_ARMV7"])
         # Only one architecture is published from 2.1.2 onwards.
         self.assertNotIn("APK_ARM64", config)
@@ -99,15 +100,15 @@ class Armv7OnlyReleaseContractTests(unittest.TestCase):
             latest_path = root / "latest.json"
             releases_path = root / "releases.json"
             latest_path.write_text(json.dumps(latest), encoding="utf-8")
-            # Legacy published 2.1.2 (2010200) must be exceeded by the 2.2.0 candidate.
-            self.assertGreater(int(validate_release.load_config()["VERSION_CODE"]), 2010200)
+            # Published 2.1.2 (2010200) and 2.2.0 (2020000) must be exceeded by the 2.3.0 candidate.
+            self.assertGreater(int(validate_release.load_config()["VERSION_CODE"]), 2020000)
             releases_path.write_text(json.dumps([releases[:4], releases[4:]]), encoding="utf-8")
             validate_release.check_version(str(latest_path), str(releases_path))
 
-            # A published release above the candidate (2.2.0 = 2020000) must block it.
+            # A published release above the candidate (2.3.0 = 2030000) must block it.
             too_high = dict(releases[1])
-            too_high["tag_name"] = "v2.2.1"
-            too_high["body"] = "Version 2.2.1 (versionCode 2020100)"
+            too_high["tag_name"] = "v2.3.1"
+            too_high["body"] = "Version 2.3.1 (versionCode 2030100)"
             releases_path.write_text(json.dumps(releases + [too_high]), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "must exceed every published release|must be newer"):
                 validate_release.check_version(str(latest_path), str(releases_path))
@@ -411,6 +412,11 @@ arm64-v8a (a 64-bit-only system) cannot install this release.
                 "SCRIPT_TAG", "BASE_TAG", "APK_ARMV7")},
             "SIGNING_CERT_SHA256": "b9cb7e4b4d5179870e672e850f5d3661f02c248f943dbaf10cd78cd0c047eaae",
         })
+        # The What changed section is generated from CHANGELOG.md exactly as
+        # render_release_notes.sh does it.
+        what_changed = build_changelog.release_notes_section(build_changelog.load()[0], config["VERSION_NAME"])
+        environment["WHAT_CHANGED"] = what_changed.rstrip("\n")
+        self.assertIn("WHAT_CHANGED", template)
         script = "cat <<YTARK_NOTES_EOF\n" + body + "\nYTARK_NOTES_EOF\n"
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "render-notes.sh"
@@ -429,6 +435,12 @@ arm64-v8a (a 64-bit-only system) cannot install this release.
         self.assertEqual(validate_release.parse_release_version_code(rendered),
                          int(config["VERSION_CODE"]))
         self.assertNotRegex(rendered, r"personal\s+tube\s+tv")
+        # The changelog section is present, including the fresh-install defaults.
+        self.assertIn("## What changed in this release", rendered)
+        self.assertIn("### Defaults and migration", rendered)
+        self.assertIn("Fresh installations start with OLED Black", rendered)
+        self.assertIn("### Known limitations", rendered)
+        self.assertNotIn("${WHAT_CHANGED}", rendered)
 
     def test_previous_update_smoke_rejects_nonofficial_urls(self):
         name = "YTArk-v2.0.3-ytark.15-armv7.apk"

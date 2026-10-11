@@ -23,7 +23,18 @@ inside the TV frontend only.
 ## What YTArk stores on the device
 
 - **App settings** (ad-block toggle, SponsorBlock categories, quality, themes,
-  cosmetic logo preference) in local storage inside the app's data directory.
+  cosmetic logo preference, OLED Black, the player cleanup switches) in local
+  storage inside the app's data directory, together with a settings schema
+  marker (`configSchemaVersion`).
+- **YouTube Settings layout** (2.3+): the order, hidden sections, pinned and
+  hidden entries you chose, stored as stable section/entry identifiers, plus the
+  section titles YTArk detected so the editor can show them. Entries of account,
+  sign-in and other protected sections are not recorded at all, and titles that
+  look like an e-mail address are replaced, so no account identity is stored.
+- **What's new** (2.3+): the last installed version seen and the version whose
+  card you dismissed — version strings only.
+- **Settings search** runs entirely on the TV. Queries are not stored after the
+  app closes and are never sent to YouTube, GitHub or any other service.
 - **Updater state** (pending update metadata, snooze timestamps) in the app's
   `ytark_native_updater` preferences.
 - Google session cookies and tokens are kept by the upstream Cobalt/Chromium

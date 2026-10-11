@@ -1,4 +1,41 @@
+// YTArk userscript configuration.
+//
+// Every YTArk preference lives in one JSON object stored under
+// localStorage['ytaf-configuration']. The key name is inherited from TizenTube
+// and is kept so that saved preferences survive every update. YTArk never
+// reads or writes Google account, cookie or session storage from here.
+//
+// Schema history
+//   (no marker)  YTArk <= 2.2.0: missing keys were merged from defaults.
+//   2            YTArk 2.3.0: explicit `configSchemaVersion`. The appearance and
+//                player-cleanup keys introduced in 2.3 receive install-type-aware
+//                defaults exactly once (see migrateConfig) and explicit stored
+//                choices win from then on.
+
 const CONFIG_KEY = 'ytaf-configuration';
+export const CONFIG_SCHEMA_VERSION = 2;
+/** Presence of YouTube TV's own storage means the app has run before. Only the
+ * existence of the key is checked; its contents are never read. */
+const LEANBACK_HISTORY_KEY = 'yt.leanback.default::recurring_actions';
+/** `lastSeenVersion` value for an installation migrated from <= 2.2. */
+export const LEGACY_VERSION_MARKER = 'legacy';
+
+export const THEMES = Object.freeze(['youtube', 'oled']);
+
+/** Defaults of a fresh installation; these are also the product defaults. */
+export const FRESH_INSTALL_DEFAULTS = Object.freeze({
+  uiTheme: 'oled',
+  hidePlayerWatermark: true,
+  removePlayerScrim: true,
+});
+
+/** Values an installation upgraded from <= 2.2 keeps until the user opts in. */
+export const UPGRADE_DEFAULTS = Object.freeze({
+  uiTheme: 'youtube',
+  hidePlayerWatermark: false,
+  removePlayerScrim: false,
+});
+
 const defaultConfig = {
   // Client-side ad filtering defaults on for fresh installs; explicit stored
   // user choices are preserved by the missing-key-only merge below.
@@ -25,7 +62,7 @@ const defaultConfig = {
   enableDeArrowThumbnails: false,
   focusContainerColor: '#0f0f0f',
   routeColor: '#0f0f0f',
-  enableFixedUI: (window.h5vcc) ? false : true,
+  enableFixedUI: (typeof window !== 'undefined' && window.h5vcc) ? false : true,
   enableHqThumbnails: false,
   enableChapters: true,
   enableLongPress: true,
@@ -55,7 +92,10 @@ const defaultConfig = {
   dimmingOpacity: 0.5,
   enablePaidPromotionOverlay: true,
   speedSettingsIncrement: 0.25,
+  // Legacy key: earlier builds declared this default while the player and the
+  // settings read `preferredVideoCodec`. It is kept so old data stays intact.
   videoPreferredCodec: 'any',
+  preferredVideoCodec: 'any',
   launchToOnStartup: null,
   reloadHomeOnStartup: true,
   disabledSidebarContents: [],
@@ -78,72 +118,360 @@ const defaultConfig = {
   tvActivePreset: null,
   tvLastPresetSnapshot: null,
   tvQuickQuality: null,
+
+  // YTArk 2.3: appearance and player cleanup (product defaults; installations
+  // upgraded from <= 2.2 receive UPGRADE_DEFAULTS once instead).
+  ...FRESH_INSTALL_DEFAULTS,
+  // Native YouTube Settings page layout. Stable category/row identities only.
+  ytSettingsLayout: { order: [], hidden: [], pinned: [], hiddenRows: [] },
+  // Sections detected on the native YouTube Settings page (no account data).
+  ytSettingsCatalog: null,
+  // "What's new" bookkeeping, stored by version only.
+  lastSeenVersion: '',
+  whatsNewVersion: '',
+  whatsNewDismissedVersion: '',
+  configSchemaVersion: CONFIG_SCHEMA_VERSION,
 };
 
-let localConfig;
+// ---------------------------------------------------------------------------
+// Pure helpers (exported for tests)
+// ---------------------------------------------------------------------------
 
-try {
-  const stored = window.localStorage[CONFIG_KEY];
-  if (stored === undefined || stored === null || stored === 'undefined' || stored === 'null') {
-    localConfig = {};
-  } else {
-    const parsed = JSON.parse(stored);
-    if (Array.isArray(parsed) || typeof parsed !== 'object' || parsed === null) {
-      console.warn('Config was not a plain object, resetting to defaults');
-      localConfig = {};
-    } else {
-      localConfig = parsed;
+function isPlainObject(value) {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function cloneValue(value) {
+  if (value === null || typeof value !== 'object') return value;
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch (_) {
+    return Array.isArray(value) ? value.slice() : { ...value };
+  }
+}
+
+function uniqueStrings(list, limit = 100, maxLength = 200) {
+  if (!Array.isArray(list)) return [];
+  const seen = new Set();
+  const result = [];
+  for (const item of list) {
+    if (typeof item !== 'string' || !item || item.length > maxLength || seen.has(item)) continue;
+    seen.add(item);
+    result.push(item);
+    if (result.length >= limit) break;
+  }
+  return result;
+}
+
+function isJsonObjectString(value) {
+  if (typeof value !== 'string' || value.length > 4000) return false;
+  try {
+    return isPlainObject(JSON.parse(value));
+  } catch (_) {
+    return false;
+  }
+}
+
+export function sanitizeLayout(value) {
+  const source = isPlainObject(value) ? value : {};
+  return {
+    order: uniqueStrings(source.order),
+    hidden: uniqueStrings(source.hidden),
+    pinned: uniqueStrings(source.pinned, 30),
+    hiddenRows: uniqueStrings(source.hiddenRows),
+  };
+}
+
+const SANITIZERS = {
+  uiTheme(value, fallback) {
+    return THEMES.includes(value) ? value : fallback;
+  },
+  launchToOnStartup(value) {
+    return value === null || isJsonObjectString(value) ? value : null;
+  },
+  ytSettingsLayout(value) {
+    return sanitizeLayout(value);
+  },
+  ytSettingsCatalog(value) {
+    return isPlainObject(value) && Array.isArray(value.categories) ? value : null;
+  },
+  sponsorBlockManualSkips(value, fallback) {
+    return Array.isArray(value) ? uniqueStrings(value, 20, 40) : cloneValue(fallback);
+  },
+  hideWatchedVideosPages(value, fallback) {
+    return Array.isArray(value) ? uniqueStrings(value, 20, 40) : cloneValue(fallback);
+  },
+  disabledSidebarContents(value, fallback) {
+    return Array.isArray(value) ? uniqueStrings(value, 100, 200) : cloneValue(fallback);
+  },
+  sidebarContentsOrder(value, fallback) {
+    if (!Array.isArray(value)) return cloneValue(fallback);
+    return value.filter(item => (typeof item === 'string' && item.length > 0 && item.length <= 200)
+      || (isPlainObject(item) && typeof item.browseId === 'string' && item.browseId.length > 0));
+  },
+};
+
+/**
+ * Normalize one stored value against its default. Wrong but unambiguous types
+ * are coerced (for example "true" or "80"), anything else falls back to the
+ * default so a malformed value cannot crash a feature.
+ */
+export function normalizeValue(key, value) {
+  if (!Object.prototype.hasOwnProperty.call(defaultConfig, key)) return value;
+  const fallback = defaultConfig[key];
+  if (Object.prototype.hasOwnProperty.call(SANITIZERS, key)) return SANITIZERS[key](value, fallback);
+  if (fallback === null) return value === undefined ? null : value;
+  switch (typeof fallback) {
+    case 'boolean':
+      if (typeof value === 'boolean') return value;
+      if (value === 'true') return true;
+      if (value === 'false') return false;
+      return fallback;
+    case 'number': {
+      if (typeof value === 'number' && Number.isFinite(value)) return value;
+      if (typeof value === 'string' && value.trim() !== '' && Number.isFinite(Number(value))) return Number(value);
+      return fallback;
+    }
+    case 'string':
+      return typeof value === 'string' ? value : fallback;
+    default:
+      if (Array.isArray(fallback)) return Array.isArray(value) ? value : cloneValue(fallback);
+      if (isPlainObject(fallback)) return isPlainObject(value) ? value : cloneValue(fallback);
+      return value;
+  }
+}
+
+/** Normalize every known key in place; returns the keys that were repaired. */
+export function normalizeConfig(config) {
+  const repaired = [];
+  for (const key of Object.keys(defaultConfig)) {
+    if (config[key] === undefined) continue;
+    const normalized = normalizeValue(key, config[key]);
+    if (JSON.stringify(normalized) !== JSON.stringify(config[key])) {
+      config[key] = normalized;
+      repaired.push(key);
     }
   }
-} catch (err) {
-  console.warn('Config read failed:', err);
-  localConfig = {};
+  return repaired;
 }
 
-// Merge defaults for any missing keys
-for (const key of Object.keys(defaultConfig)) {
-  if (localConfig[key] === undefined) {
-    localConfig[key] = defaultConfig[key];
+/**
+ * Migrate a stored configuration object to the current schema. Pure: callers
+ * decide whether and when to persist the result.
+ *
+ * @param {object|null} stored     Parsed stored object, or null when absent.
+ * @param {{hasLeanbackHistory?: boolean}} env
+ * @returns {{config: object, freshInstall: boolean, migratedFrom: number|null,
+ *            repaired: string[], changed: boolean}}
+ */
+export function migrateConfig(stored, env = {}) {
+  const config = isPlainObject(stored) ? { ...stored } : {};
+  const hadStoredConfig = isPlainObject(stored) && Object.keys(stored).length > 0;
+  const storedSchema = Number(config.configSchemaVersion);
+  const schema = Number.isFinite(storedSchema) && storedSchema > 0 ? storedSchema : 0;
+  let freshInstall = false;
+  let migratedFrom = null;
+  let changed = false;
+
+  if (schema < CONFIG_SCHEMA_VERSION) {
+    const existingInstall = hadStoredConfig || env.hasLeanbackHistory === true;
+    if (existingInstall) {
+      // Keep the current appearance: new options start off until chosen.
+      for (const key of Object.keys(UPGRADE_DEFAULTS)) {
+        if (config[key] === undefined) config[key] = UPGRADE_DEFAULTS[key];
+      }
+      if (!config.lastSeenVersion) config.lastSeenVersion = LEGACY_VERSION_MARKER;
+      migratedFrom = schema || 1;
+    } else {
+      freshInstall = true;
+    }
+    if (config.preferredVideoCodec === undefined && typeof config.videoPreferredCodec === 'string'
+        && config.videoPreferredCodec !== 'any') {
+      config.preferredVideoCodec = config.videoPreferredCodec;
+    }
+    config.configSchemaVersion = CONFIG_SCHEMA_VERSION;
+    changed = true;
   }
-}
 
-export function configRead(key) {
-  if (localConfig[key] === undefined) {
-    console.warn('Populating key', key, 'with default value', defaultConfig[key]);
-    localConfig[key] = defaultConfig[key];
+  for (const key of Object.keys(defaultConfig)) {
+    if (config[key] === undefined) config[key] = cloneValue(defaultConfig[key]);
   }
-
-  return localConfig[key];
+  const repaired = normalizeConfig(config);
+  if (repaired.length) changed = true;
+  return { config, freshInstall, migratedFrom, repaired, changed };
 }
 
-export function configWrite(key, value) {
-  console.info('Setting key', key, 'to', value);
-  localConfig[key] = value;
+// ---------------------------------------------------------------------------
+// Runtime state
+// ---------------------------------------------------------------------------
+
+function storage() {
   try {
-    window.localStorage[CONFIG_KEY] = JSON.stringify(localConfig);
-  } catch (err) {
-    console.warn('Config write to localStorage failed:', err);
+    return typeof window !== 'undefined' && window.localStorage ? window.localStorage : null;
+  } catch (_) {
+    return null;
   }
-  configChangeEmitter.dispatchEvent(new CustomEvent('configChange', { detail: { key, value } }));
+}
+
+function readStored() {
+  const store = storage();
+  if (!store) return { value: null, hasLeanbackHistory: false };
+  let hasLeanbackHistory = false;
+  try {
+    const marker = store[LEANBACK_HISTORY_KEY];
+    hasLeanbackHistory = marker !== undefined && marker !== null;
+  } catch (_) {
+    hasLeanbackHistory = false;
+  }
+  try {
+    const stored = store[CONFIG_KEY];
+    if (stored === undefined || stored === null || stored === 'undefined' || stored === 'null' || stored === '') {
+      return { value: null, hasLeanbackHistory };
+    }
+    const parsed = JSON.parse(stored);
+    if (!isPlainObject(parsed)) {
+      console.warn('[YTArk] Saved settings were not an object; defaults are used for this session.');
+      // A corrupt object still proves the app has run before.
+      return { value: {}, hasLeanbackHistory: true };
+    }
+    return { value: parsed, hasLeanbackHistory };
+  } catch (err) {
+    console.warn('[YTArk] Saved settings could not be read; defaults are used for this session:', err);
+    return { value: {}, hasLeanbackHistory: true };
+  }
+}
+
+const loaded = readStored();
+const migration = migrateConfig(loaded.value, { hasLeanbackHistory: loaded.hasLeanbackHistory });
+const localConfig = migration.config;
+const configMeta = Object.freeze({
+  freshInstall: migration.freshInstall,
+  migratedFrom: migration.migratedFrom,
+  repaired: migration.repaired.slice(),
+  schemaVersion: CONFIG_SCHEMA_VERSION,
+});
+if (migration.repaired.length) {
+  console.warn('[YTArk] Repaired malformed saved settings:', migration.repaired.join(', '));
 }
 
 export const configChangeEmitter = {
   listeners: {},
   addEventListener(type, callback) {
     if (!this.listeners[type]) this.listeners[type] = [];
+    if (this.listeners[type].includes(callback)) return;
     this.listeners[type].push(callback);
   },
   removeEventListener(type, callback) {
     if (!this.listeners[type]) return;
     this.listeners[type] = this.listeners[type].filter(cb => cb !== callback);
   },
+  listenerCount(type) {
+    return this.listeners[type] ? this.listeners[type].length : 0;
+  },
   dispatchEvent(event) {
     const type = event.type;
     if (!this.listeners[type]) return;
-    this.listeners[type].forEach(cb => {
+    this.listeners[type].slice().forEach(cb => {
       try {
-        cb.call(this, event)
-      } catch (_) {};
+        cb.call(this, event);
+      } catch (error) {
+        console.warn('[YTArk] A settings listener failed:', error);
+      }
     });
   }
 };
+
+function makeEvent(type, detail) {
+  if (typeof CustomEvent === 'function') {
+    try {
+      return new CustomEvent(type, { detail });
+    } catch (_) {
+      /* fall through to a plain event object */
+    }
+  }
+  return { type, detail };
+}
+
+let persistFailureReported = false;
+let lastPersistOk = true;
+
+function persist(reasonKey) {
+  const store = storage();
+  try {
+    if (!store) throw new Error('localStorage is unavailable');
+    store[CONFIG_KEY] = JSON.stringify(localConfig);
+    lastPersistOk = true;
+    return true;
+  } catch (err) {
+    lastPersistOk = false;
+    console.warn('[YTArk] Settings could not be saved:', err);
+    if (!persistFailureReported) {
+      // One notification per session: the UI shows a single toast.
+      persistFailureReported = true;
+      configChangeEmitter.dispatchEvent(makeEvent('configPersistError', { key: reasonKey, error: String(err) }));
+    }
+    return false;
+  }
+}
+
+// Persist the schema marker once so the migration never runs twice. A fresh
+// installation must persist too: on the next launch YouTube's own storage
+// exists, and without the marker it would be mistaken for an upgrade.
+if (migration.changed) {
+  persist('configSchemaVersion');
+}
+
+export function configRead(key) {
+  if (localConfig[key] === undefined) {
+    if (!Object.prototype.hasOwnProperty.call(defaultConfig, key)) {
+      console.warn('[YTArk] Unknown setting requested:', key);
+      return undefined;
+    }
+    localConfig[key] = cloneValue(defaultConfig[key]);
+  }
+  return localConfig[key];
+}
+
+export function configDefault(key) {
+  return cloneValue(defaultConfig[key]);
+}
+
+export function configKeys() {
+  return Object.keys(defaultConfig);
+}
+
+export function configWrite(key, value) {
+  localConfig[key] = value;
+  persist(key);
+  configChangeEmitter.dispatchEvent(makeEvent('configChange', { key, value }));
+}
+
+/** Write several keys with one storage write, then notify for each key. */
+export function configWriteMany(values) {
+  if (!isPlainObject(values)) return;
+  const keys = Object.keys(values);
+  if (!keys.length) return;
+  for (const key of keys) localConfig[key] = values[key];
+  persist(keys[0]);
+  for (const key of keys) {
+    configChangeEmitter.dispatchEvent(makeEvent('configChange', { key, value: values[key] }));
+  }
+}
+
+/** Restore the given keys to their defaults (never touches other data). */
+export function resetConfigKeys(keys) {
+  const values = {};
+  for (const key of keys || []) {
+    if (Object.prototype.hasOwnProperty.call(defaultConfig, key)) values[key] = cloneValue(defaultConfig[key]);
+  }
+  configWriteMany(values);
+  return Object.keys(values);
+}
+
+export function getConfigMeta() {
+  return configMeta;
+}
+
+export function lastPersistSucceeded() {
+  return lastPersistOk;
+}
