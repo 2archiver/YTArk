@@ -211,6 +211,22 @@ public final class UpdateReleaseContractTest {
         throw new AssertionError("Expected rejection for " + description);
     }
 
+    /** The rejection must also explain itself: unsupported ABI lists need actionable text. */
+    private static void rejectsWithMessage(IoRunnable assertion, String expectedFragment,
+                                           String description) throws Exception {
+        try {
+            assertion.run();
+        } catch (IOException expected) {
+            String message = expected.getMessage();
+            if (message == null || !message.contains(expectedFragment)) {
+                throw new AssertionError(description + ": expected a message containing \""
+                        + expectedFragment + "\", got \"" + message + "\"");
+            }
+            return;
+        }
+        throw new AssertionError("Expected rejection for " + description);
+    }
+
     private static void equals(Object expected, Object actual, String description) {
         if (expected == null ? actual != null : !expected.equals(actual)) {
             throw new AssertionError(description + ": expected " + expected + ", got " + actual);
