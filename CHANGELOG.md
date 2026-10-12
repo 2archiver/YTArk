@@ -18,9 +18,45 @@ Conventions:
 - Capabilities inherited from TizenTube and TizenTubeCobalt are listed under
   "Upstream base and inherited capabilities", not as YTArk additions.
 
-## [2.5.0] — Unreleased
+## [2.6.0] — Unreleased
 
-> Not yet published. Planned tag `v2.5.0` · versionCode 2050000 · userscript `s24` · one ARMv7 APK (armeabi-v7a) on TizenTubeCobalt v2.0.2. The publication date is recorded on the GitHub release when the release workflow publishes this build.
+> Not yet published. Planned tag `v2.6.0` · versionCode 2060000 · userscript `s25` · one ARMv7 APK (armeabi-v7a) on TizenTubeCobalt v2.0.2. The publication date is recorded on the GitHub release when the release workflow publishes this build.
+
+Complete native updater and Android install-permission release for the ARMv7 build. The updater is reachable from the TV apps row as **YTArk Updates**. Every install still needs your confirmation in Android's installer, and nothing is installed silently, uninstalled or reset.
+
+### Added
+- **YTArk Updates in the TV apps row** (launcher entry for the existing native updater screen; `ytark://updates` keeps working). The Settings → Updates card points to this screen.
+- **Install permission handled by the user, never by YTArk.** Installing needs Android's one-time "Install unknown apps" permission for YTArk (`REQUEST_INSTALL_PACKAGES`). YTArk asks for it only when you press Install, checks the live permission with `canRequestPackageInstalls()`, and opens only the permission screen for this app's package. It continues only if the permission is actually on when you return. No storage permission is requested.
+- **Storage and compatibility guards.** The download is refused with a clear message when the free space cannot hold the APK plus a safety margin, and an out-of-space failure during the transfer is reported as its own state. Leftover partial files and old-version APKs are removed, and a verified pending APK is kept. The APK's minimum Android version is checked before any hand-off.
+- **Granular update states** with a reason on every failure: offline, release lookup failed, rate limited, architecture unavailable, no ARMv7 APK for the newer release, not enough storage, download failed, validation failed, install permission needed, installer unavailable, install not confirmed.
+- **"Newer than latest" result.** A build that is newer than the latest published stable release is reported as such, not as an ordinary "up to date".
+- **View Release Page** on the updater screen: opens the official release page when a browser is present.
+
+### Changed
+- **Install hand-off happens once.** The installer is opened at most once per press. Its result code is never treated as success: the installed versionCode is read again on the next check, and only that confirms the update. A restart never repeats a hand-off that is still waiting; Retry Installation is the only way to reopen it.
+- **Focus and Back.** After the permission screen returns, D-pad focus goes back to Install Update. The screen keeps receiving results when it is recreated, for example after a rotation.
+- **Card copy.** The Settings card names the YTArk Updates screen as the install route, says the card itself does not download or install, and labels cached results with the time of the last successful check.
+
+### Fixed
+- A second manual check while one was running failed with "already running". The running check now reports to the screen that asked.
+- A newer release with no ARMv7 APK was reported as a generic lookup failure. It now has its own state, and the installed version is unchanged.
+- The update card and the updater screen could show an installed build that is newer than the latest release with the same message as an up-to-date install.
+
+### Defaults and migration
+- **Upgrading from 2.5.** The updater code in this release runs only once 2.6 is installed, so 2.5 cannot update itself to 2.6. Install the signed `YTArk-v2.6.0-armv7.apk` once, over the existing app, with the same signing certificate: Android keeps your app data and sign-in. Later releases can then be checked and installed from YTArk Updates. Uninstalling or reinstalling is not needed and is not the update method.
+- Settings schema 3 is unchanged. No preference, sign-in or app data is reset by this release.
+
+### Known limitations
+- **Not device-verified.** No TV run of 2.6 is recorded: the install-permission screen, the installer hand-off, the post-install version confirmation and the TV apps-row entry are NOT RUN. The verification report for this build lists what was and was not run.
+- The web card cannot start the native installer. Cobalt registers the JavaScript bridge objects, and the repacked build cannot add one, so the card hands off to YTArk Updates instead of running the install itself.
+- 2.5 clients need the one-time manual install of 2.6 described above. Nothing repairs 2.5 retroactively.
+
+### Validation
+- Automated: the userscript unit and integration tests (Node), the Python release, repacker and changelog tests, and the native updater Java contract tests run in CI for this build. The bundled changelog and build metadata are regenerated and checked. The release pipeline checks the signed APK's manifest for the YTArk Updates launcher entry, the signing certificate, the ABI, the versionCode and the release assets before publishing.
+
+## [2.5.0] — 2026-10-11
+
+> Published 2026-10-11 23:41 UTC as [YTArk 2.5](https://github.com/2archiver/YTArk/releases/tag/v2.5.0) · tag `v2.5.0` · versionCode 2050000 · userscript `s24` · ARMv7 APK
 
 Settings cleanup and UX repair: the removed controls are gone everywhere, the settings entry opens only when it is selected, OLED Black actually paints, and About reports the real installed version. Same package identity (`io.github.twoarchiver.ytark`), signing certificate, ARMv7 base and YouTube TV frontend as 2.4.
 

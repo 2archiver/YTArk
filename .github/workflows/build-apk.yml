@@ -132,7 +132,7 @@ jobs:
           grep -q "YouTube Premium" ../dist/userScript.js
           for needle in ytark-theme-oled ytark-no-player-scrim featuredChannel YTARK_SEARCH_OPEN \
               YTARK_YTS_EDITOR YTARK_CHANGELOG_SHOW v2.0.2-personal.14 configSchemaVersion \
-              YTARK_GUIDE_SETTINGS_OPEN YTARK_VERSION_REREAD apkAsset; do
+              YTARK_GUIDE_SETTINGS_OPEN YTARK_VERSION_REREAD apkAsset "Newer than the latest stable release"; do
             grep -q "$needle" ../dist/userScript.js || { echo "Bundle is missing $needle" >&2; exit 1; }
           done
           # Removed in 2.5: presets, the user-agent override and "Fix UI" must

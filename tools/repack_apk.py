@@ -513,11 +513,16 @@ def patch_updater_manifest(decoded_dir: str, app_id: str) -> None:
     components = f"""
     <activity
         android:name="{UPDATER_ACTIVITY}"
+        android:label="YTArk Updates"
         android:theme="@android:style/Theme.Material.NoActionBar"
         android:screenOrientation="landscape"
         android:excludeFromRecents="true"
         android:launchMode="singleTop"
         android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+      </intent-filter>
       <intent-filter>
         <action android:name="android.intent.action.VIEW" />
         <category android:name="android.intent.category.DEFAULT" />
@@ -974,8 +979,8 @@ def main():
     ap.add_argument("--app-id", default="io.github.twoarchiver.ytark")
     ap.add_argument("--script-url", required=False,
                     help="replacement userscript URL, must end with '?v='")
-    ap.add_argument("--version-code", type=int, default=2050000)
-    ap.add_argument("--version-name", default="2.5.0")
+    ap.add_argument("--version-code", type=int, default=2060000)
+    ap.add_argument("--version-name", default="2.6.0")
     ap.add_argument("--apktool", default="apktool",
                     help="apktool command, e.g. 'java -jar apktool.jar'")
     ap.add_argument("--zipalign", default="zipalign")

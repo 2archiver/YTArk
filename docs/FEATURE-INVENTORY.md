@@ -1,7 +1,7 @@
 # YTArk feature inventory (regression checklist)
 
 Derived from the current source (`TizenTube/mods/config.js` defaults and
-`TizenTube/mods/features`, `ui`, `resolveCommand.js`) for the 2.5.0 candidate.
+`TizenTube/mods/features`, `ui`, `resolveCommand.js`) for the 2.6.0 candidate.
 "Code" means the feature is implemented in the bundled userscript and covered by
 a source-level test where noted. "Device" means a physical TV run is recorded;
 **no device run has been recorded for this candidate**, so every device column is
@@ -11,7 +11,7 @@ Base: TizenTubeCobalt `v2.0.2` (Cobalt runtime and YouTube TV frontend are the
 upstream ones, unchanged). YTArk adds the userscript layer and native updater.
 The complete version history is in [`CHANGELOG.md`](../CHANGELOG.md).
 
-## 2.5.0 candidate: what each claim is backed by
+## 2.6.0 candidate: what each claim is backed by
 
 Three separate columns, never merged. **Source implemented** means the code exists
 in this repository. **Packaged / CI verified** means a named CI gate or the candidate
@@ -20,7 +20,13 @@ APK. Only the first two can be true before a device run.
 
 | Claim | Source implemented | Packaged / CI verified | Device tested |
 |---|---|---|---|
-| Version 2.5.0 / versionCode 2050000 / `v2.5.0` / `s24` metadata | Yes (`release/version.properties`, generated `assets/buildInfo.generated.js`) | `ci.yml` grep checks, `build_buildinfo.py --check`, `validate_release.py`, release contract tests | NOT RUN |
+| Version 2.6.0 / versionCode 2060000 / `v2.6.0` / `s25` metadata | Yes (`release/version.properties`, generated `assets/buildInfo.generated.js`) | `ci.yml` grep checks, `build_buildinfo.py --check`, `validate_release.py`, release contract tests | NOT RUN |
+| Native updater: TV launcher entry *YTArk Updates*, `ytark://updates` link, and the native screen | Yes (`tools/repack_apk.py` `patch_updater_manifest`, `UpdateActivity.java`) | `test_updater_manifest_patch.py`, `test_updater_launcher.py`, `validate_release.py` `validate_updater_launcher` on the compiled manifest | NOT RUN |
+| Install gate: install only on an explicit press, permission checked with `canRequestPackageInstalls()`, no automatic continuation after a restart, no repeated hand-off | Yes (`InstallGate.java`, `UpdateActivity.java`, `YtarkUpdater.java`) | `InstallGateTest` (host JRE, CI `ci.yml`) | NOT RUN |
+| Storage and compatibility guards: free-space budget, stale-file cleanup that keeps the release being installed, minimum-SDK check, clean release-page tag | Yes (`UpdateGuards.java`) | `UpdateGuardsTest` (host JRE, CI) | NOT RUN |
+| Honest release states: "Up to date" only after a fresh successful check; "Newer than the latest stable release" for a newer local build; timestamped cached results | Yes (`features/updater.js`, `features/updateState.js`) | `updates-settings.test.mjs` (honest release-state copy, 2.6) | NOT RUN |
+| Web card cannot call the native updater (no bridge; Cobalt registers its bridge objects in `initializeJavaBridge()`) | Documented limitation; the card links to the native screen | Stated in README and `UPDATES-PARITY.md` | n/a |
+| 2.5 bootstrap limit: one manual install of the signed 2.6 APK is needed before the 2.6 updater runs | Documented | README, CHANGELOG 2.6 | NOT RUN |
 | Installed-version resolution for About and Updates (async bridge read, bounded retries, labelled build-metadata fallback) | Yes (`features/appVersion.js`, `features/updater.js`) | `app-version.test.mjs`, `updates-settings.test.mjs`; `build_buildinfo.py --check` in `ci.yml` and `build-apk.yml` | NOT RUN |
 | Guide entry opens only on an explicit activation (focus/scroll cannot open it; entry last; Back restores focus) | Yes (`ui/guideEntryActivation.js`, `ui/customGuideAction.js`, `resolveCommand.js`) | `guide-entry-activation.test.mjs`, `guide-entry.test.mjs` | NOT RUN |
 | User-Agent profile, presets/undo and Fix UI removed; retired keys migrated once | Yes (`config.js` `RETIRED_KEYS`, `features/userAgentRetirement.js`) | `settings-cleanup.test.mjs`, `config-migration.test.mjs`, `branding-guest-ua.test.mjs`; retired-symbol and bundle greps in `ci.yml` | NOT RUN |

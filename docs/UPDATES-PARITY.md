@@ -30,7 +30,7 @@ practice, and where YTArk deliberately differs.
 | Resumable download only when the partial file still matches the expected asset (`UpdatePreferences` staged metadata, `docs/UPDATES.md` step 2) | Resume requires the same tag, asset name, ABI, size **and** published digest; `Range` requests are validated against `Content-Range` or the partial is discarded | `UpdateResumeContract` + its CI test, `YtarkUpdater.java` resume block |
 | Interrupted/failed download is recoverable and reports actionably (`InstallPolicy.failureMessage`, `docs/UPDATES.md`) | `UpdateActivity` reports the real failure (network, storage, validation) and offers retry/resume; the frontend reports `download_error` with resume | `UpdateActivity.java` state machine, `update-state.test.mjs` ("hides check while busy and always offers one recovery path") |
 | Unknown-app permission is a real state: `PERMISSION_REQUIRED` → Android's settings page → retry (`InstallPolicy.InstallStart.PERMISSION_REQUIRED`, `InstallPolicy.InstallState`) | `UpdateActivity` routes to `ACTION_MANAGE_UNKNOWN_APP_SOURCES` with `startActivityForResult` and resumes into "ready to install" without re-downloading | `UpdateActivity.java`, README "Native updates and release integrity" |
-| Installer hand-off through `PackageInstaller` with a **mutable** result `PendingIntent`; a queued request is never called installed (`InstallPolicy.installResultPendingIntentFlags`, `docs/UPDATES.md` step 5) | The native engine hands the verified APK to Android's installer and only reports success after Android confirms the new version is installed | `YtarkUpdater.java` (`clearPendingIfInstalled`), `UpdateResumeContract`, README |
+| Installer hand-off through the system installer (`PackageInstaller`, `docs/UPDATES.md` step 5); a queued request is never called installed | 2.6 starts `ACTION_INSTALL_PACKAGE` on a private, single-file content URI with a read grant; the installer result code is never treated as success. Success is confirmed only by reading the installed versionCode again. The 2.6 Java engine has no result `PendingIntent`; its notification `PendingIntent`s are `FLAG_IMMUTABLE` (`YtarkUpdater.immutablePendingFlags`). The `InstallPolicy` names in the reference column are not present in this Java tree | `YtarkUpdater.java` (`prepareInstallerIntent`, `reconcileOnStart`), `InstallGate.java`, `UpdateGuards.java`, `UpdateActivity.java`, host tests `InstallGateTest`, `UpdateGuardsTest`; device NOT RUN |
 | Successful install is confirmed by reading the package metadata again; a staged APK whose build is installed (or older) becomes obsolete (`InstallPolicy.isStagedObsolete`, `UpdateManager.discardObsoleteStaged`) | Pending-update state is reconciled against the real file and the installed version at startup; stale or invalid pending metadata is discarded | `YtarkUpdater.java` ("Discarding stale pending update metadata"), `verifyPendingUpdate` |
 | Progress uses real bytes; indeterminate when the total is unknown (`SettingsUpdates` `ProgressBar`, `update_download_progress`) | `UpdateActivity` shows `downloaded * 100 / total` live and switches the bar to indeterminate when no total is known; the frontend never renders a percentage it does not have | `UpdateActivity.java` (`onProgress`, `setIndeterminate`), `update-state.test.mjs` ("unknown download totals stay indeterminate") |
 | Check cadence and throttling: success cadence, shorter retry cadence after a failure/interrupted attempt, and a rate-limit deadline from `Retry-After` / `X-RateLimit-Reset` that suppresses even manual retries (`UpdateSchedulePolicy`, `UpdatePreferences`) | Same structure (uniform cadence after success, shorter retry window after a failure, `rate_limit_until` from GitHub's headers, `nextEligibleAtMillis`) with YTArk's own values: 6 h cadence, 1 h retry | `UpdateSchedulePolicyTest` + CI `javac` test-run, `YtarkUpdater.java` rate-limit block; `updates-settings.test.mjs` ("rate-limit ... honestly") |
@@ -61,6 +61,16 @@ real, validated release check and hands the user to the native screen for the
 transfer, and it says so instead of displaying a progress bar it cannot back
 with bytes. Live progress, `verifying`, `ready_to_install`, the permission step
 and the post-install confirmation are all implemented and displayed natively.
+
+**2.6 resolution.** The native screen is a real TV launcher entry, *YTArk Updates*
+(MAIN + LEANBACK_LAUNCHER, exported, labelled), in addition to the
+`ytark://updates` link. Both open the native `UpdateActivity` directly. The web
+card does not call into the native layer: no bridge object is added, and no
+web-to-native call path is claimed. Device status: NOT RUN.
+
+**2.6 bootstrap limit.** The 2.6 updater code runs only once 2.6 is installed. A
+2.5 install needs one manual install of the signed 2.6 APK over the existing app.
+Nothing repairs 2.5 retroactively.
 
 ## How to re-run the verification
 

@@ -24,7 +24,7 @@ const resolve = await import('../resolveCommand.js');
 resolve.patchResolveCommand();
 const resolveCommand = resolve.default;
 
-const PUBLISHED_TAGS = ['v2.4.0', 'v2.3.0', 'v2.2.0', 'v2.1.2', 'v2.1.1', 'v2.1.0', 'v2.0.4-ytark.17', 'v2.0.4-ytark.16',
+const PUBLISHED_TAGS = ['v2.5.0', 'v2.4.0', 'v2.3.0', 'v2.2.0', 'v2.1.2', 'v2.1.1', 'v2.1.0', 'v2.0.4-ytark.17', 'v2.0.4-ytark.16',
   'v2.0.3-ytark.15', 'v2.0.2-personal.14'];
 
 beforeEach(() => {
@@ -45,7 +45,7 @@ describe('bundled changelog data', () => {
       return 0;
     });
     assert.deepEqual(keys, sorted, 'newest first');
-    assert.equal(entries[0].version, '2.5.0');
+    assert.equal(entries[0].version, '2.6.0');
     assert.equal(entries[0].status, 'unreleased');
     assert.equal(entries[0].date, null, 'no invented date for unpublished work');
     const published = entries.filter(entry => entry.status === 'published');
@@ -69,9 +69,10 @@ describe('in-app reader', () => {
     const modal = lastModal(recorded, reader.CHANGELOG_MODAL_ID);
     const titles = modalItems(modal).map(rowTitle);
     const versionRows = titles.filter(title => title.startsWith('YTArk 2.'));
-    assert.equal(versionRows[0], 'YTArk 2.5');
-    assert.equal(versionRows[1], 'YTArk 2.4');
-    assert.equal(versionRows[2], 'YTArk 2.3  ·  Installed');
+    assert.equal(versionRows[0], 'YTArk 2.6');
+    assert.equal(versionRows[1], 'YTArk 2.5');
+    assert.equal(versionRows[2], 'YTArk 2.4');
+    assert.equal(versionRows[3], 'YTArk 2.3  ·  Installed');
     assert.equal(versionRows.at(-1), 'YTArk 2.0.2-personal.14');
     assert.equal(versionRows.length, YTARK_CHANGELOG.entries.length);
     assert.equal(rowTitle(modalItems(modal)[selectedIndex(modal)]), 'YTArk 2.3  ·  Installed');

@@ -10,7 +10,7 @@ until a named device has recorded it. Nothing here is inferred from a previous
 release: evidence belongs to the exact APK whose sha256 is written below.
 
 Device: `__________` (model, Google TV / Android TV version, `ro.product.cpu.abilist`)
-Installed before: `__________` · Candidate/release: `YTArk-v2.5.0-armv7.apk`
+Installed before: `__________` · Candidate/release: `YTArk-v2.6.0-armv7.apk`
 APK sha256: `__________` · Signer SHA-256 matches `signing/YTArk-cert-sha256.txt`: [ ]
 
 | # | Check | Result |
@@ -24,7 +24,7 @@ APK sha256: `__________` · Signer SHA-256 matches `signing/YTArk-cert-sha256.tx
 | 7 | Remote keys: D-pad focus moves through Settings in order; Back returns | NOT RUN |
 | 8 | Settings → YTArk Updates: installed version, latest stable and status are shown; QR and official URL are legible and scan to the release page | NOT RUN |
 | 9 | Light and dark themes show the correct Premium wordmark (cosmetic only) | NOT RUN |
-| 10 | Native entry: the card does not trigger `ytark://updates` (native integration pending). Record only if a native path to `UpdateActivity` is exercised on the device | NOT RUN |
+| 10 | Native entry: the card does not trigger `ytark://updates` (no bridge; the card links to the native screen). Record only if a native path to `UpdateActivity` is exercised on the device | NOT RUN |
 | 11 | Update from 2.4: appearance unchanged (YouTube default theme, watermark and dimming options off); the What's new card appears once and stays dismissed | NOT RUN |
 | 12 | Fresh install: OLED Black, Hide channel watermark and Remove player dimming are on | NOT RUN |
 | 13 | Appearance → Theme: switching OLED Black ⇄ YouTube default works live, survives a restart and brings back saved custom colours | NOT RUN |
@@ -44,6 +44,13 @@ APK sha256: `__________` · Signer SHA-256 matches `signing/YTArk-cert-sha256.tx
 | 27 | Installed and available update versions stay separate: the Updates card's "Installed" value matches About, and a build-metadata fallback is labelled as such | NOT RUN |
 | 28 | Repeatedly opening and closing YTArk Settings, its submenus and About creates no duplicate panels, rows or handlers (no growing stack of popups) | NOT RUN |
 | 29 | Playback, YouTube's own Settings page and the update check still work after the cleanup | NOT RUN |
+| 30 | **YTArk Updates** appears once in the TV apps row (launcher entry) and opens the native updater screen with D-pad focus on the first action | NOT RUN |
+| 31 | Updater check against the live official release: a fresh check shows the installed and latest versions; **Up to date** appears only after that successful check and shows its time | NOT RUN |
+| 32 | Install Update with the unknown-app permission **off** opens only YTArk's own permission screen; nothing opens on focus or launch; returning with the permission off does not install | NOT RUN |
+| 33 | Install Update with the permission **on** opens Android's installer for the verified APK; cancelling keeps the verified update ready without re-downloading | NOT RUN |
+| 34 | After a completed installation, the next launch or check reads the installed versionCode and reports the new version; the installer result code alone is never reported as success | NOT RUN |
+| 35 | Storage: the download is app-private (no storage permission prompt appears); a too-small free-space case is refused before transfer | NOT RUN |
+| 36 | Bootstrap: a 2.5 install is updated to 2.6 by one manual install of the signed APK over the existing app; sign-in, data and preferences are kept | NOT RUN |
 
 Record the result of each row with the date, the device, the APK sha256 and a link
 to the evidence. Do not mark a row passed without that evidence, and do not reuse
