@@ -29,7 +29,7 @@ export function makeYtarkCategory(customized) {
     actionRow(t('settings.ttSettings.title'), 'tizentube_open_action', 'TT_SETTINGS_SHOW', [], t('settings.ttSettings.summary')),
     actionRow(tx('ytark.stock.search', 'Search YTArk settings'), 'ytark_search_action', 'YTARK_SEARCH_OPEN', {},
       tx('ytark.search.entryDescription', 'Find any YTArk setting by name or keyword')),
-    actionRow('YTArk Updates', 'ytark_updates_action', 'CHECK_FOR_UPDATES', [],
+    actionRow('YTArk Updates', 'ytark_updates_action', 'YTARK_NATIVE_UPDATES_OPEN', {},
       tx('ytark.stock.updatesSummary', 'Check the official stable YTArk release')),
   ];
   if (customized) {

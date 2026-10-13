@@ -21,6 +21,21 @@ import {
 } from './ytSettingsEditor.js';
 import { tx } from '../translations/text.js';
 
+function openNativeRoute(host) {
+  const route = `ytark://${host}`;
+  try {
+    if (typeof window === 'undefined' || !window.location) throw new Error('The Android route is unavailable.');
+    // These are explicit ACTION_VIEW routes declared by repack_apk.py; no
+    // invented JavaScript-to-Java bridge is assumed.
+    window.location.href = route;
+    return true;
+  } catch (error) {
+    showToast('YTArk', `Could not open native YTArk controls. Open ${route} from the TV launcher or use YTArk Updates.`);
+    console.warn('[YTArk] Could not open a native YTArk screen:', error);
+    return false;
+  }
+}
+
 function defer(callback) {
   setTimeout(() => {
     try {
@@ -34,6 +49,17 @@ function defer(callback) {
 export function handleYtarkAction(action, parameters) {
   const p = parameters && typeof parameters === 'object' && !Array.isArray(parameters) ? parameters : {};
   switch (action) {
+    case 'YTARK_NATIVE_UPDATES_OPEN':
+      return openNativeRoute('updates');
+    case 'YTARK_NATIVE_STORAGE_OPEN': {
+      const video = typeof document !== 'undefined' && document.querySelector
+        ? document.querySelector('video') : null;
+      if (video && ((!video.paused && !video.ended) || video.networkState === 2)) {
+        showToast('YTArk Cache & Storage', 'Pause playback and wait for streaming to stop before clearing temporary cache.');
+        return false;
+      }
+      return openNativeRoute('storage');
+    }
     case 'YTARK_MENU_SHOW':
       showSettingsMenu(p.menuId || 'root', { focusId: p.focusId, update: !!p.update, returnTo: p.returnTo });
       return true;

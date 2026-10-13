@@ -87,7 +87,7 @@ tests do not replace these rows.
 | 34 | Restore default layout | Only the layout resets; YTArk and YouTube settings and the session are unchanged | |
 | 35 | Changelog reader | Version list newest first with the installed version marked; long versions scroll with the D-pad; Back returns; QR opens the release page | |
 | 36 | Section reset | The confirmation lists the defaults; only that section changes | |
-| 37 | In-place update to 2.4 | Installs over 2.3 without uninstalling; session, cookies and preferences preserved | |
+| 37 | In-place update to 2.8.0 | Installs directly over published 2.7.0 without uninstalling; package, signer, session, cookies and preferences are preserved | |
 
 ## YTArk 2.4 features (updater verdicts, settings categories, guide entry)
 
@@ -139,7 +139,7 @@ painted.
 | 54 | Installed vs available | The Updates card's "Installed" value matches About; "Latest" stays a separate value; a pending asynchronous read shows a brief loading state and then the real version in place (no second panel) | |
 | 55 | No duplicates after heavy use | Repeated opens/closes of YTArk Settings, its submenus, About and the changelog create no duplicate panels, rows or handlers; playback, YouTube's own Settings page and the update check still work | |
 
-## YTArk 2.7 features (search keyboard, About dialog, simplified changelog)
+## YTArk 2.7 features retained in 2.8 (search keyboard, About dialog, simplified changelog)
 
 Every row is **NOT RUN** until recorded on the build under test. The DOM tests and
 CI checks cover focus, layout data and the bundled text, not a TV panel or a
@@ -151,8 +151,30 @@ device input method.
 | 63 | Search settings without a system keyboard | The on-screen key grid types, the panel says the on-screen keys are in use, and no "keyboard opened" claim is made anywhere | NOT RUN |
 | 64 | About YTArk layout | At 720p, 1080p and 4K with display scaling the header reads "About YTArk" / "YTArk <version>", no text overlaps or clips, every row wraps, and Build details, Third-party notices and licences and Version history each open with D-pad focus and scroll | NOT RUN |
 | 65 | What's new placement | No top-level "What's new" row in YTArk Settings and none on the YouTube Settings page's YTArk section; the post-update notice points to YTArk Updates, and YTArk Updates → changelog is the only route to the version history | NOT RUN |
-| 66 | Changelog summaries | Each version row leads with one short line; 2.6 reads exactly "2.6 — Added Full Auto Updating"; the list stays newest first and long versions scroll with the D-pad; Back returns | NOT RUN |
+| 66 | Changelog summaries | Each version row leads with one short line; 2.7 reads exactly "2.7 — TV keyboard search, a readable About dialog and a simpler changelog"; the list stays newest first and long versions scroll with the D-pad; Back returns | NOT RUN |
 | 67 | OLED Black after the relabel | Turning OLED Black on still repaints the supported surfaces to true black immediately and after a restart, the focused row stays distinguishable, and the setting text matches what is actually themed | NOT RUN |
+
+## YTArk 2.8 candidate features (storage, recovery and update automation)
+
+All rows below are **NOT RUN** for the unpublished 2.8.0 candidate until a
+physical TV test records the signed APK identity and device details. Android
+JobScheduler is best-effort and can defer its hourly interval. See
+[`DEVICE-ACCEPTANCE.md`](DEVICE-ACCEPTANCE.md) for the complete 2.8 acceptance
+list.
+
+| # | Check | Expected | Result |
+|---|---|---|---|
+| 68 | Cache measurement and cleanup | Off-main-thread work; only Android internal/external app-cache roots are traversed; recent/unstatable files are retained; login/profile/settings/database/watch data and files outside those roots remain untouched | NOT RUN |
+| 69 | Cache cleanup honesty and file handles | Deleted file count/bytes and post-cleanup cache size are measured; user is told to pause playback and that Android file-cache handles are not enumerated | NOT RUN |
+| 70 | Updater-file cleanup | Active downloads, requested installs, installer hand-offs, selected resumable release files and pending verified APKs are protected; only obsolete updater-owned files are removed | NOT RUN |
+| 71 | Playback recovery opt-in and migration | New default is off; explicit existing preference is preserved; toggle persists across app restart | NOT RUN |
+| 72 | VOD/DVR position and live edge | Restores only a supported seekable VOD/DVR time and retains live-edge intent where exposed; does not seek outside the player's current ranges | NOT RUN |
+| 73 | Recovery exclusions | Manual pause/seek, navigation away, PiP/hidden playback, offline state and completion stop retries; visible text identifying sign-in/age/region restrictions stops retries; other errors remain bounded to three attempts | NOT RUN |
+| 74 | Automatic updater preferences | Checks and downloads are separate persistent settings, new defaults on, explicit off retained; turning automatic downloads off cancels an active automatic transfer without losing matching partial bytes | NOT RUN |
+| 75 | Persistent hourly update job | Network-connected persisted JobScheduler job is registered; Android may defer execution; no exact alarm or permanent polling service is introduced | NOT RUN |
+| 76 | Release validation, permission and installer | Official stable release and installed ABI only; package/version/signer/digest/native ABI validated before Android installer; permission opens only by explicit action; Android confirmation remains required | NOT RUN |
+| 77 | Installer reconciliation | Installer launch is not called success; later installed package version decides result; cancellation/restart remains recoverable | NOT RUN |
+| 78 | Startup-animation availability | Informational-only row; no YTArk toggle or claim to remove system splash/YouTube UI; initialization, injection, session restore and migrations still run | NOT RUN |
 
 ## 64-bit-only userspace check (expected exclusion)
 

@@ -478,9 +478,11 @@ def patch_launcher_icon(decoded_dir: str) -> None:
 
 UPDATER_PACKAGE = "io.github.twoarchiver.ytark.updater"
 UPDATER_ACTIVITY = UPDATER_PACKAGE + ".UpdateActivity"
+UPDATER_STORAGE_ACTIVITY = UPDATER_PACKAGE + ".StorageActivity"
 UPDATER_PROVIDER = UPDATER_PACKAGE + ".UpdateBootstrapProvider"
 UPDATE_FILE_PROVIDER = UPDATER_PACKAGE + ".PendingUpdateProvider"
 UPDATER_RECEIVER = UPDATER_PACKAGE + ".UpdateActionReceiver"
+UPDATER_JOB_SERVICE = UPDATER_PACKAGE + ".UpdateCheckJobService"
 
 
 def patch_updater_manifest(decoded_dir: str, app_id: str) -> None:
@@ -491,14 +493,15 @@ def patch_updater_manifest(decoded_dir: str, app_id: str) -> None:
 
     if not re.search(r"xmlns:android\s*=", xml):
         raise SystemExit("ERROR: decoded manifest has no android namespace.")
-    if (UPDATER_PROVIDER in xml or UPDATER_ACTIVITY in xml or UPDATER_RECEIVER in xml
-            or UPDATE_FILE_PROVIDER in xml):
+    if (UPDATER_PROVIDER in xml or UPDATER_ACTIVITY in xml or UPDATER_STORAGE_ACTIVITY in xml
+            or UPDATER_RECEIVER in xml or UPDATER_JOB_SERVICE in xml or UPDATE_FILE_PROVIDER in xml):
         raise SystemExit("ERROR: native YTArk updater components already exist in the manifest.")
 
     permissions = (
         "android.permission.INTERNET",
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.REQUEST_INSTALL_PACKAGES",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
     )
     permission_xml = ""
     for permission in permissions:
@@ -530,6 +533,24 @@ def patch_updater_manifest(decoded_dir: str, app_id: str) -> None:
         <data android:scheme="ytark" android:host="updates" />
       </intent-filter>
     </activity>
+    <activity
+        android:name="{UPDATER_STORAGE_ACTIVITY}"
+        android:label="YTArk Cache &amp; Storage"
+        android:theme="@android:style/Theme.Material.NoActionBar"
+        android:screenOrientation="landscape"
+        android:excludeFromRecents="true"
+        android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW" />
+        <category android:name="android.intent.category.DEFAULT" />
+        <category android:name="android.intent.category.BROWSABLE" />
+        <data android:scheme="ytark" android:host="storage" />
+      </intent-filter>
+    </activity>
+    <service
+        android:name="{UPDATER_JOB_SERVICE}"
+        android:permission="android.permission.BIND_JOB_SERVICE"
+        android:exported="false" />
     <provider
         android:name="{UPDATER_PROVIDER}"
         android:authorities="{app_id}.ytarkupdater"
@@ -979,8 +1000,8 @@ def main():
     ap.add_argument("--app-id", default="io.github.twoarchiver.ytark")
     ap.add_argument("--script-url", required=False,
                     help="replacement userscript URL, must end with '?v='")
-    ap.add_argument("--version-code", type=int, default=2070000)
-    ap.add_argument("--version-name", default="2.7.0")
+    ap.add_argument("--version-code", type=int, default=2080000)
+    ap.add_argument("--version-name", default="2.8.0")
     ap.add_argument("--apktool", default="apktool",
                     help="apktool command, e.g. 'java -jar apktool.jar'")
     ap.add_argument("--zipalign", default="zipalign")

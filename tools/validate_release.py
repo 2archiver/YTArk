@@ -27,6 +27,8 @@ APK_DESCRIPTORS = (
     b"io/github/twoarchiver/ytark/updater/UpdateBootstrapProvider",
     b"io/github/twoarchiver/ytark/updater/PendingUpdateProvider",
     b"io/github/twoarchiver/ytark/updater/UpdateActivity",
+    b"io/github/twoarchiver/ytark/updater/StorageActivity",
+    b"io/github/twoarchiver/ytark/updater/UpdateCheckJobService",
 )
 ANDROID_14_API = 34
 # YTArk publishes exactly one architecture: 32-bit ARM (armeabi-v7a). The
@@ -395,6 +397,46 @@ def validate_compiled_manifest(apk: Path, aapt: str) -> None:
 UPDATER_ACTIVITY_NAME = "io.github.twoarchiver.ytark.updater.UpdateActivity"
 
 
+def validate_updater_background_components(tree: str) -> None:
+    """Require persistent JobScheduler and scoped native storage components."""
+    application_blocks = _element_blocks(tree, "application")
+    if not application_blocks:
+        raise ValueError("Compiled Android manifest has no application element")
+    app = application_blocks[0]
+    storage_found = False
+    for activity in _element_blocks(app, "activity"):
+        name = _attribute_line(activity, "name") or ""
+        if "io.github.twoarchiver.ytark.updater.StorageActivity" not in name:
+            continue
+        storage_found = True
+        if not _boolean_attribute_is_true(_attribute_line(activity, "exported")):
+            raise ValueError("The YTArk Cache & Storage activity must have its explicit ACTION_VIEW route")
+        if not any("android.intent.action.VIEW" in block
+                   and "android:scheme" in block and "ytark" in block
+                   and "android:host" in block and "storage" in block
+                   for block in _element_blocks(activity, "intent-filter")):
+            raise ValueError("The YTArk Cache & Storage activity has no ytark://storage route")
+        break
+    if not storage_found:
+        raise ValueError("Compiled manifest has no YTArk Cache & Storage activity")
+
+    service_found = False
+    for service in _element_blocks(app, "service"):
+        name = _attribute_line(service, "name") or ""
+        if "io.github.twoarchiver.ytark.updater.UpdateCheckJobService" not in name:
+            continue
+        service_found = True
+        if "android.permission.BIND_JOB_SERVICE" not in (_attribute_line(service, "permission") or ""):
+            raise ValueError("The periodic updater service must require BIND_JOB_SERVICE")
+        if _boolean_attribute_is_true(_attribute_line(service, "exported")):
+            raise ValueError("The periodic updater service must not be exported")
+        break
+    if not service_found:
+        raise ValueError("Compiled manifest has no persistent updater JobService")
+    if "android.permission.RECEIVE_BOOT_COMPLETED" not in tree:
+        raise ValueError("Persistent updater scheduling requires RECEIVE_BOOT_COMPLETED")
+
+
 def validate_updater_launcher(tree: str) -> None:
     """The YTArk Updates screen must be a real TV launcher entry, not only a deep link."""
     application_blocks = _element_blocks(tree, "application")
@@ -505,11 +547,15 @@ def validate_apk(path: str, architecture: str, expected_cert_file: str,
     validate_compiled_manifest(apk, aapt)
     manifest = run([aapt, "dump", "xmltree", str(apk), "AndroidManifest.xml"])
     validate_updater_launcher(manifest)
+    validate_updater_background_components(manifest)
     for required in (
         "io.github.twoarchiver.ytark.updater.UpdateActivity",
         "io.github.twoarchiver.ytark.updater.UpdateBootstrapProvider",
         "io.github.twoarchiver.ytark.updater.PendingUpdateProvider",
         "io.github.twoarchiver.ytark.updater.UpdateActionReceiver",
+        "io.github.twoarchiver.ytark.updater.UpdateCheckJobService",
+        "io.github.twoarchiver.ytark.updater.StorageActivity",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.REQUEST_INSTALL_PACKAGES",
         "android.permission.POST_NOTIFICATIONS",
         "ytarkupdater.files",

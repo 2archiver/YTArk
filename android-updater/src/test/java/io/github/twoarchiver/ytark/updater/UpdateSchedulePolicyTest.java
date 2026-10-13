@@ -3,7 +3,7 @@ package io.github.twoarchiver.ytark.updater;
 /** Pure scheduling/backoff regression tests; runs on a host JRE. */
 public final class UpdateSchedulePolicyTest {
     public static void main(String[] args) {
-        firstAutomaticCheckIsEligibleAndSuccessUsesSixHourCadence();
+        firstAutomaticCheckIsEligibleAndSuccessUsesHourlyCadence();
         failureUsesBoundedRetryRatherThanRapidStartupLoops();
         rateLimitDeadlineTakesPrecedence();
         interruptedLegacyAttemptRemainsThrottled();
@@ -11,13 +11,15 @@ public final class UpdateSchedulePolicyTest {
         System.out.println("UpdateSchedulePolicy tests passed (5 groups).");
     }
 
-    private static void firstAutomaticCheckIsEligibleAndSuccessUsesSixHourCadence() {
+    private static void firstAutomaticCheckIsEligibleAndSuccessUsesHourlyCadence() {
         assertTrue(due(0L, 0L, 0L, 0L, 0L, 0L, 10_000L), "first check is due");
         long success = 20_000L;
+        assertEquals(60L * 60L * 1000L, UpdateSchedulePolicy.CHECK_INTERVAL_MILLIS,
+                "persistent JobScheduler cadence is one hour");
         assertFalse(due(success, success, success, 0L, 0L, 0L,
                 success + UpdateSchedulePolicy.CHECK_INTERVAL_MILLIS - 1L), "hourly cadence before deadline");
         assertTrue(due(success, success, success, 0L, 0L, 0L,
-                success + UpdateSchedulePolicy.CHECK_INTERVAL_MILLIS), "check due at six hours");
+                success + UpdateSchedulePolicy.CHECK_INTERVAL_MILLIS), "check due after one hour");
         assertEquals(success + UpdateSchedulePolicy.CHECK_INTERVAL_MILLIS,
                 next(success, success, success, 0L, 0L, 0L, success), "next eligible time");
     }

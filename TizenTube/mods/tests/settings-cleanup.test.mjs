@@ -12,7 +12,7 @@ import {
 
 const { recorded, windowStub } = setupEnvironment({ version: '2.3.0' });
 await initEnglish();
-const { configRead, configWrite, configKeys } = await import('../config.js');
+const { configRead, configWrite, configKeys, configDefault } = await import('../config.js');
 const registry = await import('../ui/settingsRegistry.js');
 const search = await import('../ui/settingsSearch.js');
 const appVersion = await import('../features/appVersion.js');
@@ -192,9 +192,9 @@ describe('About YTArk', () => {
     assert.ok(build.openPopupAction.popup.overlaySectionRenderer.overlay.overlayTwoPanelRenderer
       .actionPanel.overlayPanelRenderer.content.scrollPaneRenderer, 'D-pad scrollable');
     const details = modalItems(build).map(messageText).join('\n');
-    assert.match(details, /versionName: 2\.7\.0/);
-    assert.match(details, /versionCode: 2070000/);
-    assert.match(details, /YTArk userscript: s26/);
+    assert.match(details, /versionName: 2\.8\.0/);
+    assert.match(details, /versionCode: 2080000/);
+    assert.match(details, /YTArk userscript: s27/);
     assert.match(details, /Android base: v2\.0\.2/);
 
     resolveCommand({ customAction: { action: 'YTARK_PANEL_SHOW', parameters: { id: 'about' } } });
@@ -230,7 +230,7 @@ describe('About YTArk', () => {
     await tick(20);
     resolveCommand({ customAction: { action: 'YTARK_PANEL_SHOW', parameters: { id: 'about' } } });
     const panel = lastModal(recorded, 'ytark-panel-about');
-    assert.equal(header(panel).subtitle, 'YTArk 2.7 (build metadata)', "this build's own version, labelled by source");
+    assert.equal(header(panel).subtitle, 'YTArk 2.8 (build metadata)', "this build's own version, labelled by source");
     const lines = modalItems(panel).map(messageText).filter(Boolean);
     assert.ok(lines.some(line => /packaging metadata/.test(line)), 'the source is stated');
     const reread = findRow(panel, 'Read the installed version again');
@@ -280,11 +280,28 @@ describe('YTArk and YouTube settings are told apart', () => {
 
   it('groups the retained controls into the documented categories', () => {
     assert.deepEqual(tree().children.map(node => node.id),
-      ['search', 'playback', 'appearance', 'privacy', 'navigation', 'updates', 'about', 'support']);
-    for (const menuId of ['playback', 'appearance', 'privacy', 'navigation', 'updates']) {
+      ['search', 'playback', 'appearance', 'privacy', 'navigation', 'storage', 'updates', 'about', 'support']);
+    for (const menuId of ['playback', 'appearance', 'privacy', 'navigation', 'storage', 'updates']) {
       const node = registry.findNode(tree(), menuId);
       assert.ok(node.title && node.description, `${menuId} has a title and a description`);
       assert.ok((node.children || []).length > 0, `${menuId} is not an empty destination`);
     }
+  });
+
+  it('exposes recovery as opt-in, scoped native storage routes and an informational animation row', () => {
+    const recovery = registry.findNode(tree(), 'player.recovery');
+    assert.equal(recovery.type, 'toggle');
+    assert.equal(recovery.key, 'enablePlaybackRecovery');
+    assert.equal(configDefault('enablePlaybackRecovery'), false);
+
+    const storage = registry.findNode(tree(), 'storage.open');
+    assert.equal(storage.type, 'action');
+    assert.equal(storage.command[0].customAction.action, 'YTARK_NATIVE_STORAGE_OPEN');
+    assert.match(storage.description, /temporary cache/);
+
+    const animation = registry.findNode(tree(), 'nav.skipStartupAnimation');
+    assert.equal(animation.type, 'panel', 'there is no setting that could promise an animation skip');
+    assert.match(animation.description, /no optional startup animation to skip/);
+    assert.match(JSON.stringify(animation.panel()), /Android's system splash/);
   });
 });

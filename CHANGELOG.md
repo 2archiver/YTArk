@@ -21,34 +21,42 @@ Conventions:
 - Capabilities inherited from TizenTube and TizenTubeCobalt are listed under
   "Upstream base and inherited capabilities", not as YTArk additions.
 
-## [2.7.0] — Unreleased
+## [2.8.0] — Unreleased
 
-> Not yet published. Planned tag `v2.7.0` · versionCode 2070000 · userscript `s26` · one ARMv7 APK (armeabi-v7a) on TizenTubeCobalt v2.0.2. The publication date is recorded on the GitHub release when the release workflow publishes this build.
+> Not yet published. Planned tag `v2.8.0` · versionCode 2080000 · userscript `s27` · one ARMv7 APK (armeabi-v7a) on TizenTubeCobalt v2.0.2. This is intended as a direct, signed in-place update to published 2.7.0; package ID, signing identity and app data directory stay unchanged.
 
-TV keyboard search, a readable About dialog and a simpler changelog.
+Safer storage, opt-in playback recovery and hourly updates.
 
 ### Added
-- **TV keyboard for Search settings.** The search field is a real editable input: it takes focus when the panel opens, keeps it while the frontend's own focus handling runs, and asks the platform for its keyboard through the standard VirtualKeyboard API where the engine implements it. Where no input method is offered, the D-pad on-screen key grid types instead and the panel says so. Back closes the keyboard or the panel and returns focus to where search was opened from.
+- **Cache & Storage for the TV remote.** Measures Android's app-cache directories off the UI thread and can clear only old files there; recently modified or unstatable files are retained. The updater's private files are a separate control. The operation does not scan profile or local-storage directories outside those cache roots, or touch cookies, account data, preferences, databases, watch position, downloads or installer-held APKs. Pause playback first.
+- **Opt-in playback recovery.** Uses the existing player state and `PlayerService.loadVideo` contract, with bounded retries for sustained buffering and recoverable media errors. Supported VOD/DVR positions and live-edge intent are preserved; user pauses, seeking, completion, navigation, hidden/PiP playback and offline state stop retries. Player text that identifies sign-in/age/region restrictions stops retries; other errors remain bounded to three attempts. Android and YouTube UI are not reloaded.
+- **Persistent stable-release update automation.** Android JobScheduler requests an hourly network-connected check and can download/resume and validate a compatible stable APK in the background. Checks and downloads can each be disabled. Download, validation, permission, installer hand-off and installed-version reconciliation remain separate persisted states; only Android's installer can request the user's install confirmation.
 
 ### Changed
-- **About YTArk rebuilt** with one version line in the header, a navigable **Build details** row (versionName · versionCode · userscript · Android base), a **Third-party notices and licences** subsection and a **Version history** row that opens the changelog in YTArk Updates. The full licence text is not displayed in the primary dialog, and the attribution stays reachable.
-- **What's new is no longer a top-level YTArk Settings row** (nor a row on the YouTube Settings page's YTArk section). The version history lives only in YTArk Updates, and the post-update notice points there.
-- **OLED Black is labelled for what it themes**: the app backdrop, the browse, search and settings surfaces and YTArk dialogs. YouTube-owned pages, artwork, thumbnails, video and captions keep their own colours, which the setting text now states.
-- **The changelog leads with one user-facing line per version**, newest first, with the detailed notes kept for the current release and the linked release page.
-
-### Fixed
-- Search settings could lose the caret to the frontend's own focus handling right after the panel opened; the panel now re-asserts focus while it is still the intended target and never fights the user's move onto the on-screen keys.
-- The About panel repeated the version in several rows and carried legal sentences between them; the version now appears once, and the closing sentence is the only legal line.
+- **Cache cleanup is scoped to Android cache roots.** Update downloads and pending installer files live separately; obsolete updater files can be cleared only when no download, install request or installer hand-off is active. Results report measured and deleted bytes rather than a guessed reclaimed amount.
+- **Navigation includes startup-animation availability.** This build has no optional YTArk startup animation or removable delay, so the row is informational only—not a toggle and not a promise to remove Android's system splash or YouTube UI. Initialization, injection, session restore and migrations remain unchanged.
+- **Updater automation is explicit and best-effort.** New defaults enable automatic stable checks and downloads; users can turn either off. JobScheduler may defer work, and Android confirmation remains required before installation.
 
 ### Defaults and migration
-- Settings schema 3 is unchanged. No preference, sign-in or app data is reset by this release, and the updater path added in 2.6 is untouched.
+- Userscript settings schema 4 adds `enablePlaybackRecovery`, default **off**. Existing explicit preferences are preserved; only a missing recovery key receives the default. No account/session data or other stored setting is migrated or reset.
+- Native automatic checks and downloads default **on** for this new updater preference. Explicit off choices are retained. The update remains compatible with the published 2.7.0 package and signing identity; no uninstall, data-directory change or Cobalt engine rebuild is part of this update.
+
+### Fixed
+- Automatic download selection respects skipped/cancelled releases and preserves matching partial files for an explicit resume. Work interrupted by an app restart is reconciled without treating an installer hand-off as a completed install.
+- Playback recovery cancels scheduled attempts on navigation and suspends them during PiP; an error arriving after a media load event is not mistaken for healthy playback.
 
 ### Known limitations
-- **Not device-verified.** Whether a given Android TV device shows its soft keyboard for a focused field, the About layout at 720p, 1080p and 4K with display scaling, and the OLED look on a physical panel are NOT RUN until recorded in `docs/RUNTIME-CHECKLIST.md`.
-- YTArk cannot call a native "show keyboard" bridge: the pinned Cobalt base exposes none, so devices without a platform IME fall back to the on-screen key grid, which is always available.
+- **Not device-verified.** The Android app-cache layout, active playback/file-handle behavior, playback recovery, JobScheduler timing, PackageInstaller hand-off and signed in-place upgrade from 2.7.0 have not been exercised on a physical TV in this worktree. Android may defer hourly jobs.
+- The pinned base remains TizenTubeCobalt v2.0.2; the Cobalt engine and YouTube TV frontend are not upgraded here. Only ARMv7 (`armeabi-v7a`) is supported by the published release line.
 
 ### Validation
-- Automated: the userscript unit and integration tests (Node), the Python release, repacker and changelog tests, and the native updater Java contract tests run in CI; the bundled changelog and build metadata are regenerated and checked.
+- This 2.8.0 entry is unpublished. Test, build and device-run results for the candidate are recorded separately; no release has been published from this work.
+
+## [2.7.0] — 2026-10-13
+
+> Published 2026-10-13 08:10 UTC as [YTArk 2.7](https://github.com/2archiver/YTArk/releases/tag/v2.7.0) · tag `v2.7.0` · versionCode 2070000 · userscript `s26` · one ARMv7 APK
+
+TV keyboard search, a readable About dialog and a simpler changelog.
 
 ## [2.6.0] — 2026-10-13
 

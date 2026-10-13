@@ -51,6 +51,18 @@ class UpdaterManifestPatchTests(unittest.TestCase):
         self.assertLess(xml.index("dev.cobalt.app.MainActivity"), xml.index(repack_apk.UPDATER_ACTIVITY))
         self.assertEqual(xml.count("android.intent.category.LEANBACK_LAUNCHER"), 2)
 
+    def test_persistent_hourly_job_and_storage_route_are_declared_without_exporting_the_service(self):
+        xml = self.patched()
+        self.assertIn('android.permission.RECEIVE_BOOT_COMPLETED', xml)
+        service = re.search(r'<service\s+android:name="' + re.escape(repack_apk.UPDATER_JOB_SERVICE) + r'"[^>]*/>', xml)
+        self.assertIsNotNone(service)
+        self.assertIn('android.permission.BIND_JOB_SERVICE', service.group(0))
+        self.assertIn('android:exported="false"', service.group(0))
+        storage = re.search(r'<activity\s+android:name="' + re.escape(repack_apk.UPDATER_STORAGE_ACTIVITY) + r'".*?</activity>', xml, re.S)
+        self.assertIsNotNone(storage)
+        self.assertIn('android:host="storage"', storage.group(0))
+        self.assertIn('android:exported="true"', storage.group(0))
+
     def test_providers_and_receiver_are_private_and_the_file_provider_is_single_file(self):
         xml = self.patched()
         self.assertIn(f'android:authorities="{APP_ID}.ytarkupdater"', xml)
@@ -65,10 +77,11 @@ class UpdaterManifestPatchTests(unittest.TestCase):
         self.assertIsNotNone(receiver)
         self.assertIn('android:exported="false"', receiver.group(0))
 
-    def test_only_install_and_notification_permissions_are_added_and_no_storage_permission(self):
+    def test_only_updater_permissions_are_added_and_no_storage_permission(self):
         xml = self.patched()
         self.assertIn('android.permission.REQUEST_INSTALL_PACKAGES', xml)
         self.assertIn('android.permission.POST_NOTIFICATIONS', xml)
+        self.assertIn('android.permission.RECEIVE_BOOT_COMPLETED', xml)
         for forbidden in ("MANAGE_EXTERNAL_STORAGE", "READ_EXTERNAL_STORAGE", "WRITE_EXTERNAL_STORAGE",
                           "READ_MEDIA_", "READ_MEDIA_IMAGES", "READ_MEDIA_VIDEO"):
             self.assertNotIn(forbidden, xml)
