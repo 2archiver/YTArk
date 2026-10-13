@@ -67,6 +67,10 @@ export function handleYtarkAction(action, parameters) {
     case 'YTARK_SEARCH_OPEN':
       resetSearchState();
       showSettingsSearch({ update: false });
+      // Opening Search focuses the real text field straight away and asks the
+      // platform for its keyboard, so the first OK lands in a field rather than
+      // on a passive row that needs a second press.
+      editSearchQuery();
       return true;
     case 'YTARK_SEARCH_SHOW':
       showSettingsSearch({ update: p.update !== false, focusId: p.focusId });

@@ -100,7 +100,7 @@ export function versionMessages(entry, installed = installedVersion()) {
   const facts = sanitizeText(entry.facts || '');
   const status = entryStatus(entry, installed);
   messages.push([status, facts].filter(Boolean).join('\n'));
-  if (entry.summary) messages.push(sanitizeText(entry.summary));
+  if (entry.summary) messages.push(headlineFor(entry));
   for (const section of entry.sections) {
     const heading = sanitizeText(section.heading, 80);
     messages.push(...chunkLines(heading, section.items || []));
@@ -122,6 +122,19 @@ function findEntry(version) {
   return changelogEntries().find(entry => entry.version === wanted) || null;
 }
 
+/**
+ * The one-line, user-facing headline of a version: the bounded summary from
+ * CHANGELOG.md, shown as "<display> — <summary>" (for example
+ * "2.6 — Added Full Auto Updating"). Exactly one line, so the TV reader never
+ * has to scroll sideways or overlap text.
+ */
+export function headlineFor(entry) {
+  // One line, no trailing period: "2.6 — Added Full Auto Updating".
+  const summary = sanitizeText(entry && entry.summary ? entry.summary : '', 220)
+    .split('\n')[0].replace(/[.\s]+$/, '');
+  return summary ? `${entry.display} — ${summary}` : `YTArk ${entry.display}`;
+}
+
 /** Version picker: newest first, installed version marked and focused. */
 export function showChangelog({ update = false, focusVersion = '' } = {}) {
   const installed = installedVersion();
@@ -141,11 +154,13 @@ export function showChangelog({ update = false, focusVersion = '' } = {}) {
   }
   entries.forEach((entry, index) => {
     const installedRow = isInstalledEntry(entry, installed);
-    const summary = sanitizeText(entry.summary || (entry.sections[0] && entry.sections[0].items[0]) || '', 140);
+    // One short, user-facing line per version: "<version> — <summary>". The
+    // detail pane holds the rest (and the release page link), so a version row
+    // never repeats its own notes as a second paragraph.
     rows.push(buttonItem(
       {
-        title: `YTArk ${entry.display}${installedRow ? `  ·  ${tx('ytark.changelog.installed', 'Installed')}` : ''}`,
-        subtitle: [entryStatus(entry, installed), entry.tag, summary].filter(Boolean).join(' · '),
+        title: `${headlineFor(entry)}${installedRow ? `  ·  ${tx('ytark.changelog.installed', 'Installed')}` : ''}`,
+        subtitle: [entryStatus(entry, installed), entry.tag].filter(Boolean).join(' · '),
       },
       { icon: installedRow ? 'CHECK_CIRCLE_THICK' : 'INFO', secondaryIcon: 'CHEVRON_RIGHT' },
       [{ customAction: { action: 'YTARK_CHANGELOG_VERSION', parameters: { version: entry.version } } }],

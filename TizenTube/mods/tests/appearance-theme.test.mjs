@@ -11,6 +11,7 @@ const { configRead, configWrite, configChangeEmitter } = await import('../config
 const theme = await import('../ui/theme.js');
 const styles = await import('../ui/appearanceStyles.js');
 const { OLED_TOKENS } = await import('../ui/themeTokens.js');
+const registry = await import('../ui/settingsRegistry.js');
 
 const root = doc.documentElement;
 const has = name => root.classList.contains(name);
@@ -168,6 +169,23 @@ describe('composition with the Premium wordmark', () => {
     assert.deepEqual(emblem.map(node => node.getAttribute('fill')), sourceFills, 'the red emblem is never inverted');
     assert.equal(rootObservers(), before, 'theme changes create no second Premium theme observer');
     branding.cleanup();
+  });
+});
+
+describe('OLED Black labelling', () => {
+  it('describes exactly the surfaces the stylesheet themes, and no more', () => {
+    const node = registry.findNode(registry.buildSettingsTree(), 'appearance.theme');
+    assert.ok(node, 'the theme setting is in the tree');
+    assert.match(node.description, /surfaces YTArk can style/,
+      'the row says the theme is scoped, not global');
+    const oled = node.options.find(option => option.value === 'oled');
+    assert.match(oled.description, /app backdrop/i);
+    assert.match(oled.description, /browse, search and settings surfaces/i);
+    assert.match(oled.description, /YTArk dialogs/i);
+    assert.match(oled.description, /keep their own colours/i,
+      'and it says what is left to YouTube');
+    assert.doesNotMatch(oled.description, /everything|entire|all screens|whole app/i,
+      'no global-coverage claim');
   });
 });
 

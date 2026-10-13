@@ -25,14 +25,14 @@ import { t } from 'i18next';
 import qrcode from 'qrcode-npm';
 import { configRead, configDefault } from '../config.js';
 import {
-  installedVersionInfo, installedVersionLabel, buildDetails, youtubeFrontendVersion,
+  installedVersionInfo, installedVersionLabel, youtubeFrontendVersion,
   startVersionResolution, VERSION_SOURCES,
 } from '../features/appVersion.js';
 import {
   overlayPanelItemListRenderer, scrollPaneRenderer, overlayMessageRenderer, QrCodeRenderer, buttonItem,
 } from './ytUI.js';
+import { YTARK_BUILD_INFO } from '../assets/buildInfo.generated.js';
 import { tx } from '../translations/text.js';
-import { whatsNewState } from '../features/whatsNew.js';
 
 const qrcodes = {};
 
@@ -151,13 +151,22 @@ function startupDestination(id, titleKey, icon, endpoint) {
   return { id: `ui.launchTo.${id}`, title: t(titleKey), icon, value: JSON.stringify(endpoint) };
 }
 
+/**
+ * About YTArk — the short, TV-readable identity panel.
+ *
+ * Layout contract (see the 2.7 acceptance checklist): the header carries the
+ * name, the subtitle carries the single "YTArk <version>" line, the content
+ * holds at most one informational line plus the navigable subsections, and the
+ * closing line is the only legal sentence. Nothing here repeats the version,
+ * and no fixed height or absolute position is used: the frontend renders these
+ * rows, wraps them and scrolls them at 720p, 1080p and 4K.
+ */
 function aboutPanel() {
   const info = installedVersionInfo();
   const version = info.loading
     ? tx('ytark.about.versionLoading', 'Reading the installed version…')
-    : ytarkDisplayVersion();
-  const youtube = youtubeFrontendVersion();
-  const items = [overlayMessageRenderer(`${tx('ytark.about.ytarkVersion', 'YTArk version')}: ${version}`)];
+    : `YTArk ${ytarkDisplayVersion()}`;
+  const items = [];
   if (!info.loading && info.source !== VERSION_SOURCES.package) {
     items.push(overlayMessageRenderer(tx(
       'ytark.about.versionSource',
@@ -165,18 +174,35 @@ function aboutPanel() {
   }
   // Only reported when the running frontend really publishes its own version;
   // it is the YouTube TV app version, never the YTArk version.
+  const youtube = youtubeFrontendVersion();
   if (youtube) {
-    items.push(overlayMessageRenderer(`${tx('ytark.about.youtubeVersion', 'YouTube version')}: ${youtube}`));
-  }
-  const details = buildDetails();
-  if (details) {
-    items.push(overlayMessageRenderer(`${tx('ytark.about.buildDetails', 'Build details')}: ${details}`));
+    items.push(overlayMessageRenderer(`${tx('ytark.about.youtubeVersion', 'YouTube TV version')}: ${youtube}`));
   }
   items.push(
-    overlayMessageRenderer('YTArk is an independent Android TV application. YouTube and the YouTube TV app remain Google services.'),
-    overlayMessageRenderer('The optional YouTube Premium wordmark is a local visual only. It does not provide a subscription or account benefits.'),
-    overlayMessageRenderer('Third-party notices and source attribution are included in the release NOTICE.md, TizenTube/LICENSE, and upstream license files.'),
-    overlayMessageRenderer(tx('ytark.about.changelog', 'Version history: YTArk Settings › Changelog.')),
+    buttonItem(
+      {
+        title: tx('ytark.about.buildDetailsTitle', 'Build details'),
+        subtitle: tx('ytark.about.buildDetailsSubtitle', 'versionName · versionCode · userscript · Android base'),
+      },
+      { icon: 'INFO' },
+      [custom('YTARK_PANEL_SHOW', { id: 'about.buildInfo' })],
+    ),
+    buttonItem(
+      {
+        title: tx('ytark.about.noticesTitle', 'Third-party notices and licences'),
+        subtitle: tx('ytark.about.noticesSubtitle', 'Attribution and licence texts that ship with YTArk'),
+      },
+      { icon: 'LIST' },
+      [custom('YTARK_PANEL_SHOW', { id: 'about.notices' })],
+    ),
+    buttonItem(
+      {
+        title: tx('ytark.about.changelog', 'Version history'),
+        subtitle: tx('ytark.about.changelogSubtitle', 'Opens the changelog in YTArk Updates'),
+      },
+      { icon: 'HISTORY' },
+      [custom('YTARK_CHANGELOG_SHOW', {})],
+    ),
   );
   if (!info.loading && info.source !== VERSION_SOURCES.package) {
     items.push(buttonItem(
@@ -188,10 +214,56 @@ function aboutPanel() {
       [custom('YTARK_VERSION_REREAD', {})],
     ));
   }
+  items.push(overlayMessageRenderer(tx(
+    'ytark.about.independent',
+    'About: YTArk is an independent Android TV application. YouTube remains a Google service.')));
   return {
     title: 'About YTArk',
-    subtitle: `${tx('ytark.about.ytarkVersion', 'YTArk version')} ${version}`,
+    subtitle: version,
     content: overlayPanelItemListRenderer(items, 0),
+  };
+}
+
+/** Collapsible-style build information: its own navigable panel, scrollable. */
+function aboutBuildInfoPanel() {
+  const build = YTARK_BUILD_INFO || {};
+  const backend = installedVersionInfo();
+  const lines = [
+    `${tx('ytark.about.package', 'Android package')}: ${build.appId || 'io.github.twoarchiver.ytark'}`,
+    `${tx('ytark.about.versionName', 'versionName')}: ${build.versionName || 'unknown'}`,
+    `${tx('ytark.about.versionCode', 'versionCode')}: ${build.versionCode === undefined ? 'unknown' : String(build.versionCode)}`,
+    `${tx('ytark.about.scriptVersion', 'YTArk userscript')}: ${build.scriptTag || 'unknown'}`,
+    `${tx('ytark.about.baseTag', 'Android base')}: ${build.baseTag || 'unknown'}`,
+  ];
+  if (!backend.loading && backend.version) {
+    lines.push(`${tx('ytark.about.installedVersionName', 'Installed version reported by the platform')}: ${backend.version}`);
+  }
+  return {
+    title: tx('ytark.about.buildDetailsTitle', 'Build details'),
+    subtitle: tx('ytark.about.buildDetailsSubtitle', 'versionName · versionCode · userscript · Android base'),
+    content: scrollPaneRenderer(lines.map(line => overlayMessageRenderer(line))),
+  };
+}
+
+/**
+ * Attribution and licence pointers. Kept (never deleted) but out of the
+ * primary dialog, with the full texts named so they stay findable and open.
+ */
+function aboutNoticesPanel() {
+  const build = YTARK_BUILD_INFO || {};
+  const lines = [
+    tx('ytark.about.noticeBase',
+      'YTArk is an independent build of TizenTubeCobalt {{base}} (TizenTube, GNU GPL v3). Its source is published at https://github.com/2archiver/YTArk under the repository licence.',
+      { base: build.baseTag || 'v2.0.2' }),
+    tx('ytark.about.noticeComponents',
+      'Bundled and adapted components keep their own licences: TizenTube (GPL-3.0-only), TizenTubeCobalt/Cobalt (BSD-style Cobalt licence with its own NOTICE), SponsorBlock, DeArrow and the QR encoder. Full texts are in NOTICE.md and TizenTube/LICENSE in the repository and in the release assets.'),
+    tx('ytark.about.noticeTrademarks',
+      'Google, Android, YouTube and YouTube TV are trademarks of Google LLC. The optional YouTube Premium wordmark is a local visual only; it does not provide a subscription or account benefits.'),
+  ];
+  return {
+    title: tx('ytark.about.noticesTitle', 'Third-party notices and licences'),
+    subtitle: tx('ytark.about.noticesSubtitle', 'Attribution and licence texts that ship with YTArk'),
+    content: scrollPaneRenderer(lines.map(line => overlayMessageRenderer(line))),
   };
 }
 
@@ -204,7 +276,8 @@ function colorsPanel() {
     }),
     tx('ytark.appearance.colors.edit', 'Change them in the colour panel opened with the remote\'s red button, or with the focus and route colour settings.'),
     theme === 'oled'
-      ? tx('ytark.appearance.colors.oled', 'OLED Black is active and draws true black instead; your colours are kept and come back with YouTube default.')
+      ? tx('ytark.appearance.colors.oled', 'OLED Black is active: the surfaces YTArk can style are true black, and your '
+        + 'colours are kept and come back with YouTube default. YouTube-owned pages keep their own colours.')
       : tx('ytark.appearance.colors.youtube', 'YouTube default is active, so these colours are in use.'),
   ];
   return {
@@ -212,37 +285,6 @@ function colorsPanel() {
     subtitle: tx('ytark.appearance.colors.subtitle', 'Your saved custom colours'),
     content: scrollPaneRenderer(lines.map(line => overlayMessageRenderer(line))),
   };
-}
-
-function whatsNewNodes() {
-  let state;
-  try {
-    state = whatsNewState();
-  } catch (_) {
-    state = { show: false };
-  }
-  if (!state.show || !state.entry) return [];
-  const summary = state.entry.summary || (state.entry.sections[0] && state.entry.sections[0].items[0]) || '';
-  return [
-    {
-      id: 'whatsNew',
-      type: 'action',
-      search: false,
-      title: tx('ytark.whatsNew.title', 'What\'s new in YTArk {{version}}', { version: state.entry.display }),
-      description: summary.length > 140 ? `${summary.slice(0, 139)}…` : summary,
-      icon: 'STAR',
-      command: [custom('YTARK_CHANGELOG_VERSION', { version: state.entry.version })],
-    },
-    {
-      id: 'whatsNew.dismiss',
-      type: 'action',
-      search: false,
-      title: tx('ytark.whatsNew.dismissShort', 'Dismiss What\'s new'),
-      description: tx('ytark.whatsNew.dismissSubtitle', 'Hides the What\'s new card in YTArk Settings for this version'),
-      icon: 'CLOSE',
-      command: [custom('YTARK_WHATS_NEW_DISMISS', { refresh: 'settings' })],
-    },
-  ];
 }
 
 /** Build the complete settings tree for the current state and device. */
@@ -267,7 +309,6 @@ export function buildSettingsTree() {
       icon: 'SEARCH',
       command: [custom('YTARK_SEARCH_OPEN', {})],
     },
-    ...whatsNewNodes(),
     {
       id: 'playback',
       type: 'menu',
@@ -427,7 +468,7 @@ export function buildSettingsTree() {
           id: 'appearance.theme',
           type: 'choice',
           title: tx('ytark.appearance.theme.title', 'Theme'),
-          description: tx('ytark.appearance.theme.description', 'YouTube default or OLED Black'),
+          description: tx('ytark.appearance.theme.description', 'YouTube TV colours, or true black on the surfaces YTArk can style'),
           icon: 'DARK_THEME',
           key: 'uiTheme',
           menuId: 'ytark-theme',
@@ -442,7 +483,9 @@ export function buildSettingsTree() {
             {
               id: 'appearance.theme.oled',
               title: tx('ytark.appearance.theme.oled', 'OLED Black'),
-              description: tx('ytark.appearance.theme.oledDescription', 'True black backgrounds for supported screens; images and video keep their colours'),
+              description: tx('ytark.appearance.theme.oledDescription',
+                'True black for the app backdrop, the browse, search and settings surfaces and YTArk dialogs. '
+                + 'YouTube-owned pages, artwork, thumbnails, video and captions keep their own colours.'),
               value: 'oled',
             },
           ],
@@ -857,6 +900,31 @@ export function buildSettingsTree() {
       icon: 'INFO',
       keywords: ['about', 'version', 'build', 'youtube version', 'licence', 'license', 'attribution'],
       panel: aboutPanel,
+      // Navigable subsections of the About dialog. They are reachable from the
+      // panel only (not indexed, not rendered as rows), so the notices and the
+      // build metadata cannot collide with the primary dialog.
+      children: [
+        {
+          id: 'about.buildInfo',
+          type: 'panel',
+          search: false,
+          title: tx('ytark.about.buildDetailsTitle', 'Build details'),
+          description: tx('ytark.about.buildDetailsSubtitle', 'versionName · versionCode · userscript · Android base'),
+          icon: 'INFO',
+          keywords: ['build', 'versionname', 'versioncode', 'userscript', 'android base'],
+          panel: aboutBuildInfoPanel,
+        },
+        {
+          id: 'about.notices',
+          type: 'panel',
+          search: false,
+          title: tx('ytark.about.noticesTitle', 'Third-party notices and licences'),
+          description: tx('ytark.about.noticesSubtitle', 'Attribution and licence texts that ship with YTArk'),
+          icon: 'LIST',
+          keywords: ['licence', 'license', 'attribution', 'notice', 'trademark'],
+          panel: aboutNoticesPanel,
+        },
+      ],
     },
     {
       id: 'support',

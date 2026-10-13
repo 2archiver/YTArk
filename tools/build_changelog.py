@@ -237,14 +237,22 @@ def validate(model: dict, configured_version: str | None = None) -> None:
                 raise ChangelogError(f"{version}: published entries must link their GitHub release")
         elif "publishedAt" in meta:
             raise ChangelogError(f"{version}: an unreleased entry cannot carry a publication time")
-        if not entry["sections"] or not any(section["items"] for section in entry["sections"]):
-            raise ChangelogError(f"{version}: needs at least one section with items")
+        # A version is either a full entry with sections or a one-line summary
+        # (the simplified, user-facing history for older releases). It may not
+        # be an empty heading.
+        if not entry["summary"] and not any(section["items"] for section in entry["sections"]):
+            raise ChangelogError(f"{version}: needs a summary line or a section with items")
     keys = [version_key(entry["version"]) for entry in entries]
     if keys != sorted(keys, reverse=True):
         raise ChangelogError("versions must be listed newest first")
     unreleased = [entry for entry in entries if entry["status"] == "unreleased"]
     if len(unreleased) > 1 or (unreleased and entries[0] is not unreleased[0]):
         raise ChangelogError("only the newest entry may be Unreleased")
+    newest = entries[0]
+    if newest["status"] == "unreleased" and not any(section["items"] for section in newest["sections"]):
+        # The newest entry is the source of the GitHub release notes, so it
+        # keeps the real sectioned notes even though older versions are one-liners.
+        raise ChangelogError(f"{newest['version']}: the newest entry needs sections with items for the release notes")
     for entry in entries + model["notes"]:
         items = entry.get("items", []) + [item for section in entry.get("sections", []) for item in section["items"]]
         texts = [item["text"] for item in items] + [entry.get("summary", ""), entry.get("meta", {}).get("raw", "")]

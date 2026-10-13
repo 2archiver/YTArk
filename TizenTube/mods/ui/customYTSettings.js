@@ -1,7 +1,7 @@
 /**
  * YTArk integration with the native YouTube TV Settings page.
  *
- * Adds one YTArk section (YTArk Settings, Search, What's new, YTArk Updates
+ * Adds one YTArk section (YTArk Settings, Search, YTArk Updates
  * and, when the page layout is customized, a restore entry), records the
  * detected sections for the "Customize YouTube Settings" editor and applies
  * the saved layout. Patching is idempotent: revisiting the page never adds a
@@ -29,8 +29,6 @@ export function makeYtarkCategory(customized) {
     actionRow(t('settings.ttSettings.title'), 'tizentube_open_action', 'TT_SETTINGS_SHOW', [], t('settings.ttSettings.summary')),
     actionRow(tx('ytark.stock.search', 'Search YTArk settings'), 'ytark_search_action', 'YTARK_SEARCH_OPEN', {},
       tx('ytark.search.entryDescription', 'Find any YTArk setting by name or keyword')),
-    actionRow(tx('ytark.stock.whatsNew', 'What\'s new in YTArk'), 'ytark_changelog_action', 'YTARK_CHANGELOG_SHOW', {},
-      tx('ytark.changelog.entryDescription', 'Version history bundled with this build')),
     actionRow('YTArk Updates', 'ytark_updates_action', 'CHECK_FOR_UPDATES', [],
       tx('ytark.stock.updatesSummary', 'Check the official stable YTArk release')),
   ];

@@ -130,6 +130,13 @@ class YTArkUiBrandingTests(unittest.TestCase):
                                             # renamed by the bundler, its fields are not)
             "YTARK_VERSION_REREAD",         # About can ask the platform again
             "ytark-user-agent-retired",     # one-shot user-agent retirement marker
+            # 2.7 features must ship in the artefact, not only in the source.
+            "virtualKeyboard",              # standard IME channel, feature-detected
+            "data-ytark-keyboard",          # the panel reports which keyboard it uses
+            "about.buildInfo",              # About's navigable Build details subsection
+            "about.notices",                # About's licences subsection
+            "Third-party notices and licences",
+            "Added Full Auto Updating",     # the simplified one-line changelog summary
         ):
             self.assertIn(needle, built)
         # The embedded metadata is this release's, not a stale one: the bundler

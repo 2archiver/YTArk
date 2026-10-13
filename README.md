@@ -12,10 +12,10 @@ native updater that always hands installation to Android for user confirmation.
 |---|---|
 | Android package | `io.github.twoarchiver.ytark` (unchanged; same signing certificate) |
 | Launcher label | `YTArk` |
-| Version | `2.6` (Android versionName `2.6.0`, release title `YTArk 2.6`) |
-| versionCode | `2060000` (above every published YTArk APK; 2.5.0 is `2050000`, 2.4.0 is `2040000`) |
-| APK (the only architecture) | `YTArk-v2.6.0-armv7.apk` — `armeabi-v7a` |
-| Userscript revision | `s25` (the immutable tags `s24` and earlier are never moved) |
+| Version | `2.7` (Android versionName `2.7.0`, release title `YTArk 2.7`) |
+| versionCode | `2070000` (above every published YTArk APK; 2.6.0 is `2060000`, 2.5.0 is `2050000`) |
+| APK (the only architecture) | `YTArk-v2.7.0-armv7.apk` — `armeabi-v7a` |
+| Userscript revision | `s26` (the immutable tags `s25` and earlier are never moved) |
 | Android base | TizenTubeCobalt `v2.0.2` ARMv7 APK |
 
 **YTArk 2.6 completes the native updater and its Android install-permission path
@@ -195,7 +195,7 @@ simply not an update target any more.
 ## Remote-friendly installation
 
 1. From the official release page, download the versioned ARMv7 APK
-   (`YTArk-v2.6.0-armv7.apk`; earlier versions remain on the
+   (`YTArk-v2.7.0-armv7.apk`; earlier versions remain on the
    [release page](https://github.com/2archiver/YTArk/releases)). Download `SHA256SUMS.txt` too.
    If YTArk 2.5 is installed, this one-time manual install is the only way to
    reach 2.6, because 2.5 has no updater that can fetch it.
@@ -237,10 +237,10 @@ an update unless you understand that uninstalling can erase app data.
 | Hide channel watermark / Remove player dimming | **On for fresh installs**, off after an update until chosen; independent toggles under Appearance → Player. Device NOT RUN |
 | Search settings | Every YTArk setting, local only; D-pad keyboard, suggestions and the TV keyboard. Device NOT RUN |
 | Customize YouTube Settings | Order/hide sections, pin/hide entries by stable ids; protected entries; scoped restore. Device NOT RUN |
-| Changelog and What's new | Bundled history (offline), dismissible card once per installed version. Device NOT RUN |
+| Changelog and What's new | Bundled history (offline) inside YTArk Updates; the dismissible card for the newly installed version sits in the changelog itself (2.7), with a launch notice pointing there. Device NOT RUN |
 | Settings → YTArk Updates | Installed version, latest stable check, plain status (fresh results only), official-page QR fallback, changelog link, and a route to the native screen. Device NOT RUN |
-| Native updater | Host tests in CI (release contract, install gate, storage guards, SHA-256, signer, ABI, installer hand-off). TV launcher entry *YTArk Updates* and install-permission path in 2.6. **Device NOT RUN** |
-| ARMv7 (`armeabi-v7a`) APK | **The only published architecture** from 2.1.2; 2.6.0 publishes from `main` like 2.5.0, and device acceptance stays NOT RUN until recorded |
+| Native updater | Host tests in CI (release contract, install gate, storage guards, SHA-256, signer, ABI, installer hand-off). TV launcher entry *YTArk Updates* and install-permission path in 2.6; 2.7 leaves the updater code untouched. **Device NOT RUN** |
+| ARMv7 (`armeabi-v7a`) APK | **The only published architecture** from 2.1.2; 2.7.0 publishes from `main` like 2.6.0, and device acceptance stays NOT RUN until recorded |
 | 64-bit-only Android userspace (`arm64-v8a` only) | **Not supported** by this release line; documented exclusion, no ARM64 asset |
 | Background playback, PiP, casting, downloads, system-wide ad blocking | **Not claimed** |
 
@@ -514,7 +514,7 @@ section of the release notes:
 ```sh
 python3 tools/build_changelog.py --write       # regenerate TizenTube/mods/assets/changelog.generated.js
 python3 tools/build_changelog.py --check       # what CI runs
-python3 tools/build_changelog.py release-notes --version 2.6.0
+python3 tools/build_changelog.py release-notes --version 2.7.0
 ```
 
 Build metadata: About YTArk and the Updates card report the installed package
@@ -561,7 +561,7 @@ refuses any candidate that is not above every published installable build.
 - `build-apk.yml` runs on push to `main` or manual dispatch. It builds, signs and
   package-checks the ARMv7 candidate APK, uploads it as an Actions artefact, and
   then — in the same run, in a separate job that depends on the build succeeding
-  — publishes the immutable `s25` userscript tag and the stable GitHub release
+  — publishes the immutable `s26` userscript tag and the stable GitHub release
   from those exact bytes. Only that publish job holds `contents: write`; the build
   job stays read-only and is the only job that sees the signing key.
 - `publish-release.yml` is the manual recovery path. It takes

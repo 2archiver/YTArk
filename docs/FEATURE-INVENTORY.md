@@ -1,7 +1,7 @@
 # YTArk feature inventory (regression checklist)
 
 Derived from the current source (`TizenTube/mods/config.js` defaults and
-`TizenTube/mods/features`, `ui`, `resolveCommand.js`) for the 2.6.0 candidate.
+`TizenTube/mods/features`, `ui`, `resolveCommand.js`) for the 2.7.0 candidate.
 "Code" means the feature is implemented in the bundled userscript and covered by
 a source-level test where noted. "Device" means a physical TV run is recorded;
 **no device run has been recorded for this candidate**, so every device column is
@@ -11,7 +11,7 @@ Base: TizenTubeCobalt `v2.0.2` (Cobalt runtime and YouTube TV frontend are the
 upstream ones, unchanged). YTArk adds the userscript layer and native updater.
 The complete version history is in [`CHANGELOG.md`](../CHANGELOG.md).
 
-## 2.6.0 candidate: what each claim is backed by
+## 2.7.0 candidate: what each claim is backed by
 
 Three separate columns, never merged. **Source implemented** means the code exists
 in this repository. **Packaged / CI verified** means a named CI gate or the candidate
@@ -20,7 +20,7 @@ APK. Only the first two can be true before a device run.
 
 | Claim | Source implemented | Packaged / CI verified | Device tested |
 |---|---|---|---|
-| Version 2.6.0 / versionCode 2060000 / `v2.6.0` / `s25` metadata | Yes (`release/version.properties`, generated `assets/buildInfo.generated.js`) | `ci.yml` grep checks, `build_buildinfo.py --check`, `validate_release.py`, release contract tests | NOT RUN |
+| Version 2.7.0 / versionCode 2070000 / `v2.7.0` / `s26` metadata | Yes (`release/version.properties`, generated `assets/buildInfo.generated.js`) | `ci.yml` grep checks, `build_buildinfo.py --check`, `validate_release.py`, release contract tests | NOT RUN |
 | Native updater: TV launcher entry *YTArk Updates*, `ytark://updates` link, and the native screen | Yes (`tools/repack_apk.py` `patch_updater_manifest`, `UpdateActivity.java`) | `test_updater_manifest_patch.py`, `test_updater_launcher.py`, `validate_release.py` `validate_updater_launcher` on the compiled manifest | NOT RUN |
 | Install gate: install only on an explicit press, permission checked with `canRequestPackageInstalls()`, no automatic continuation after a restart, no repeated hand-off | Yes (`InstallGate.java`, `UpdateActivity.java`, `YtarkUpdater.java`) | `InstallGateTest` (host JRE, CI `ci.yml`) | NOT RUN |
 | Storage and compatibility guards: free-space budget, stale-file cleanup that keeps the release being installed, minimum-SDK check, clean release-page tag | Yes (`UpdateGuards.java`) | `UpdateGuardsTest` (host JRE, CI) | NOT RUN |
@@ -105,7 +105,7 @@ reproducibility result verified for the released artefacts.
 | 28 | Remove player dimming | ON for fresh installs, OFF after an update | `ui/appearanceStyles.js` | `appearance-theme.test.mjs` | NOT RUN |
 | 29 | Search settings | — | `ui/settingsSearch.js`, `ui/textEntryOverlay.js`, `ui/settingsRegistry.js` | `settings-search.test.mjs` | NOT RUN |
 | 30 | Customize YouTube Settings | stock layout | `features/ytSettingsLayout.js`, `ui/ytSettingsEditor.js` | `yt-settings-layout.test.mjs` | NOT RUN |
-| 31 | Changelog reader and What's new card | card once per update | `ui/changelogReader.js`, `features/whatsNew.js`, `CHANGELOG.md` | `changelog-whats-new.test.mjs`, `test_build_changelog.py` | NOT RUN |
+| 31 | Changelog reader and What's new card | card once per update, inside YTArk Updates (2.7); one short summary line per version | `ui/changelogReader.js`, `features/whatsNew.js`, `CHANGELOG.md` | `changelog-whats-new.test.mjs`, `test_build_changelog.py` | NOT RUN |
 | 32 | Section resets with scoped confirmation | — | `ui/settings.js` | `settings-search.test.mjs` | NOT RUN |
 | 33 | Removed in 2.5: user-agent profiles, presets / Undo Last Preset / Quick Quality, Fix UI, `videoPreferredCodec` | gone | `config.js` (`RETIRED_KEYS`) | `settings-cleanup.test.mjs`, `config-migration.test.mjs` | n/a |
 

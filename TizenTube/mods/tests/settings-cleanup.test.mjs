@@ -157,31 +157,68 @@ describe('one authoritative control per behaviour', () => {
 });
 
 describe('About YTArk', () => {
-  it('reports the installed version and the build details, as separate fields', async () => {
+  it('shows one version line, navigable subsections and no legal text between rows', async () => {
     appVersion.resetVersionForTests();
     appVersion.startVersionResolution({ force: true, delays: [0] });
     await tick(20);
     resolveCommand({ customAction: { action: 'YTARK_PANEL_SHOW', parameters: { id: 'about' } } });
     const panel = lastModal(recorded, 'ytark-panel-about');
     assert.equal(header(panel).title, 'About YTArk');
-    assert.equal(header(panel).subtitle, 'YTArk version 2.3');
-    const lines = modalItems(panel).map(messageText).filter(Boolean);
-    assert.equal(lines[0], 'YTArk version: 2.3', 'the installed package version, not "unknown"');
-    assert.ok(lines.some(line => line.startsWith('Build details: versionName 2.6.0')), 'build details are separate');
+    assert.equal(header(panel).subtitle, 'YTArk 2.3', 'the version appears exactly once, in the header');
+    const items = modalItems(panel);
+    const rows = items.map(rowTitle).filter(Boolean);
+    assert.deepEqual(rows, ['Build details', 'Third-party notices and licences', 'Version history'],
+      'the About dialog is short and every extra detail is one D-pad press away');
+    const lines = items.map(messageText).filter(Boolean);
+    assert.deepEqual(lines, ['About: YTArk is an independent Android TV application. YouTube remains a Google service.'], 'one closing legal line, nothing between the rows');
+    for (const line of lines) assert.ok(line.length <= 160, 'lines wrap instead of overflowing at 720p');
+    const buttons = items.filter(item => item && item.compactLinkRenderer);
+    for (const button of buttons) {
+      const subtitle = button.compactLinkRenderer.subtitle ? button.compactLinkRenderer.subtitle.simpleText : '';
+      assert.ok(String(subtitle).length <= 90, `${rowTitle(button)} keeps a short subtitle`);
+    }
     assert.ok(!lines.some(line => /Version unknown/i.test(line)), 'never "Version unknown"');
     // The YouTube frontend does not publish a client version in this harness,
     // so the field is omitted instead of guessed.
-    assert.ok(!lines.some(line => line.startsWith('YouTube version:')));
-    assert.ok(!findRow(panel, 'Read the installed version again'),
-      'no re-read row once the platform answered');
+    assert.ok(!lines.some(line => line.startsWith('YouTube TV version:')));
+    assert.ok(!findRow(panel, 'Read the installed version again'), 'no re-read row once the platform answered');
   });
 
-  it('shows the YouTube frontend version only when it is really published', async () => {
+  it('keeps build details, the licences and the changelog one press away', async () => {
+    resolveCommand({ customAction: { action: 'YTARK_PANEL_SHOW', parameters: { id: 'about' } } });
+    await press(resolveCommand, findRow(lastModal(recorded, 'ytark-panel-about'), 'Build details'));
+    const build = lastModal(recorded, 'ytark-panel-about.buildInfo');
+    assert.ok(build, 'Build details opens its own panel');
+    assert.ok(build.openPopupAction.popup.overlaySectionRenderer.overlay.overlayTwoPanelRenderer
+      .actionPanel.overlayPanelRenderer.content.scrollPaneRenderer, 'D-pad scrollable');
+    const details = modalItems(build).map(messageText).join('\n');
+    assert.match(details, /versionName: 2\.7\.0/);
+    assert.match(details, /versionCode: 2070000/);
+    assert.match(details, /YTArk userscript: s26/);
+    assert.match(details, /Android base: v2\.0\.2/);
+
+    resolveCommand({ customAction: { action: 'YTARK_PANEL_SHOW', parameters: { id: 'about' } } });
+    await press(resolveCommand, findRow(lastModal(recorded, 'ytark-panel-about'), 'Third-party notices and licences'));
+    const notices = lastModal(recorded, 'ytark-panel-about.notices');
+    const text = modalItems(notices).map(messageText).join('\n');
+    assert.match(text, /GPL/);
+    assert.match(text, /NOTICE\.md/);
+    assert.match(text, /trademarks/i, 'the attribution stays reachable, just not in the primary dialog');
+
+    resolveCommand({ customAction: { action: 'YTARK_PANEL_SHOW', parameters: { id: 'about' } } });
+    const versionHistory = findRow(lastModal(recorded, 'ytark-panel-about'), 'Version history');
+    assert.ok(versionHistory, 'the changelog stays linked from About');
+    await press(resolveCommand, versionHistory);
+    assert.ok(lastModal(recorded, 'ytark-changelog'), 'and it opens, inside the YTArk Updates path');
+  });
+
+  it('shows the YouTube TV version only when it is really published', async () => {
     windowStub.yt = { config_: { INNERTUBE_CONTEXT: { clientInformation: { clientVersion: 'v2.20250101.01.00' } } } };
     resolveCommand({ customAction: { action: 'YTARK_PANEL_SHOW', parameters: { id: 'about' } } });
-    const lines = modalItems(lastModal(recorded, 'ytark-panel-about')).map(messageText).filter(Boolean);
-    assert.ok(lines.includes('YouTube version: v2.20250101.01.00'));
-    assert.ok(lines[0].startsWith('YTArk version:'), 'and stays separate from the YTArk version');
+    const panel = lastModal(recorded, 'ytark-panel-about');
+    const lines = modalItems(panel).map(messageText).filter(Boolean);
+    assert.ok(lines.includes('YouTube TV version: v2.20250101.01.00'));
+    assert.equal(header(panel).subtitle, 'YTArk 2.3', 'and stays separate from the YTArk version');
     delete windowStub.yt;
   });
 
@@ -193,8 +230,8 @@ describe('About YTArk', () => {
     await tick(20);
     resolveCommand({ customAction: { action: 'YTARK_PANEL_SHOW', parameters: { id: 'about' } } });
     const panel = lastModal(recorded, 'ytark-panel-about');
+    assert.equal(header(panel).subtitle, 'YTArk 2.7 (build metadata)', "this build's own version, labelled by source");
     const lines = modalItems(panel).map(messageText).filter(Boolean);
-    assert.equal(lines[0], 'YTArk version: 2.6 (build metadata)');
     assert.ok(lines.some(line => /packaging metadata/.test(line)), 'the source is stated');
     const reread = findRow(panel, 'Read the installed version again');
     assert.ok(reread, 'the user can ask the platform again');
@@ -204,8 +241,7 @@ describe('About YTArk', () => {
     const refreshed = lastModal(recorded, 'ytark-panel-about');
     assert.equal(refreshed.openPopupAction.updateAction, true, 'refreshed in place, not stacked');
     assert.equal(refreshed.openPopupAction.shouldMatchUniqueId, true);
-    const refreshedLines = modalItems(refreshed).map(messageText).filter(Boolean);
-    assert.equal(refreshedLines[0], 'YTArk version: 2.3', 'the platform value wins as soon as it arrives');
+    assert.equal(header(refreshed).subtitle, 'YTArk 2.3', 'the platform value wins as soon as it arrives');
     appVersion.resetVersionForTests();
     appVersion.startVersionResolution({ force: true, delays: [0] });
     await tick(20);

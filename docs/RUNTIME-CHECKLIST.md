@@ -139,6 +139,21 @@ painted.
 | 54 | Installed vs available | The Updates card's "Installed" value matches About; "Latest" stays a separate value; a pending asynchronous read shows a brief loading state and then the real version in place (no second panel) | |
 | 55 | No duplicates after heavy use | Repeated opens/closes of YTArk Settings, its submenus, About and the changelog create no duplicate panels, rows or handlers; playback, YouTube's own Settings page and the update check still work | |
 
+## YTArk 2.7 features (search keyboard, About dialog, simplified changelog)
+
+Every row is **NOT RUN** until recorded on the build under test. The DOM tests and
+CI checks cover focus, layout data and the bundled text, not a TV panel or a
+device input method.
+
+| # | Check | Expected | Result |
+|---|---|---|---|
+| 62 | Search settings and the TV keyboard | Selecting Search focuses a real text field and the device's own keyboard is offered where the device provides one (Android TV remote-app keyboard or another IME); typing filters results live; Clear empties the field; Back closes the keyboard first, then the panel, and focus returns to the row Search was opened from | NOT RUN |
+| 63 | Search settings without a system keyboard | The on-screen key grid types, the panel says the on-screen keys are in use, and no "keyboard opened" claim is made anywhere | NOT RUN |
+| 64 | About YTArk layout | At 720p, 1080p and 4K with display scaling the header reads "About YTArk" / "YTArk <version>", no text overlaps or clips, every row wraps, and Build details, Third-party notices and licences and Version history each open with D-pad focus and scroll | NOT RUN |
+| 65 | What's new placement | No top-level "What's new" row in YTArk Settings and none on the YouTube Settings page's YTArk section; the post-update notice points to YTArk Updates, and YTArk Updates → changelog is the only route to the version history | NOT RUN |
+| 66 | Changelog summaries | Each version row leads with one short line; 2.6 reads exactly "2.6 — Added Full Auto Updating"; the list stays newest first and long versions scroll with the D-pad; Back returns | NOT RUN |
+| 67 | OLED Black after the relabel | Turning OLED Black on still repaints the supported surfaces to true black immediately and after a restart, the focused row stays distinguishable, and the setting text matches what is actually themed | NOT RUN |
+
 ## 64-bit-only userspace check (expected exclusion)
 
 On a device or emulator image whose `ro.product.cpu.abilist` contains only

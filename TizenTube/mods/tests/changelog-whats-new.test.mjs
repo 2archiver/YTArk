@@ -24,8 +24,8 @@ const resolve = await import('../resolveCommand.js');
 resolve.patchResolveCommand();
 const resolveCommand = resolve.default;
 
-const PUBLISHED_TAGS = ['v2.5.0', 'v2.4.0', 'v2.3.0', 'v2.2.0', 'v2.1.2', 'v2.1.1', 'v2.1.0', 'v2.0.4-ytark.17', 'v2.0.4-ytark.16',
-  'v2.0.3-ytark.15', 'v2.0.2-personal.14'];
+const PUBLISHED_TAGS = ['v2.6.0', 'v2.5.0', 'v2.4.0', 'v2.3.0', 'v2.2.0', 'v2.1.2', 'v2.1.1', 'v2.1.0', 'v2.0.4-ytark.17',
+  'v2.0.4-ytark.16', 'v2.0.3-ytark.15', 'v2.0.2-personal.14'];
 
 beforeEach(() => {
   recorded.length = 0;
@@ -45,16 +45,21 @@ describe('bundled changelog data', () => {
       return 0;
     });
     assert.deepEqual(keys, sorted, 'newest first');
-    assert.equal(entries[0].version, '2.6.0');
+    assert.equal(entries[0].version, '2.7.0');
     assert.equal(entries[0].status, 'unreleased');
     assert.equal(entries[0].date, null, 'no invented date for unpublished work');
     const published = entries.filter(entry => entry.status === 'published');
     assert.deepEqual(published.map(entry => entry.tag), PUBLISHED_TAGS);
     for (const entry of published) {
-      assert.match(entry.date, /^2026-10-(09|10|11)$/);
+      assert.match(entry.date, /^2026-10-(09|10|11|13)$/);
       assert.equal(entry.releaseUrl, `https://github.com/2archiver/YTArk/releases/tag/${entry.tag}`);
       assert.ok(entry.publishedAt.startsWith(entry.date));
-      assert.ok(entry.sections.length > 0);
+      // Simplified history: a published version is one short, user-facing line
+      // (the summary the row headline is built from), never a wall of text.
+      assert.ok(entry.summary && entry.summary.length <= 90,
+        `${entry.version} carries one short summary line`);
+      assert.ok(entry.sections.reduce((count, section) => count + section.items.length, 0) <= 2,
+        `${entry.version} stays a one-liner`);
     }
     const drafts = YTARK_CHANGELOG.notes.find(note => /draft/i.test(note.title));
     assert.ok(drafts.items.some(item => item.includes('v2.2.0-probeJ') && /never published/.test(item)));
@@ -68,26 +73,64 @@ describe('in-app reader', () => {
     resolveCommand({ customAction: { action: 'YTARK_CHANGELOG_SHOW', parameters: {} } });
     const modal = lastModal(recorded, reader.CHANGELOG_MODAL_ID);
     const titles = modalItems(modal).map(rowTitle);
-    const versionRows = titles.filter(title => title.startsWith('YTArk 2.'));
-    assert.equal(versionRows[0], 'YTArk 2.6');
-    assert.equal(versionRows[1], 'YTArk 2.5');
-    assert.equal(versionRows[2], 'YTArk 2.4');
-    assert.equal(versionRows[3], 'YTArk 2.3  ·  Installed');
-    assert.equal(versionRows.at(-1), 'YTArk 2.0.2-personal.14');
+    const versionRows = titles.filter(title => /^\d+\.\d/.test(title));
+    const find = version => YTARK_CHANGELOG.entries.find(entry => entry.version === version);
     assert.equal(versionRows.length, YTARK_CHANGELOG.entries.length);
-    assert.equal(rowTitle(modalItems(modal)[selectedIndex(modal)]), 'YTArk 2.3  ·  Installed');
-    assert.match(rowSubtitle(findRow(modal, 'YTArk 2.2')), /Published .*2026 · v2\.2\.0/);
+    assert.equal(versionRows[0], reader.headlineFor(find('2.7.0')));
+    assert.equal(versionRows[1], reader.headlineFor(find('2.6.0')));
+    assert.equal(versionRows.at(-1), reader.headlineFor(find('2.0.2-personal.14')));
+    assert.equal(versionRows[0], '2.7 — TV keyboard search, a readable About dialog and a simpler changelog');
+    assert.equal(versionRows[1], '2.6 — Added Full Auto Updating');
+    assert.equal(versionRows[4], '2.3 — OLED Black, cleaner playback and searchable settings  ·  Installed');
+    assert.equal(rowTitle(modalItems(modal)[selectedIndex(modal)]), versionRows[4]);
+    assert.match(rowSubtitle(findRow(modal, item => rowTitle(item).startsWith('2.2 — '))), /Published .*2026 · v2\.2\.0/);
     assert.match(header(modal).subtitle, /installed 2\.3\.0/);
+  });
+
+  it('leads every version with one short, user-facing summary line', () => {
+    const entries = YTARK_CHANGELOG.entries;
+    const byVersion = Object.fromEntries(entries.map(entry => [entry.version, entry]));
+    assert.equal(reader.headlineFor(byVersion['2.6.0']), '2.6 — Added Full Auto Updating',
+      'the 2.6 changelog reads exactly "2.6 — Added Full Auto Updating"');
+    for (const entry of entries) {
+      assert.ok(entry.summary && entry.summary.length <= 90,
+        `${entry.version} carries one short summary line (${String(entry.summary).length} chars)`);
+      const headline = reader.headlineFor(entry);
+      assert.ok(headline.startsWith(`${entry.display} — `), `${entry.version} headline is "<version> — <summary>"`);
+      assert.doesNotMatch(headline, /[\n<>*`]/, `${entry.version} headline stays plain, single-line text`);
+    }
+  });
+
+  it('shows the one-line summary first and keeps full notes for the current release', async () => {
+    resolveCommand({ customAction: { action: 'YTARK_CHANGELOG_SHOW', parameters: {} } });
+    await press(resolveCommand, findRow(lastModal(recorded, reader.CHANGELOG_MODAL_ID),
+      item => rowTitle(item).startsWith('2.6 — ')));
+    const detail = lastModal(recorded, reader.CHANGELOG_VERSION_MODAL_ID);
+    const messages = modalItems(detail).map(messageText).filter(Boolean);
+    assert.equal(messages[1], '2.6 — Added Full Auto Updating');
+    assert.ok(messages.every(text => text.length <= 1300), 'every message is bounded for the TV reader');
+    assert.ok(messages.length <= 4, 'an older version stays short on the TV');
+
+    // The current, unreleased version is the one that carries the detailed
+    // sections, because it is also the source of its own release notes.
+    resolveCommand({ customAction: { action: 'YTARK_CHANGELOG_SHOW', parameters: { update: true } } });
+    await press(resolveCommand, findRow(lastModal(recorded, reader.CHANGELOG_MODAL_ID),
+      item => rowTitle(item).startsWith('2.7 — ')));
+    const current = modalItems(lastModal(recorded, reader.CHANGELOG_VERSION_MODAL_ID))
+      .map(messageText).join('\n');
+    assert.match(current, /Added\n• TV keyboard for Search settings/);
+    assert.match(current, /Known limitations/);
   });
 
   it('renders a version as plain, scrollable text with its release page', async () => {
     resolveCommand({ customAction: { action: 'YTARK_CHANGELOG_SHOW', parameters: {} } });
-    await press(resolveCommand, findRow(lastModal(recorded, reader.CHANGELOG_MODAL_ID), 'YTArk 2.2'));
+    await press(resolveCommand, findRow(lastModal(recorded, reader.CHANGELOG_MODAL_ID),
+      item => rowTitle(item).startsWith('2.2 — ')));
     const detail = lastModal(recorded, reader.CHANGELOG_VERSION_MODAL_ID);
     assert.ok(detail.openPopupAction.popup.overlaySectionRenderer.overlay.overlayTwoPanelRenderer
       .actionPanel.overlayPanelRenderer.content.scrollPaneRenderer, 'D-pad scrollable pane');
     const text = modalItems(detail).map(messageText).join('\n');
-    assert.match(text, /Changed\n• SponsorBlock segment lookups have a real deadline/);
+    assert.match(text, /2\.2 — Maintenance and UX release on the same TizenTubeCobalt v2\.0\.2 ARMv7 base/);
     assert.match(text, /Release page: https:\/\/github\.com\/2archiver\/YTArk\/releases\/tag\/v2\.2\.0/);
     assert.doesNotMatch(text, /\*\*|`|<|>/);
     assert.equal(header(detail).title, 'YTArk 2.2');
@@ -155,15 +198,22 @@ describe('post-update What\'s new', () => {
     assert.equal(configRead('lastSeenVersion'), '2.3.0');
 
     resolveCommand({ customAction: { action: 'TT_SETTINGS_SHOW', parameters: [] } });
-    let root = lastModal(recorded, 'tt-settings');
-    assert.deepEqual(modalItems(root).slice(0, 3).map(rowTitle),
-      ['Search settings', 'What\'s new in YTArk 2.3', 'Dismiss What\'s new']);
-    await press(resolveCommand, findRow(root, 'What\'s new in YTArk 2.3'));
-    assert.equal(header(lastModal(recorded, reader.CHANGELOG_VERSION_MODAL_ID)).title, 'YTArk 2.3');
-    await press(resolveCommand, findRow(root, 'Dismiss What\'s new'));
+    const root = lastModal(recorded, 'tt-settings');
+    const rootTitles = modalItems(root).map(rowTitle);
+    assert.equal(rootTitles[0], 'Search settings');
+    assert.equal(rootTitles.some(title => /What's new in YTArk/.test(title)), false,
+      'no duplicate What\'s new row at the top of YTArk Settings');
+    // The card (and its dismiss action) is inside YTArk Updates → changelog.
+    resolveCommand({ customAction: { action: 'YTARK_CHANGELOG_SHOW', parameters: {} } });
+    let changelog = lastModal(recorded, reader.CHANGELOG_MODAL_ID);
+    const dismiss = findRow(changelog, item => /^Dismiss What's new/.test(rowTitle(item)));
+    assert.ok(dismiss, 'the post-update card is offered inside the changelog');
+    await press(resolveCommand, dismiss);
     assert.equal(configRead('whatsNewDismissedVersion'), '2.3.0');
-    root = lastModal(recorded, 'tt-settings');
-    assert.equal(modalItems(root).map(rowTitle).includes('What\'s new in YTArk 2.3'), false);
+    resolveCommand({ customAction: { action: 'YTARK_CHANGELOG_SHOW', parameters: { update: true } } });
+    changelog = lastModal(recorded, reader.CHANGELOG_MODAL_ID);
+    assert.equal(findRow(changelog, item => /^Dismiss What's new/.test(rowTitle(item))), null,
+      'and disappears once dismissed');
 
     // A later launch of the same version neither announces nor shows the card.
     whatsNew.resetWhatsNewForTests();

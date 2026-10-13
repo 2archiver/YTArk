@@ -289,14 +289,64 @@
     },
     "ytark": {
         "about": {
+            "baseTag": "Android base",
             "buildDetails": "Build details",
-            "changelog": "Version history: YTArk Settings › Changelog.",
+            "buildDetailsSubtitle": "versionName · versionCode · userscript · Android base",
+            "buildDetailsTitle": "Build details",
+            "changelog": "Version history",
+            "changelogSubtitle": "Opens the changelog in YTArk Updates",
+            "independent": "About: YTArk is an independent Android TV application. YouTube remains a Google service.",
+            "installedVersionName": "Installed version reported by the platform",
+            "noticeTrademarks": "Google, Android, YouTube and YouTube TV are trademarks of Google LLC. The optional YouTube Premium wordmark is a local visual only; it does not provide a subscription or account benefits.",
+            "noticesSubtitle": "Attribution and licence texts that ship with YTArk",
+            "noticesTitle": "Third-party notices and licences",
+            "package": "Android package",
             "rereadVersion": "Read the installed version again",
             "rereadVersionDescription": "Asks the platform for the installed YTArk package version",
+            "scriptVersion": "YTArk userscript",
+            "versionCode": "versionCode",
             "versionLoading": "Reading the installed version…",
+            "versionName": "versionName",
             "versionSource": "Read from this build's packaging metadata: the platform did not report the installed package version.",
-            "ytarkVersion": "YTArk version",
-            "youtubeVersion": "YouTube version"
+            "youtubeVersion": "YouTube TV version",
+            "ytarkVersion": "YTArk version"
+        },
+        "appearance": {
+            "colors": {
+                "edit": "Change them in the colour panel opened with the remote's red button, or with the focus and route colour settings.",
+                "oled": "OLED Black is active: the surfaces YTArk can style are true black, and your colours are kept and come back with YouTube default. YouTube-owned pages keep their own colours.",
+                "saved": "Saved colours: navigation {{focus}}, content {{route}}.",
+                "subtitle": "Your saved custom colours",
+                "title": "Navigation and content colours",
+                "youtube": "YouTube default is active, so these colours are in use."
+            },
+            "colorsSwitched": "Theme set to YouTube default so your colours are visible.",
+            "description": "Theme and player look",
+            "player": {
+                "description": "Watermark and control-overlay dimming",
+                "hideEndCards": "Hide end-screen cards",
+                "hideEndCardsDescription": "Removes the clickable cards shown over the last seconds of a video.",
+                "hideWatermark": "Hide channel watermark",
+                "hideWatermarkDescription": "Hide the clickable channel logo over videos.",
+                "idleDimming": "Screen dimming when idle",
+                "idleDimmingDescription": "Separate setting under User Interface",
+                "removeScrim": "Remove player dimming",
+                "removeScrimDescription": "Keep the video bright when playback controls are visible.",
+                "title": "Player"
+            },
+            "premiumLogo": {
+                "description": "Local wordmark only; it never grants or claims a paid YouTube subscription.",
+                "title": "Premium logo (cosmetic)"
+            },
+            "theme": {
+                "description": "YouTube TV colours, or true black on the surfaces YTArk can style",
+                "oled": "OLED Black",
+                "oledDescription": "True black for the app backdrop, the browse, search and settings surfaces and YTArk dialogs. YouTube-owned pages, artwork, thumbnails, video and captions keep their own colours.",
+                "title": "Theme",
+                "youtube": "YouTube default",
+                "youtubeDescription": "YouTube TV colours with your saved navigation and content colours"
+            },
+            "title": "Appearance"
         },
         "categories": {
             "navigation": {
@@ -311,43 +361,6 @@
                 "description": "Ads, content filtering and prompts",
                 "title": "Privacy"
             }
-        },
-        "appearance": {
-            "colors": {
-                "edit": "Change them in the colour panel opened with the remote's red button, or with the focus and route colour settings.",
-                "oled": "OLED Black is active and draws true black instead; your colours are kept and come back with YouTube default.",
-                "saved": "Saved colours: navigation {{focus}}, content {{route}}.",
-                "subtitle": "Your saved custom colours",
-                "title": "Navigation and content colours",
-                "youtube": "YouTube default is active, so these colours are in use."
-            },
-            "colorsSwitched": "Theme set to YouTube default so your colours are visible.",
-            "description": "Theme and player look",
-            "premiumLogo": {
-                "description": "Local wordmark only; it never grants or claims a paid YouTube subscription.",
-                "title": "Premium logo (cosmetic)"
-            },
-            "player": {
-                "description": "Watermark and control-overlay dimming",
-                "hideWatermark": "Hide channel watermark",
-                "hideEndCards": "Hide end-screen cards",
-                "hideEndCardsDescription": "Removes the clickable cards shown over the last seconds of a video.",
-                "hideWatermarkDescription": "Hide the clickable channel logo over videos.",
-                "idleDimming": "Screen dimming when idle",
-                "idleDimmingDescription": "Separate setting under User Interface",
-                "removeScrim": "Remove player dimming",
-                "removeScrimDescription": "Keep the video bright when playback controls are visible.",
-                "title": "Player"
-            },
-            "theme": {
-                "description": "YouTube default or OLED Black",
-                "oled": "OLED Black",
-                "oledDescription": "True black backgrounds for supported screens; images and video keep their colours",
-                "title": "Theme",
-                "youtube": "YouTube default",
-                "youtubeDescription": "YouTube TV colours with your saved navigation and content colours"
-            },
-            "title": "Appearance"
         },
         "changelog": {
             "continued": "(continued)",
@@ -369,8 +382,9 @@
             "clear": "Clear",
             "delete": "Delete",
             "done": "Done",
-            "hint": "OK types · Down moves to the keyboard · Back closes this panel",
+            "hint": "OK types · Down moves to the on-screen keys · Back closes this panel",
             "keyboard": "On-screen keyboard",
+            "onScreenOnly": "This device did not offer a system keyboard here, so the on-screen keys are used.",
             "placeholder": "Type a setting name",
             "space": "Space"
         },
@@ -446,9 +460,9 @@
         "whatsNew": {
             "dismiss": "Dismiss What's new for {{version}}",
             "dismissShort": "Dismiss What's new",
-            "dismissSubtitle": "Hides the What's new card in YTArk Settings for this version",
+            "dismissSubtitle": "Hides the What's new card in YTArk Updates for this version",
             "title": "What's new in YTArk {{version}}",
-            "toastBody": "See What's new at the top of YTArk Settings.",
+            "toastBody": "Version history and release notes are in YTArk Updates.",
             "toastTitle": "YTArk updated to {{version}}"
         },
         "ytSettings": {

@@ -343,7 +343,7 @@ function execute_once_dom_loaded() {
         const entry = changelogEntryFor(version);
         showToast(
           tx('ytark.whatsNew.toastTitle', 'YTArk updated to {{version}}', { version: entry ? entry.display : version }),
-          tx('ytark.whatsNew.toastBody', 'See What\'s new at the top of YTArk Settings.'),
+          tx('ytark.whatsNew.toastBody', 'Version history and release notes are in YTArk Updates.'),
         );
       },
     });
