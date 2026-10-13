@@ -195,8 +195,9 @@ describe('YTArk Updates card without a connected native engine', () => {
     assert.match(text, /Installed: 2\.1/);
     assert.match(text, /Latest stable: 2\.1\.2 \(armeabi-v7a\)/);
     assert.match(text, /Device architecture: armeabi-v7a \(confirmed\)/);
-    assert.match(text, /To install, open the official page \(or scan the QR code with your phone\) and download the ARMv7 APK\./);
-    assert.match(text, /Official page: https:\/\/github\.com\/2archiver\/YTArk\/releases\/tag\/v2\.1\.2/);
+    assert.match(text, /To update, open \S*YTArk Updates\S* in the TV apps row\. It verifies the ARMv7 APK and asks Android to confirm the install\./);
+    assert.match(text, /Manual route, official page \(or scan the QR code with your phone\): https:\/\/github\.com\/2archiver\/YTArk\/releases\/tag\/v2\.1\.2/);
+    assert.match(text, /This card does not download or install anything\./);
     assert.match(text, /Release notes/);
     assert.doesNotMatch(text, /Vector Premium wordmark/, 'no long note text inline in the dialog');
     assert.doesNotMatch(text, /Reload the app|reconnect|Open YTArk Updates screen/i,
@@ -491,5 +492,38 @@ describe('state model hand-off', () => {
     }));
     assert.equal(snapshot.state, 'ready_to_install');
     assert.equal(snapshot.verified, true);
+  });
+});
+
+describe('honest release-state copy (2.6)', () => {
+  it('says "newer than latest" when the installed build is ahead of the published release', async () => {
+    const { controller, ui } = makeController({ installedVersion: () => '2.7.0' });
+    await controller.open();
+    assert.equal(controller.state.model.state, 'current');
+    assert.equal(controller.state.model.installedAhead, true);
+    const text = flatText(ui.modals.at(-1));
+    assert.match(text, /Newer than the latest stable release \(2\.1\.2\)/);
+    assert.doesNotMatch(text, /Up to date/, 'a newer local build is not presented as up to date');
+    controller.dispose();
+  });
+
+  it('labels "Up to date" with the time of the last successful check', async () => {
+    const { controller, ui } = makeController({ installedVersion: () => '2.1.2' });
+    await controller.open();
+    assert.equal(controller.state.model.state, 'current');
+    assert.equal(controller.state.model.installedAhead, false);
+    const text = flatText(ui.modals.at(-1));
+    assert.match(text, /Up to date with the latest stable release · checked /);
+    controller.dispose();
+  });
+
+  it('never offers an install control on the card, and says the card does not install', async () => {
+    const { controller, ui } = makeController();
+    await controller.open();
+    assert.equal(controller.state.model.state, 'available');
+    const ids = actionIds(ui.modals.at(-1));
+    assert.ok(!ids.includes('install'), 'the card has no install action');
+    assert.match(flatText(ui.modals.at(-1)), /This card does not download or install anything\./);
+    controller.dispose();
   });
 });

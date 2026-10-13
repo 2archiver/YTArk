@@ -392,6 +392,32 @@ def validate_compiled_manifest(apk: Path, aapt: str) -> None:
     print(f"Verified compiled TV launcher: {launcher_name.strip()}, MAIN + LEANBACK_LAUNCHER, exported, YTArk launcher icon and banner.")
 
 
+UPDATER_ACTIVITY_NAME = "io.github.twoarchiver.ytark.updater.UpdateActivity"
+
+
+def validate_updater_launcher(tree: str) -> None:
+    """The YTArk Updates screen must be a real TV launcher entry, not only a deep link."""
+    application_blocks = _element_blocks(tree, "application")
+    if not application_blocks:
+        raise ValueError("Compiled Android manifest has no application element")
+    for activity in _element_blocks(application_blocks[0], "activity"):
+        name_line = _attribute_line(activity, "name")
+        if not name_line or UPDATER_ACTIVITY_NAME not in name_line:
+            continue
+        label_line = _attribute_line(activity, "label")
+        if not label_line or "YTArk Updates" not in label_line:
+            raise ValueError("The YTArk Updates activity must be labelled 'YTArk Updates'")
+        if not _boolean_attribute_is_true(_attribute_line(activity, "exported")):
+            raise ValueError("The YTArk Updates activity must be explicitly android:exported=true")
+        for intent_filter in _element_blocks(activity, "intent-filter"):
+            if ("android.intent.action.MAIN" in intent_filter
+                    and "android.intent.category.LEANBACK_LAUNCHER" in intent_filter):
+                print("Verified updater TV launcher entry: YTArk Updates (MAIN + LEANBACK_LAUNCHER).")
+                return
+        raise ValueError("The YTArk Updates activity has no MAIN + LEANBACK_LAUNCHER entry")
+    raise ValueError("Compiled manifest has no YTArk Updates activity")
+
+
 def validate_apk(path: str, architecture: str, expected_cert_file: str,
                  aapt: str, apksigner: str) -> None:
     config = load_config()
@@ -478,6 +504,7 @@ def validate_apk(path: str, architecture: str, expected_cert_file: str,
 
     validate_compiled_manifest(apk, aapt)
     manifest = run([aapt, "dump", "xmltree", str(apk), "AndroidManifest.xml"])
+    validate_updater_launcher(manifest)
     for required in (
         "io.github.twoarchiver.ytark.updater.UpdateActivity",
         "io.github.twoarchiver.ytark.updater.UpdateBootstrapProvider",

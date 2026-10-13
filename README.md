@@ -12,18 +12,46 @@ native updater that always hands installation to Android for user confirmation.
 |---|---|
 | Android package | `io.github.twoarchiver.ytark` (unchanged; same signing certificate) |
 | Launcher label | `YTArk` |
-| Version | `2.5` (Android versionName `2.5.0`, release title `YTArk 2.5`) |
-| versionCode | `2050000` (above every published YTArk APK; 2.4.0 stays `2040000`) |
-| APK (the only architecture) | `YTArk-v2.5.0-armv7.apk` — `armeabi-v7a` |
-| Userscript revision | `s24` (the immutable tags `s23` and earlier are never moved) |
+| Version | `2.6` (Android versionName `2.6.0`, release title `YTArk 2.6`) |
+| versionCode | `2060000` (above every published YTArk APK; 2.5.0 is `2050000`, 2.4.0 is `2040000`) |
+| APK (the only architecture) | `YTArk-v2.6.0-armv7.apk` — `armeabi-v7a` |
+| Userscript revision | `s25` (the immutable tags `s24` and earlier are never moved) |
 | Android base | TizenTubeCobalt `v2.0.2` ARMv7 APK |
 
-**YTArk 2.5 is a settings cleanup and UX repair release on the same
-TizenTubeCobalt `v2.0.2` base.** It is **not** a newer Cobalt engine, **not** a
-newer YouTube client, and **not** an official YouTube upgrade. It keeps the
-package, the signing certificate, the YouTube TV frontend, the 2.4 verdict-aware
-updater and the 2.3 appearance features, and it repairs what was broken or
-misleading in 2.4:
+**YTArk 2.6 completes the native updater and its Android install-permission path
+on the same TizenTubeCobalt `v2.0.2` base.** It is **not** a newer Cobalt engine,
+**not** a newer YouTube client, and **not** an official YouTube upgrade. It keeps
+the package, the signing certificate, the YouTube TV frontend and the 2.5
+settings cleanup, and it adds:
+
+- **YTArk Updates in the TV apps row.** The native updater screen is a real
+  launcher entry (MAIN + LEANBACK_LAUNCHER, exported, labelled *YTArk Updates*);
+  the `ytark://updates` link keeps working. The Settings → YTArk Updates card
+  says where the install happens and does not download or install itself.
+- **You grant install permission, never YTArk.** Installing needs Android's
+  one-time *Install unknown apps* permission for YTArk. YTArk checks the live
+  permission with `canRequestPackageInstalls()` and opens only this app's own
+  permission screen when you press **Install Update**. It continues only if the
+  permission is really on when you return. Nothing opens Settings on focus, on
+  launch or by itself. No storage permission is requested.
+- **Honest release states.** "Up to date" appears only after a fresh, successful
+  check, with its time. A build newer than the latest stable release reads
+  "Newer than the latest stable release". Network, unsupported ABI, missing
+  ARMv7 asset, storage, validation and installer failures are separate states.
+- **A bootstrap limit.** The 2.6 updater code runs only once 2.6 is installed.
+  A 2.5 install needs **one** manual install of the signed 2.6 APK over the
+  existing app (same package, same signer; your data and sign-in are kept). Later
+  releases can then be checked from YTArk Updates. Nothing repairs 2.5
+  retroactively, and uninstalling or reinstalling is not the update method.
+- **The web card cannot start the native installer.** Cobalt registers its
+  JavaScript bridge objects in `initializeJavaBridge()`, and a repack cannot add
+  one, so the card hands off to the native screen instead of installing. Device
+  status: **NOT RUN**.
+
+**What 2.5 changed** (kept for reference). It was a settings cleanup and UX repair
+release on the same base. It kept the package, the signing certificate, the
+YouTube TV frontend, the 2.4 verdict-aware updater and the 2.3 appearance features,
+and it repaired what was broken or misleading in 2.4:
 
 - **About YTArk reports the real installed version.** `GetVersion()` is an
   asynchronous bridge call on the pinned base, so the synchronous read in 2.4
@@ -167,8 +195,10 @@ simply not an update target any more.
 ## Remote-friendly installation
 
 1. From the official release page, download the versioned ARMv7 APK
-   (`YTArk-v2.5.0-armv7.apk`, once published; earlier versions remain on the
+   (`YTArk-v2.6.0-armv7.apk`; earlier versions remain on the
    [release page](https://github.com/2archiver/YTArk/releases)). Download `SHA256SUMS.txt` too.
+   If YTArk 2.5 is installed, this one-time manual install is the only way to
+   reach 2.6, because 2.5 has no updater that can fetch it.
 2. Verify the selected file on the computer, for example:
 
    ```sh
@@ -208,9 +238,9 @@ an update unless you understand that uninstalling can erase app data.
 | Search settings | Every YTArk setting, local only; D-pad keyboard, suggestions and the TV keyboard. Device NOT RUN |
 | Customize YouTube Settings | Order/hide sections, pin/hide entries by stable ids; protected entries; scoped restore. Device NOT RUN |
 | Changelog and What's new | Bundled history (offline), dismissible card once per installed version. Device NOT RUN |
-| Settings → YTArk Updates | Source implemented: installed version, latest stable check, plain status, official-page QR fallback, changelog link. Device NOT RUN |
-| Native updater | Source and packaged-CI verified (SHA-256, signer, ABI, manual Android installer). **Device NOT RUN; native entry pending** |
-| ARMv7 (`armeabi-v7a`) APK | **The only published architecture** from 2.1.2; 2.5.0 publishes from `main` like 2.4.0, and device acceptance stays NOT RUN until recorded |
+| Settings → YTArk Updates | Installed version, latest stable check, plain status (fresh results only), official-page QR fallback, changelog link, and a route to the native screen. Device NOT RUN |
+| Native updater | Host tests in CI (release contract, install gate, storage guards, SHA-256, signer, ABI, installer hand-off). TV launcher entry *YTArk Updates* and install-permission path in 2.6. **Device NOT RUN** |
+| ARMv7 (`armeabi-v7a`) APK | **The only published architecture** from 2.1.2; 2.6.0 publishes from `main` like 2.5.0, and device acceptance stays NOT RUN until recorded |
 | 64-bit-only Android userspace (`arm64-v8a` only) | **Not supported** by this release line; documented exclusion, no ARM64 asset |
 | Background playback, PiP, casting, downloads, system-wide ad blocking | **Not claimed** |
 
@@ -314,13 +344,14 @@ download the ARMv7 APK from the official page."* The card's **Check again**,
 this card. The repacker declares a `ytark://updates` intent-filter for the
 native `UpdateActivity`, but the card does **not** trigger that link: earlier
 builds used a link click that could not be verified without a bridge, and it was
-removed rather than faked. Native entry from the card is therefore **native
-integration pending**. Device status: NOT RUN.
+removed rather than faked. In 2.6 the native screen is reached from the TV apps
+row (*YTArk Updates*) or the `ytark://updates` link, not from this card. Device
+status: NOT RUN.
 
-**Release rules (native updater; source implemented, device NOT RUN for 2.5).**
+**Release rules (native updater 2.6; host tests in CI, device NOT RUN).**
 The bundled native updater is written to check the official GitHub stable release
 over HTTPS to `api.github.com`, with a 24-hour **Later** snooze. Its periodic
-checks are **not** device-verified for 2.5 and this release does **not** advertise
+checks are **not** device-verified for 2.6 and this release does **not** advertise
 automatic update prompts. Settings → YTArk Updates runs a manual check instead. It ignores draft and prerelease entries, requires the
 published release body to confirm the same Android versionCode as the tag, and
 selects an APK matching the **installed** native ABI (4K branding is not an
@@ -328,8 +359,17 @@ ABI; ARMv7 devices keep their 32-bit path). It validates the exact versioned
 filename and official URL, verifies the published SHA-256, package/version
 metadata, native library ABI, and pinned signer, and then uses Android's
 `PackageInstaller`. The user must choose **Install Update** and approve
-Android's confirmation; YTArk never installs silently and does not grant the
-unknown-app permission automatically. Cancelling the installer is recoverable —
+Android's confirmation; YTArk never installs silently. It requests
+`REQUEST_INSTALL_PACKAGES` but never grants it. When the unknown-app permission
+is off, **Install Update** opens only YTArk's own permission screen
+(`ACTION_MANAGE_UNKNOWN_APP_SOURCES` with `package:io.github.twoarchiver.ytark`),
+and the install continues only if the permission is on when you return. Nothing
+opens Settings on focus, on launch or by itself. A restart never repeats a
+hand-off that is still waiting; **Retry Installation** is the only way to reopen
+it. The updater requests no storage permission (no `MANAGE_EXTERNAL_STORAGE`,
+`READ_MEDIA_*` or legacy storage permission); the APK is kept in app-private
+storage and is shared to the system installer only through a single-file,
+non-exported provider with a read grant for that one file. Cancelling the installer is recoverable —
 the verified package stays ready to install without re-downloading. Interrupted
 downloads resume only when their saved URL, asset name, ABI, size, and digest
 still match. Opening the installer is never reported as a successful install:
@@ -474,7 +514,7 @@ section of the release notes:
 ```sh
 python3 tools/build_changelog.py --write       # regenerate TizenTube/mods/assets/changelog.generated.js
 python3 tools/build_changelog.py --check       # what CI runs
-python3 tools/build_changelog.py release-notes --version 2.5.0
+python3 tools/build_changelog.py release-notes --version 2.6.0
 ```
 
 Build metadata: About YTArk and the Updates card report the installed package
@@ -521,7 +561,7 @@ refuses any candidate that is not above every published installable build.
 - `build-apk.yml` runs on push to `main` or manual dispatch. It builds, signs and
   package-checks the ARMv7 candidate APK, uploads it as an Actions artefact, and
   then — in the same run, in a separate job that depends on the build succeeding
-  — publishes the immutable `s24` userscript tag and the stable GitHub release
+  — publishes the immutable `s25` userscript tag and the stable GitHub release
   from those exact bytes. Only that publish job holds `contents: write`; the build
   job stays read-only and is the only job that sees the signing key.
 - `publish-release.yml` is the manual recovery path. It takes

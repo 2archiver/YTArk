@@ -167,7 +167,7 @@ describe('About YTArk', () => {
     assert.equal(header(panel).subtitle, 'YTArk version 2.3');
     const lines = modalItems(panel).map(messageText).filter(Boolean);
     assert.equal(lines[0], 'YTArk version: 2.3', 'the installed package version, not "unknown"');
-    assert.ok(lines.some(line => line.startsWith('Build details: versionName 2.5.0')), 'build details are separate');
+    assert.ok(lines.some(line => line.startsWith('Build details: versionName 2.6.0')), 'build details are separate');
     assert.ok(!lines.some(line => /Version unknown/i.test(line)), 'never "Version unknown"');
     // The YouTube frontend does not publish a client version in this harness,
     // so the field is omitted instead of guessed.
@@ -194,7 +194,7 @@ describe('About YTArk', () => {
     resolveCommand({ customAction: { action: 'YTARK_PANEL_SHOW', parameters: { id: 'about' } } });
     const panel = lastModal(recorded, 'ytark-panel-about');
     const lines = modalItems(panel).map(messageText).filter(Boolean);
-    assert.equal(lines[0], 'YTArk version: 2.5 (build metadata)');
+    assert.equal(lines[0], 'YTArk version: 2.6 (build metadata)');
     assert.ok(lines.some(line => /packaging metadata/.test(line)), 'the source is stated');
     const reread = findRow(panel, 'Read the installed version again');
     assert.ok(reread, 'the user can ask the platform again');

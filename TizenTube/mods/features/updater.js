@@ -25,6 +25,7 @@ import {
   LATEST_RELEASE_PAGE,
   RELEASES_PAGE,
   formatTimestamp,
+  isNewerVersion,
   parseNativeState,
   validateReleasePayload,
   unknownArchitectureMessage,
@@ -403,7 +404,16 @@ export function createUpdateController(overrides = {}) {
         ? `YTArk ${release.display} is available for this device (ARMv7)`
         : 'Update available';
     }
-    if (model.state === 'current') return 'Up to date';
+    if (model.state === 'current') {
+      // "Up to date" is only ever a claim about the last successful check, so
+      // it always carries the time of that check.
+      const checked = formatTimestamp(model.lastSuccessAt);
+      if (model.installedAhead && release) {
+        return `Newer than the latest stable release (${release.display})`
+          + (checked ? ` · checked ${checked}` : '');
+      }
+      return 'Up to date with the latest stable release' + (checked ? ` · checked ${checked}` : '');
+    }
     return 'Not checked yet';
   }
 
@@ -481,9 +491,9 @@ export function createUpdateController(overrides = {}) {
     // categorically incompatible.
     if (release && state.evidence && state.evidence.verdict !== VERDICTS.incompatible) {
       const route = [
-        'To install, open the official page (or scan the QR code with your phone) and download the ARMv7 APK.',
-        `Official page: ${pageUrl}`,
-        'This screen does not download or install anything; Android asks you to confirm any install.',
+        'To update, open "YTArk Updates" in the TV apps row. It verifies the ARMv7 APK and asks Android to confirm the install.',
+        `Manual route, official page (or scan the QR code with your phone): ${pageUrl}`,
+        'This card does not download or install anything.',
       ];
       if (state.evidence && state.evidence.verdict === VERDICTS.unknown) {
         route.unshift('Until the architecture is confirmed, use this manual route:');
@@ -681,6 +691,8 @@ export function createUpdateController(overrides = {}) {
           };
         } else {
           model.state = 'current';
+          // Newer than the latest stable release is a distinct, honest result.
+          model.installedAhead = isNewerVersion(installedVersion, result.release.version);
         }
         state.model = model;
       }
@@ -726,6 +738,9 @@ export function createUpdateController(overrides = {}) {
     const model = baseModel();
     model.lastSuccessAt = state.lastSuccessAt;
     model.state = release.newer ? 'available' : 'current';
+    if (!release.newer) {
+      model.installedAhead = isNewerVersion(String(readInstalledVersion() || 'unknown'), release.version);
+    }
     if (release.newer) {
       model.available = {
         version: release.version,

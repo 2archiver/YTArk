@@ -372,7 +372,9 @@ export function describeState(state) {
     case 'checking':
       return 'Checking the official YTArk stable release…';
     case 'current':
-      return `You are running the latest published stable ${'YTArk'} release.`;
+      return state.installedAhead
+        ? 'This build is newer than the latest published stable YTArk release. Nothing was changed.'
+        : 'Up to date: the latest published stable YTArk release is installed (as of the last successful check).';
     case 'available':
       return state.available
         ? `YTArk ${state.available.display} is available for this device.`

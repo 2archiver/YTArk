@@ -103,6 +103,21 @@ tests do not replace these rows.
 | 42 | YTArk entry in the guide | Exactly one "YTArk Settings" entry, last in the sidebar, on every guide load; turning the Navigation toggle off removes it; hiding other sidebar entries never removes access | |
 | 43 | Repeated Settings opens and route changes | Exactly one Premium wordmark per header host after many opens; no duplicate mounts, no blank logo slot; the stock logo returns on unpatched hosts | |
 
+## YTArk 2.6 features (native updater, install permission, honest release states)
+
+Every row is **NOT RUN** until recorded on the build under test. The host tests
+and CI checks do not replace these rows: they cover the policy and packaging
+code, not a TV installation.
+
+| # | Check | Expected | Result |
+|---|---|---|---|
+| 56 | TV apps row | One **YTArk Updates** entry; it opens the native updater screen, and Back returns to the TV apps row | NOT RUN |
+| 57 | Settings → YTArk Updates card | Shows installed and latest versions; "Up to date" only after a fresh successful check, with the check time; a newer local build reads "Newer than the latest stable release"; the card states that it does not download or install | NOT RUN |
+| 58 | Failure states | Offline, rate-limited, unsupported ABI, missing ARMv7 asset, and bridge failure each show their own message; none is shown as "Up to date" | NOT RUN |
+| 59 | Install permission | Off: only YTArk's own permission screen opens, from the Install button; on return with the permission still off, nothing installs | NOT RUN |
+| 60 | Hand-off and focus | Install opens Android's installer once; a restart does not repeat a hand-off that is still waiting; D-pad focus returns to Install Update after the permission screen | NOT RUN |
+| 61 | Confirmation | After installing, the next check reads the installed versionCode; the installer result code alone is never reported as success | NOT RUN |
+
 ## YTArk 2.5 features (settings cleanup, explicit activation, OLED repaint, installed version)
 
 Every row is **NOT RUN** until recorded on the build under test. Static and unit

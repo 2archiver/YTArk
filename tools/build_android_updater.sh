@@ -20,15 +20,13 @@ CERT_SHA256="$(grep -v '^[[:space:]]*#' "$CERT_FILE" | tr -d '[:space:]:' | tr '
 [[ "$CERT_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "Invalid signing certificate SHA-256 fingerprint" >&2; exit 1; }
 
 SOURCE="$ROOT/android-updater/src/main/java"
-TEST_SOURCE="$ROOT/android-updater/src/test/java/io/github/twoarchiver/ytark/updater/UpdateVersionTest.java"
-CONTRACT_TEST_SOURCE="$ROOT/android-updater/src/test/java/io/github/twoarchiver/ytark/updater/UpdateReleaseContractTest.java"
-SCHEDULE_TEST_SOURCE="$ROOT/android-updater/src/test/java/io/github/twoarchiver/ytark/updater/UpdateSchedulePolicyTest.java"
-BRANDING_TEST_SOURCE="$ROOT/android-updater/src/test/java/io/github/twoarchiver/ytark/updater/YtarkBrandingTest.java"
+TEST_SOURCE_DIR="$ROOT/android-updater/src/test/java/io/github/twoarchiver/ytark/updater"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/ytark-updater.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
-# Run comparator tests on the host JRE; this includes suffix/build serials such
-# as 2.0.3-ytark.15 and guards against lexical version comparisons.
+# Run the pure policy tests on the host JRE; this includes suffix/build serials such
+# as 2.0.3-ytark.15, guards against lexical version comparisons, and covers the
+# install gate, storage budget and failure-reason rules.
 mkdir -p "$WORK/test-classes"
 javac --release 8 -d "$WORK/test-classes" \
   "$SOURCE/io/github/twoarchiver/ytark/updater/UpdateVersion.java" \
@@ -37,11 +35,15 @@ javac --release 8 -d "$WORK/test-classes" \
   "$SOURCE/io/github/twoarchiver/ytark/updater/UpdateReleaseContract.java" \
   "$SOURCE/io/github/twoarchiver/ytark/updater/UpdateSchedulePolicy.java" \
   "$SOURCE/io/github/twoarchiver/ytark/updater/YtarkBranding.java" \
-  "$TEST_SOURCE" "$CONTRACT_TEST_SOURCE" "$SCHEDULE_TEST_SOURCE" "$BRANDING_TEST_SOURCE"
-java -cp "$WORK/test-classes" io.github.twoarchiver.ytark.updater.UpdateVersionTest
-java -cp "$WORK/test-classes" io.github.twoarchiver.ytark.updater.UpdateReleaseContractTest
-java -cp "$WORK/test-classes" io.github.twoarchiver.ytark.updater.UpdateSchedulePolicyTest
-java -cp "$WORK/test-classes" io.github.twoarchiver.ytark.updater.YtarkBrandingTest
+  "$SOURCE/io/github/twoarchiver/ytark/updater/InstallGate.java" \
+  "$SOURCE/io/github/twoarchiver/ytark/updater/UpdateGuards.java" \
+  "$SOURCE/io/github/twoarchiver/ytark/updater/UpdateFailure.java" \
+  "$SOURCE/io/github/twoarchiver/ytark/updater/UpdateFailureException.java" \
+  "$TEST_SOURCE_DIR"/*Test.java
+for test_class in UpdateVersionTest UpdateReleaseContractTest UpdateSchedulePolicyTest \
+    YtarkBrandingTest InstallGateTest UpdateGuardsTest; do
+  java -cp "$WORK/test-classes" "io.github.twoarchiver.ytark.updater.$test_class"
+done
 
 mkdir -p "$WORK/generated/io/github/twoarchiver/ytark/updater" \
   "$WORK/classes" "$WORK/dex"

@@ -31,6 +31,7 @@ public final class UpdateBootstrapProvider extends ContentProvider {
         if (context == null) return false;
         applicationContext = context.getApplicationContext();
         YtarkUpdater.ensureNotificationChannel(applicationContext);
+        YtarkUpdater.reconcileOnStart(applicationContext);
         synchronized (UpdateBootstrapProvider.class) {
             if (!scheduled) {
                 scheduled = true;

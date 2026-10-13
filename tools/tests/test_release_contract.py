@@ -24,12 +24,12 @@ import validate_release
 class Armv7OnlyReleaseContractTests(unittest.TestCase):
     def test_expected_clean_semver_version_and_asset_names(self):
         config = validate_release.load_config()
-        self.assertEqual(config["VERSION_NAME"], "2.5.0")
-        self.assertEqual(config["DISPLAY_VERSION"], "2.5")
-        self.assertEqual(config["VERSION_CODE"], "2050000")
-        self.assertEqual(config["VERSION_TAG"], "v2.5.0")
-        self.assertEqual(config["RELEASE_NAME"], "YTArk 2.5")
-        self.assertEqual(config["APK_ARMV7"], "YTArk-v2.5.0-armv7.apk")
+        self.assertEqual(config["VERSION_NAME"], "2.6.0")
+        self.assertEqual(config["DISPLAY_VERSION"], "2.6")
+        self.assertEqual(config["VERSION_CODE"], "2060000")
+        self.assertEqual(config["VERSION_TAG"], "v2.6.0")
+        self.assertEqual(config["RELEASE_NAME"], "YTArk 2.6")
+        self.assertEqual(config["APK_ARMV7"], "YTArk-v2.6.0-armv7.apk")
         self.assertEqual(validate_release.apk_filename(config["VERSION_NAME"], "armv7"), config["APK_ARMV7"])
         # Only one architecture is published from 2.1.2 onwards.
         self.assertNotIn("APK_ARM64", config)
@@ -105,10 +105,10 @@ class Armv7OnlyReleaseContractTests(unittest.TestCase):
             releases_path.write_text(json.dumps([releases[:4], releases[4:]]), encoding="utf-8")
             validate_release.check_version(str(latest_path), str(releases_path))
 
-            # A published release above the candidate (2.5.0 = 2050000) must block it.
+            # A published release above the candidate (2.6.0 = 2060000) must block it.
             too_high = dict(releases[1])
-            too_high["tag_name"] = "v2.5.1"
-            too_high["body"] = "Version 2.5.1 (versionCode 2050100)"
+            too_high["tag_name"] = "v2.6.1"
+            too_high["body"] = "Version 2.6.1 (versionCode 2060100)"
             releases_path.write_text(json.dumps(releases + [too_high]), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "must exceed every published release|must be newer"):
                 validate_release.check_version(str(latest_path), str(releases_path))
