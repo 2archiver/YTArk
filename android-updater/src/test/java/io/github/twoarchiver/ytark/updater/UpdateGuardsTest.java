@@ -5,16 +5,17 @@ import java.io.IOException;
 /** Storage, cleanup, minimum-SDK and release-page rules; runs on a host JRE. */
 public final class UpdateGuardsTest {
     private static final long MIB = 1024L * 1024L;
-    private static final String CURRENT = "YTArk-v2.7.0-armv7.apk";
+    private static final String CURRENT = "YTArk-v2.8.0-armv7.apk";
 
     public static void main(String[] args) throws IOException {
         freeSpaceBudgetIncludesTheSafetyMargin();
         resumeNeedsOnlyTheRemainingBytes();
         staleFilesAreRemovedButTheKeptReleaseSurvives();
         unrelatedFilesAreNeverTouched();
+        cacheCleanupIsConfinedToExplicitRootsAndRetainsRecentOrUnknownFiles();
         minSdkGateUsesTheReleaseMinimum();
         officialPageNeedsACleanTag();
-        System.out.println("UpdateGuards tests passed (6 groups).");
+        System.out.println("UpdateGuards tests passed (7 groups).");
     }
 
     private static void freeSpaceBudgetIncludesTheSafetyMargin() {
@@ -67,6 +68,44 @@ public final class UpdateGuardsTest {
         assertFalse(UpdateGuards.isStaleUpdateFile(null, CURRENT), "a null name is not stale");
     }
 
+    private static void cacheCleanupIsConfinedToExplicitRootsAndRetainsRecentOrUnknownFiles()
+            throws IOException {
+        java.nio.file.Path base = java.nio.file.Files.createTempDirectory("ytark-cache-guards");
+        java.nio.file.Path cache = java.nio.file.Files.createDirectories(base.resolve("cache"));
+        java.nio.file.Path nested = java.nio.file.Files.createDirectories(cache.resolve("nested"));
+        java.nio.file.Path profile = java.nio.file.Files.createDirectories(base.resolve("profile"));
+        java.nio.file.Path cachedFile = java.nio.file.Files.createFile(nested.resolve("stream.tmp"));
+        java.nio.file.Path profileFile = java.nio.file.Files.createFile(profile.resolve("account.db"));
+        assertTrue(UpdateGuards.isWithinCacheRoot(cache.toFile(), cache.toFile()),
+                "the selected cache root itself is in scope");
+        assertTrue(UpdateGuards.isWithinCacheRoot(cache.toFile(), cachedFile.toFile()),
+                "a file nested under the selected cache root is in scope");
+        assertFalse(UpdateGuards.isWithinCacheRoot(cache.toFile(), profileFile.toFile()),
+                "profile data outside the selected cache root is out of scope");
+        try {
+            java.nio.file.Path escape = java.nio.file.Files.createSymbolicLink(
+                    cache.resolve("profile-link"), profile);
+            assertFalse(UpdateGuards.isWithinCacheRoot(cache.toFile(), escape.resolve("account.db").toFile()),
+                    "a symlink cannot extend cleanup into profile data");
+        } catch (IOException | UnsupportedOperationException | SecurityException unsupported) {
+            // The lexical outside-root check still covers platforms that disable symlinks.
+        }
+        cache.resolve("profile-link").toFile().delete();
+        long now = System.currentTimeMillis();
+        assertTrue(UpdateGuards.retainCacheFile(0L, now - 15L * 60L * 1000L),
+                "an unknown modification time is kept");
+        assertTrue(UpdateGuards.retainCacheFile(now, now - 15L * 60L * 1000L),
+                "a recent file is kept");
+        assertFalse(UpdateGuards.retainCacheFile(now - 16L * 60L * 1000L,
+                now - 15L * 60L * 1000L), "only a known old file is eligible for cleanup");
+        cachedFile.toFile().delete();
+        nested.toFile().delete();
+        cache.toFile().delete();
+        profileFile.toFile().delete();
+        profile.toFile().delete();
+        base.toFile().delete();
+    }
+
     private static void minSdkGateUsesTheReleaseMinimum() {
         assertTrue(UpdateGuards.deviceMeetsMinSdk(24, 24), "equal SDK is allowed");
         assertTrue(UpdateGuards.deviceMeetsMinSdk(24, 34), "newer SDK is allowed");
@@ -75,9 +114,9 @@ public final class UpdateGuardsTest {
     }
 
     private static void officialPageNeedsACleanTag() throws IOException {
-        assertEquals("https://github.com/2archiver/YTArk/releases/tag/v2.7.0",
-                UpdateGuards.officialReleasePage("v2.7.0"), "clean tag gives its release page");
-        String[] unsafe = { "2.7.0", "v2.7", "v2.7.0-rc1", "v2.7.0/../x", "", null };
+        assertEquals("https://github.com/2archiver/YTArk/releases/tag/v2.8.0",
+                UpdateGuards.officialReleasePage("v2.8.0"), "clean tag gives its release page");
+        String[] unsafe = { "2.8.0", "v2.7", "v2.8.0-rc1", "v2.8.0/../x", "", null };
         for (String tag : unsafe) {
             try {
                 UpdateGuards.officialReleasePage(tag);

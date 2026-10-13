@@ -3,7 +3,7 @@ import { enablePip } from './features/pictureInPicture.js';
 import modernUI, { optionShow } from './ui/settings.js';
 import { speedSettings } from './ui/speedUI.js';
 import { showToast, buttonItem, showModal, QrCodeRenderer, overlayPanelItemListRenderer, overlayMessageRenderer } from './ui/ytUI.js';
-import openYtArkUpdates, { handleYtArkUpdateCommand } from './features/updater.js';
+import { handleYtArkUpdateCommand } from './features/updater.js';
 import { t } from 'i18next';
 import { requestNextAndNavigateChannel, getFeedbackPanelTokens, sendFeedbackToken } from './utils/innerTubeCalls.js';
 import qrcode from 'qrcode-npm';
@@ -283,9 +283,9 @@ function customAction(action, parameters) {
             break;
         case 'UPDATE_REMIND_LATER':
         case 'UPDATE_DOWNLOAD':
-            // Do not use the upstream direct-installer action; the native YTArk
-            // updater must verify the release before opening Android Installer.
-            openYtArkUpdates();
+            // Never use the upstream direct-installer action; hand all update
+            // work to YTArk's native updater, which verifies before install.
+            handleYtarkAction('YTARK_NATIVE_UPDATES_OPEN', {});
             break;
         case 'SET_PLAYER_SPEED': {
             const speed = Number(parameters);
@@ -315,7 +315,7 @@ function customAction(action, parameters) {
             showToast('YTArk', t('toasts.videoQueueCleared'));
             break;
         case 'CHECK_FOR_UPDATES':
-            openYtArkUpdates();
+            handleYtarkAction('YTARK_NATIVE_UPDATES_OPEN', {});
             break;
         case 'YTARK_UPDATE_COMMAND':
             handleYtArkUpdateCommand(parameters);

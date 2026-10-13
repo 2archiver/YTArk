@@ -8,7 +8,8 @@ import java.util.TimeZone;
 
 /** Pure, persisted-state scheduling rules for best-effort background update checks. */
 final class UpdateSchedulePolicy {
-    static final long CHECK_INTERVAL_MILLIS = 6L * 60L * 60L * 1000L;
+    // Android JobScheduler may defer execution; this is the requested hourly cadence.
+    static final long CHECK_INTERVAL_MILLIS = 60L * 60L * 1000L;
     static final long RETRY_INTERVAL_MILLIS = 60L * 60L * 1000L;
 
     private UpdateSchedulePolicy() { }

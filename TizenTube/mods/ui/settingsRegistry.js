@@ -267,6 +267,18 @@ function aboutNoticesPanel() {
   };
 }
 
+function startupAnimationPanel() {
+  return {
+    title: tx('ytark.navigation.skipStartupAnimation.title', 'Skip startup animation'),
+    subtitle: tx('ytark.navigation.skipStartupAnimation.unavailable',
+      'Not available: this YTArk build has no optional startup animation to skip.'),
+    content: overlayPanelItemListRenderer([
+      overlayMessageRenderer(tx('ytark.navigation.skipStartupAnimation.details',
+        "The pinned TizenTubeCobalt base does not provide a separate YTArk startup animation or removable startup delay. No skip toggle is exposed. Android's system splash and YouTube UI are unchanged. Initialization, injection, sign-in/session restore and settings migrations must still run.")),
+    ]),
+  };
+}
+
 function colorsPanel() {
   const theme = configRead('uiTheme');
   const lines = [
@@ -318,7 +330,7 @@ export function buildSettingsTree() {
       menuId: 'ytark-playback',
       keywords: ['playback', 'video', 'player', 'subtitles', 'captions', 'quality'],
       header: { title: tx('ytark.categories.playback.title', 'Playback'), subtitle: tx('ytark.categories.playback.description', 'Player, video and subtitles') },
-      resetKeys: ['enablePatchingVideoPlayer', 'enablePreviousNextButtons', 'enableSuperThanksButton', 'enableAIAskButton', 'enableSpeedControlsButton', 'enableMPButton', 'enableSwapMPWithPIP', 'preferredVideoQuality', 'speedSettingsIncrement', 'videoSpeed', 'hideRelatedVideosPlayer', 'preferredVideoCodec', 'autoFrameRate', 'autoFrameRatePauseVideoFor', 'enableShowUserLanguage', 'enableShowOtherLanguages'],
+      resetKeys: ['enablePatchingVideoPlayer', 'enablePreviousNextButtons', 'enableSuperThanksButton', 'enableAIAskButton', 'enableSpeedControlsButton', 'enableMPButton', 'enableSwapMPWithPIP', 'preferredVideoQuality', 'speedSettingsIncrement', 'videoSpeed', 'hideRelatedVideosPlayer', 'preferredVideoCodec', 'autoFrameRate', 'autoFrameRatePauseVideoFor', 'enablePlaybackRecovery', 'enableShowUserLanguage', 'enableShowOtherLanguages'],
       children: [
       {
         id: 'player',
@@ -331,7 +343,7 @@ export function buildSettingsTree() {
         header: { title: t('settings.options.videoPlayer.title'), subtitle: t('settings.options.videoPlayer.subtitle') },
         resetKeys: ['enablePatchingVideoPlayer', 'enablePreviousNextButtons', 'enableSuperThanksButton', 'enableAIAskButton',
           'enableSpeedControlsButton', 'enableMPButton', 'enableSwapMPWithPIP', 'preferredVideoQuality', 'speedSettingsIncrement',
-          'videoSpeed', 'hideRelatedVideosPlayer', 'preferredVideoCodec', 'autoFrameRate', 'autoFrameRatePauseVideoFor'],
+          'videoSpeed', 'hideRelatedVideosPlayer', 'preferredVideoCodec', 'autoFrameRate', 'autoFrameRatePauseVideoFor', 'enablePlaybackRecovery'],
         children: [
           {
             id: 'player.patching',
@@ -395,6 +407,15 @@ export function buildSettingsTree() {
             })),
           },
           { id: 'player.hideRelated', type: 'toggle', title: t('settings.options.videoPlayer.options.hideRelatedVideosPlayer'), icon: 'VISIBILITY_OFF', key: 'hideRelatedVideosPlayer', keywords: ['related', 'suggestions'] },
+          {
+            id: 'player.recovery',
+            type: 'toggle',
+            title: tx('ytark.playback.recovery.title', 'Automatic playback recovery'),
+            description: tx('ytark.playback.recovery.description', 'Retry a stalled or recoverable playback error a limited number of times. Paused, completed, seeking and background playback are excluded.'),
+            icon: 'REFRESH',
+            key: 'enablePlaybackRecovery',
+            keywords: ['playback recovery', 'stalled video', 'player error', 'retry video'],
+          },
           {
             id: 'player.codec',
             type: 'choice',
@@ -857,7 +878,38 @@ export function buildSettingsTree() {
             ],
           },
           { id: 'misc.reloadHome', type: 'toggle', title: t('settings.options.misc.options.reloadHomeOnStartup'), key: 'reloadHomeOnStartup', keywords: ['startup', 'reload', 'home'] },
+          {
+            id: 'nav.skipStartupAnimation',
+            type: 'panel',
+            title: tx('ytark.navigation.skipStartupAnimation.title', 'Skip startup animation'),
+            description: tx('ytark.navigation.skipStartupAnimation.unavailable',
+              'Not available: this YTArk build has no optional startup animation to skip.'),
+            icon: 'INFO',
+            keywords: ['startup animation', 'skip animation', 'boot delay', 'splash screen'],
+            panel: startupAnimationPanel,
+          },
     ],
+    },
+    {
+      id: 'storage',
+      type: 'menu',
+      title: tx('ytark.storage.title', 'Cache & Storage'),
+      description: tx('ytark.storage.description', 'Measure and clear only temporary Android cache files; updater downloads are separate'),
+      icon: 'STORAGE',
+      menuId: 'ytark-storage-menu',
+      keywords: ['cache', 'storage', 'temporary files', 'clear cache', 'update downloads'],
+      header: { title: tx('ytark.storage.title', 'Cache & Storage'), subtitle: tx('ytark.storage.description', 'Measure and clear only temporary Android cache files; updater downloads are separate') },
+      children: [
+        {
+          id: 'storage.open',
+          type: 'action',
+          title: tx('ytark.storage.open', 'Open Cache & Storage controls'),
+          description: tx('ytark.storage.openDescription', 'Calculates Android cache size, safely clears temporary cache, or removes obsolete update downloads'),
+          icon: 'DELETE',
+          keywords: ['calculate cache size', 'clear cache', 'remove old update downloads'],
+          command: [custom('YTARK_NATIVE_STORAGE_OPEN', {})],
+        },
+      ],
     },
     {
       id: 'updates',
@@ -870,13 +922,13 @@ export function buildSettingsTree() {
       header: { title: 'YTArk Updates', subtitle: ytarkUpdateSubtitle() },
       children: [
         {
-          id: 'updates.check',
+          id: 'updates.open',
           type: 'action',
-          title: 'Check for YTArk updates',
-          description: 'Opens the official release check and download page',
+          title: 'Open updater and check now',
+          description: 'Opens the native YTArk updater for real check, download, verification and installation status',
           icon: 'SYSTEM_UPDATE',
-          keywords: ['update', 'check', 'version', 'new version'],
-          command: [custom('CHECK_FOR_UPDATES')],
+          keywords: ['update', 'check', 'version', 'new version', 'apk', 'download', 'install'],
+          command: [custom('YTARK_NATIVE_UPDATES_OPEN', {})],
         },
         {
           id: 'updates.changelog',

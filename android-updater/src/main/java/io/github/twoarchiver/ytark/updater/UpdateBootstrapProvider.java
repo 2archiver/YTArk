@@ -1,50 +1,50 @@
 package io.github.twoarchiver.ytark.updater;
 
+import android.app.Activity;
+import android.app.Application;
 import android.content.ContentProvider;
 import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
 import android.net.Uri;
-import android.os.Handler;
-import android.os.Looper;
+import android.os.Bundle;
 import android.util.Log;
 
-/** Starts bounded, persisted-state stable-release checks when Android creates the app process. */
+/** Persists the updater job and checks again when the YouTube TV app resumes. */
 public final class UpdateBootstrapProvider extends ContentProvider {
     private static final String TAG = "YTArkUpdater";
-    private static final Handler HANDLER = new Handler(Looper.getMainLooper());
-    private static Context applicationContext;
-    private static boolean scheduled;
-
-    private static final Runnable PERIODIC_CHECK = new Runnable() {
-        @Override
-        public void run() {
-            Context context = applicationContext;
-            if (context != null) YtarkUpdater.checkForUpdates(context, false, null);
-            HANDLER.postDelayed(this, UpdateSchedulePolicy.CHECK_INTERVAL_MILLIS);
-        }
-    };
+    private static boolean callbacksRegistered;
 
     @Override
     public boolean onCreate() {
         Context context = getContext();
         if (context == null) return false;
-        applicationContext = context.getApplicationContext();
-        YtarkUpdater.ensureNotificationChannel(applicationContext);
-        YtarkUpdater.reconcileOnStart(applicationContext);
-        synchronized (UpdateBootstrapProvider.class) {
-            if (!scheduled) {
-                scheduled = true;
-                // Let the launcher reach the foreground before a possible
-                // notification appears on Android TV. Persistent retry and
-                // rate-limit deadlines remain authoritative in YtarkUpdater.
-                HANDLER.postDelayed(() -> YtarkUpdater.checkForUpdates(
-                        applicationContext, false, null), 3000L);
-                HANDLER.postDelayed(PERIODIC_CHECK, UpdateSchedulePolicy.CHECK_INTERVAL_MILLIS);
-            }
-        }
-        Log.i(TAG, "YTArk stable-release checks are enabled.");
+        Context appContext = context.getApplicationContext();
+        YtarkUpdater.ensureNotificationChannel(appContext);
+        YtarkUpdater.reconcileOnStart(appContext);
+        YtarkUpdater.schedulePeriodicCheck(appContext);
+        YtarkUpdater.runAutomaticUpdate(appContext, null);
+        registerResumeHook(appContext);
+        Log.i(TAG, "Persistent hourly stable-release checks are scheduled when enabled.");
         return true;
+    }
+
+    private static synchronized void registerResumeHook(Context context) {
+        if (callbacksRegistered || !(context instanceof Application)) return;
+        ((Application) context).registerActivityLifecycleCallbacks(new Application.ActivityLifecycleCallbacks() {
+            @Override public void onActivityCreated(Activity activity, Bundle state) { }
+            @Override public void onActivityStarted(Activity activity) { }
+            @Override public void onActivityResumed(Activity activity) {
+                if (!(activity instanceof UpdateActivity)) {
+                    YtarkUpdater.runAutomaticUpdate(activity.getApplicationContext(), null);
+                }
+            }
+            @Override public void onActivityPaused(Activity activity) { }
+            @Override public void onActivityStopped(Activity activity) { }
+            @Override public void onActivitySaveInstanceState(Activity activity, Bundle state) { }
+            @Override public void onActivityDestroyed(Activity activity) { }
+        });
+        callbacksRegistered = true;
     }
 
     @Override public Cursor query(Uri uri, String[] projection, String selection,

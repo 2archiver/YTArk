@@ -3,8 +3,9 @@ package io.github.twoarchiver.ytark.updater;
 import java.util.regex.Pattern;
 
 /**
- * Pure storage and compatibility rules for the updater: free-space budget,
- * stale-file selection, the minimum-SDK gate and the official release page.
+ * Pure storage and compatibility rules for the updater/cache controls:
+ * free-space budget, confined cache paths and age policy, stale-file selection,
+ * minimum-SDK gate and official release page.
  * Android-free so CI can exercise them on a host JRE.
  */
 final class UpdateGuards {
@@ -29,6 +30,24 @@ final class UpdateGuards {
     static boolean hasEnoughFreeSpace(long availableBytes, long assetSize, long existingPartialBytes) {
         if (assetSize <= 0L) return false;
         return availableBytes >= requiredFreeBytes(assetSize, existingPartialBytes);
+    }
+
+    /**
+     * True only for a path equal to or below the explicitly supplied cache root.
+     * Canonical paths make symlink escapes resolve outside the allowed tree.
+     */
+    static boolean isWithinCacheRoot(java.io.File root, java.io.File candidate)
+            throws java.io.IOException {
+        if (root == null || candidate == null) return false;
+        String rootPath = root.getCanonicalPath();
+        String candidatePath = candidate.getCanonicalPath();
+        return candidatePath.equals(rootPath)
+                || candidatePath.startsWith(rootPath + java.io.File.separator);
+    }
+
+    /** Unknown or recent timestamps are retained rather than guessed safe to delete. */
+    static boolean retainCacheFile(long lastModifiedMillis, long cutoffMillis) {
+        return lastModifiedMillis <= 0L || lastModifiedMillis >= cutoffMillis;
     }
 
     /**

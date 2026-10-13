@@ -4,7 +4,10 @@ import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
+import android.app.job.JobInfo;
+import android.app.job.JobScheduler;
 import android.content.ContentResolver;
+import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
@@ -31,8 +34,10 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.security.MessageDigest;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Locale;
 import java.util.Properties;
 import java.util.Set;
@@ -54,6 +59,18 @@ final class YtarkUpdater {
     private static final int NOTIFICATION_UPDATE = 7201;
     private static final int NOTIFICATION_DOWNLOAD = 7202;
     private static final int NOTIFICATION_STATUS = 7203;
+    static final int PERIODIC_CHECK_JOB_ID = 7280;
+    static final String STATE_IDLE = "idle";
+    static final String STATE_CHECKING = "checking";
+    static final String STATE_AVAILABLE = "available";
+    static final String STATE_UP_TO_DATE = "up_to_date";
+    static final String STATE_DOWNLOADING = "downloading";
+    static final String STATE_VALIDATING = "validating";
+    static final String STATE_PERMISSION_NEEDED = "permission_needed";
+    static final String STATE_READY_TO_INSTALL = "ready_to_install";
+    static final String STATE_INSTALLING = "installing";
+    static final String STATE_CANCELLED = "cancelled";
+    static final String STATE_FAILED = "failed";
     private static final long SNOOZE_MILLIS = 24L * 60L * 60L * 1000L;
     private static final int MAX_METADATA_BYTES = 1024 * 1024;
     private static final int MAX_RELEASE_NOTES_CHARS = 8000;
@@ -76,8 +93,15 @@ final class YtarkUpdater {
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     /** Guards the single check slot and its listener; see checkForUpdates. */
     private static final Object CHECK_LOCK = new Object();
+    private static final Object AUTOMATIC_LOCK = new Object();
+    private static final Object UPDATE_FILES_LOCK = new Object();
     private static boolean checkRunning;
-    private static CheckCallback checkListener;
+    private static final List<CheckCallback> checkListeners = new ArrayList<>();
+    private static boolean automaticRun;
+    private static boolean automaticRerunRequested;
+    private static boolean automaticCancellationRequested;
+    private static Context automaticContext;
+    private static final List<AutomaticCallback> automaticCallbacks = new ArrayList<>();
     private static final AtomicReference<DownloadOperation> ACTIVE_DOWNLOAD = new AtomicReference<>();
 
     interface CheckCallback {
@@ -91,6 +115,11 @@ final class YtarkUpdater {
         void onVerifying();
         void onReady(File apk);
         void onError(UpdateFailure reason, String message);
+    }
+
+    interface AutomaticCallback {
+        /** retry is true only for a recoverable network/rate-limit interruption. */
+        void onFinished(boolean retry);
     }
 
     interface InstallCallback {
@@ -113,7 +142,14 @@ final class YtarkUpdater {
 
     private static final class DownloadOperation {
         final AtomicBoolean cancelled = new AtomicBoolean(false);
+        final boolean automatic;
+        final ReleaseInfo release;
         volatile HttpURLConnection connection;
+
+        DownloadOperation(boolean automatic, ReleaseInfo release) {
+            this.automatic = automatic;
+            this.release = release;
+        }
 
         void throwIfCancelled() throws UpdateCancelledException {
             if (cancelled.get()) throw new UpdateCancelledException();
@@ -163,7 +199,29 @@ final class YtarkUpdater {
         manager.createNotificationChannel(channel);
     }
 
+    static boolean automaticChecksEnabled(Context context) {
+        return preferences(context).getBoolean("automatic_checks_enabled", true);
+    }
+
+    static boolean automaticDownloadsEnabled(Context context) {
+        return preferences(context).getBoolean("automatic_downloads_enabled", true);
+    }
+
+    static void setAutomaticChecksEnabled(Context context, boolean enabled) {
+        preferences(context).edit().putBoolean("automatic_checks_enabled", enabled).apply();
+        schedulePeriodicCheck(context);
+    }
+
+    static void setAutomaticDownloadsEnabled(Context context, boolean enabled) {
+        SharedPreferences.Editor editor = preferences(context).edit()
+                .putBoolean("automatic_downloads_enabled", enabled);
+        if (enabled) editor.remove("cancelled_download_tag");
+        editor.apply();
+        if (!enabled) cancelAutomaticDownload(context);
+    }
+
     static boolean isAutomaticCheckDue(Context context) {
+        if (!automaticChecksEnabled(context)) return false;
         SharedPreferences p = preferences(context);
         long now = System.currentTimeMillis();
         return UpdateSchedulePolicy.isAutomaticCheckDue(
@@ -181,6 +239,211 @@ final class YtarkUpdater {
                 p.getLong("retry_after_at", 0L), p.getLong("rate_limit_until", 0L), now);
     }
 
+    static void schedulePeriodicCheck(Context context) {
+        Context app = context.getApplicationContext();
+        JobScheduler scheduler = (JobScheduler) app.getSystemService(Context.JOB_SCHEDULER_SERVICE);
+        if (scheduler == null) {
+            Log.w(TAG, "JobScheduler is unavailable; automatic update checks cannot persist.");
+            return;
+        }
+        if (!automaticChecksEnabled(app)) {
+            scheduler.cancel(PERIODIC_CHECK_JOB_ID);
+            return;
+        }
+        JobInfo current = scheduler.getPendingJob(PERIODIC_CHECK_JOB_ID);
+        if (current != null && current.getIntervalMillis() == UpdateSchedulePolicy.CHECK_INTERVAL_MILLIS) return;
+        if (current != null) scheduler.cancel(PERIODIC_CHECK_JOB_ID);
+        JobInfo job = new JobInfo.Builder(PERIODIC_CHECK_JOB_ID,
+                new ComponentName(app, UpdateCheckJobService.class))
+                .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY)
+                .setPersisted(true)
+                .setPeriodic(UpdateSchedulePolicy.CHECK_INTERVAL_MILLIS, 15L * 60L * 1000L)
+                .build();
+        try {
+            int result = scheduler.schedule(job);
+            if (result != JobScheduler.RESULT_SUCCESS) {
+                Log.w(TAG, "Android did not accept the persistent periodic updater job.");
+            }
+        } catch (IllegalArgumentException | SecurityException rejected) {
+            Log.w(TAG, "Android rejected the persistent periodic updater job.", rejected);
+        }
+    }
+
+    static String updaterState(Context context) {
+        return preferences(context).getString("updater_state", STATE_IDLE);
+    }
+
+    static String updaterError(Context context) {
+        return preferences(context).getString("updater_error", "");
+    }
+
+    static long downloadBytes(Context context) {
+        return preferences(context).getLong("downloaded_bytes", 0L);
+    }
+
+    static long downloadTotalBytes(Context context) {
+        return preferences(context).getLong("download_total_bytes", 0L);
+    }
+
+    static void setUpdaterState(Context context, String state, String error) {
+        SharedPreferences.Editor editor = preferences(context).edit()
+                .putString("updater_state", state)
+                .putLong("updater_state_at", System.currentTimeMillis());
+        if (error == null || error.length() == 0) editor.remove("updater_error");
+        else editor.putString("updater_error", error);
+        editor.apply();
+    }
+
+    static void runAutomaticUpdate(Context context, AutomaticCallback callback) {
+        runAutomaticUpdate(context, callback, false);
+    }
+
+    /** An explicit preference change should not be lost behind work being cancelled or joined. */
+    static void requestAutomaticUpdate(Context context) {
+        requestAutomaticUpdate(context, null);
+    }
+
+    static void requestAutomaticUpdate(Context context, AutomaticCallback callback) {
+        runAutomaticUpdate(context, callback, true);
+    }
+
+    private static void runAutomaticUpdate(Context context, AutomaticCallback callback, boolean rerunIfBusy) {
+        Context app = context.getApplicationContext();
+        synchronized (AUTOMATIC_LOCK) {
+            if (callback != null && automaticRun) automaticCallbacks.add(callback);
+            if (automaticRun) {
+                if (rerunIfBusy) automaticRerunRequested = true;
+                return;
+            }
+            if (callback != null) automaticCallbacks.add(callback);
+            automaticRun = true;
+            automaticCancellationRequested = false;
+            automaticContext = app;
+        }
+        if (!automaticChecksEnabled(app)) {
+            finishAutomaticRun(false);
+            return;
+        }
+        if (isAutomaticCancellationRequested()) {
+            finishAutomaticRun(true);
+            return;
+        }
+        if (hasVerifiedPending(app)) {
+            if (handoffInFlight(app)) {
+                setUpdaterState(app, STATE_INSTALLING,
+                        "Android installer hand-off was recorded; installation is not confirmed yet.");
+            } else if (installRequested(app) && !canRequestPackageInstalls(app)) {
+                setUpdaterState(app, STATE_PERMISSION_NEEDED,
+                        "Allow YTArk to install the verified update from Android settings.");
+            } else {
+                setUpdaterState(app, canRequestPackageInstalls(app)
+                        ? STATE_READY_TO_INSTALL : STATE_PERMISSION_NEEDED, "");
+            }
+            finishAutomaticRun(false);
+            return;
+        }
+        if (handoffInFlight(app) || installRequested(app)) {
+            setUpdaterState(app, handoffInFlight(app) ? STATE_INSTALLING : STATE_FAILED,
+                    "An install request is pending; automatic checks and downloads are paused until the installer flow is reconciled.");
+            finishAutomaticRun(false);
+            return;
+        }
+        if (isDownloadInProgress()) {
+            finishAutomaticRun(false);
+            return;
+        }
+        if (!isAutomaticCheckDue(app)) {
+            ReleaseInfo saved = selectedRelease(app);
+            if (automaticDownloadsEnabled(app) && saved != null
+                    && !isReleaseSkipped(app, saved.tag)
+                    && !isAutomaticDownloadSuppressed(app, saved.tag)) {
+                startAutomaticDownload(app, saved);
+            } else {
+                finishAutomaticRun(false);
+            }
+            return;
+        }
+        checkForUpdates(app, false, new CheckCallback() {
+            @Override public void onUpdateAvailable(ReleaseInfo release, String installedVersion) {
+                if (isAutomaticCancellationRequested()) {
+                    finishAutomaticRun(true);
+                } else if (!automaticChecksEnabled(app) || isReleaseSkipped(app, release.tag)) {
+                    finishAutomaticRun(false);
+                } else if (automaticDownloadsEnabled(app)
+                        && !isAutomaticDownloadSuppressed(app, release.tag)) {
+                    startAutomaticDownload(app, release);
+                } else {
+                    notifyIfNeeded(app, release);
+                    finishAutomaticRun(false);
+                }
+            }
+            @Override public void onUpToDate(String installedVersion, String message) {
+                finishAutomaticRun(isAutomaticCancellationRequested());
+            }
+            @Override public void onError(UpdateFailure reason, String message) {
+                finishAutomaticRun(isAutomaticCancellationRequested()
+                        || reason == UpdateFailure.OFFLINE
+                        || reason == UpdateFailure.RATE_LIMITED || reason == UpdateFailure.RELEASE_LOOKUP_FAILED);
+            }
+        });
+    }
+
+    private static void startAutomaticDownload(Context app, ReleaseInfo release) {
+        downloadAndVerify(app, release, true, new DownloadCallback() {
+            @Override public void onProgress(long downloaded, long total) { }
+            @Override public void onVerifying() { }
+            @Override public void onReady(File apk) {
+                finishAutomaticRun(false);
+            }
+            @Override public void onError(UpdateFailure reason, String message) {
+                finishAutomaticRun(automaticDownloadsEnabled(app)
+                        && (reason == UpdateFailure.OFFLINE
+                        || reason == UpdateFailure.RATE_LIMITED
+                        || reason == UpdateFailure.DOWNLOAD_FAILED));
+            }
+        });
+    }
+
+    static void cancelAutomaticRun(Context context) {
+        synchronized (AUTOMATIC_LOCK) {
+            if (automaticRun) {
+                automaticCancellationRequested = true;
+                automaticRerunRequested = false;
+            }
+        }
+        cancelAutomaticDownload(context);
+    }
+
+    private static boolean isAutomaticCancellationRequested() {
+        synchronized (AUTOMATIC_LOCK) {
+            return automaticCancellationRequested;
+        }
+    }
+
+    private static void finishAutomaticRun(boolean retry) {
+        final List<AutomaticCallback> callbacks;
+        final Context rerunContext;
+        synchronized (AUTOMATIC_LOCK) {
+            callbacks = new ArrayList<>(automaticCallbacks);
+            automaticCallbacks.clear();
+            automaticRun = false;
+            // A cancellation suppresses this run, but a later explicit user
+            // request may still queue a fresh attempt behind it.
+            rerunContext = automaticRerunRequested ? automaticContext : null;
+            automaticRerunRequested = false;
+            automaticCancellationRequested = false;
+            automaticContext = null;
+        }
+        if (rerunContext != null) {
+            AutomaticCallback completion = callbacks.isEmpty() ? null : result -> {
+                for (AutomaticCallback callback : callbacks) callback.onFinished(result);
+            };
+            MAIN.post(() -> runAutomaticUpdate(rerunContext, completion));
+            return;
+        }
+        for (AutomaticCallback callback : callbacks) MAIN.post(() -> callback.onFinished(retry));
+    }
+
     static long lastCheckAt(Context context) {
         return preferences(context).getLong("last_check_at", 0L);
     }
@@ -191,20 +454,40 @@ final class YtarkUpdater {
 
     static void checkForUpdates(Context context, boolean manual, CheckCallback callback) {
         final Context app = context.getApplicationContext();
-        if (!manual && !isAutomaticCheckDue(app)) return;
+        boolean useSavedResult = false;
         synchronized (CHECK_LOCK) {
             if (checkRunning) {
-                // One network check at a time. A visible request joins the running
-                // check and receives its result; nothing is reported as a failure.
-                if (callback != null) checkListener = callback;
+                // All interested screens/jobs join one lookup; no listener is
+                // displaced when the app resumes during a manual check.
+                if (callback != null) checkListeners.add(callback);
                 return;
             }
-            checkRunning = true;
-            checkListener = callback;
+            if (!manual && !isAutomaticCheckDue(app)) {
+                useSavedResult = true;
+            } else {
+                checkRunning = true;
+                checkListeners.clear();
+                if (callback != null) checkListeners.add(callback);
+            }
+        }
+        if (useSavedResult) {
+            if (callback != null) {
+                ReleaseInfo saved = selectedRelease(app);
+                String installedName = installedVersionName(app);
+                MAIN.post(() -> {
+                    if (saved != null) callback.onUpdateAvailable(saved, installedName);
+                    else callback.onUpToDate(installedName,
+                            "An automatic check is not due yet; using the persisted release-check result.");
+                });
+            }
+            return;
         }
 
         preferences(app).edit().putLong("last_attempt_at", System.currentTimeMillis())
-                .putString("last_check_status", "Checking for stable updates…").apply();
+                .putString("last_check_status", "Checking for stable updates…")
+                .putString("updater_state", STATE_CHECKING)
+                .putLong("updater_state_at", System.currentTimeMillis())
+                .remove("updater_error").apply();
         WORKER.execute(() -> {
             InstalledVersion installed = null;
             CheckOutcome outcome = null;
@@ -217,68 +500,84 @@ final class YtarkUpdater {
             }
             final long finishedAt = System.currentTimeMillis();
             if (failure == null) {
-                recordCheckSuccess(app, finishedAt, outcome.installedAhead, outcome.latestVersion);
+                recordCheckSuccess(app, finishedAt, outcome);
             } else {
                 recordCheckFailure(app, failure, finishedAt);
             }
-            // Take the listener and release the slot in one step, so a request
-            // that joins late either gets this result or starts a fresh check.
-            final CheckCallback listener;
+            final List<CheckCallback> listeners;
             synchronized (CHECK_LOCK) {
-                listener = checkListener;
-                checkListener = null;
+                listeners = new ArrayList<>(checkListeners);
+                checkListeners.clear();
                 checkRunning = false;
             }
-            deliverCheckResult(app, listener, installed, outcome, failure);
+            deliverCheckResult(app, listeners, installed, outcome, failure);
         });
     }
 
-    private static void deliverCheckResult(Context app, CheckCallback listener,
+    private static void deliverCheckResult(Context app, List<CheckCallback> listeners,
                                            InstalledVersion installed, CheckOutcome outcome,
                                            Exception failure) {
         if (failure != null) {
             Log.w(TAG, "Update check failed", failure);
-            if (listener != null) {
-                final UpdateFailure reason = failureReason(failure, UpdateFailure.RELEASE_LOOKUP_FAILED);
-                final String message = friendlyMessage(failure, reason);
+            final UpdateFailure reason = failureReason(failure, UpdateFailure.RELEASE_LOOKUP_FAILED);
+            final String message = friendlyMessage(failure, reason);
+            for (CheckCallback listener : listeners) {
                 MAIN.post(() -> listener.onError(reason, message));
             }
+            if (listeners.isEmpty()) showStatusNotification(app, "YTArk update check failed", message, ACTION_CHECK);
             return;
         }
         if (outcome.release == null) {
-            if (listener != null) {
-                final String installedName = installed.versionName;
-                final String message = outcome.installedAhead
-                        ? "This build is newer than the latest published stable release ("
-                        + outcome.latestVersion + "). Nothing was changed."
-                        : "You’re using the latest published stable YTArk update.";
+            final String installedName = installed.versionName;
+            final String message = outcome.installedAhead
+                    ? "This build is newer than the latest published stable release ("
+                    + outcome.latestVersion + "). Nothing was changed."
+                    : "You’re using the latest published stable YTArk update.";
+            for (CheckCallback listener : listeners) {
                 MAIN.post(() -> listener.onUpToDate(installedName, message));
             }
             return;
         }
-        if (listener != null) {
-            final String installedName = installed.versionName;
-            final ReleaseInfo release = outcome.release;
+        final String installedName = installed.versionName;
+        final ReleaseInfo release = outcome.release;
+        saveSelectedRelease(app, release);
+        for (CheckCallback listener : listeners) {
             MAIN.post(() -> listener.onUpdateAvailable(release, installedName));
-        } else {
-            notifyIfNeeded(app, outcome.release);
+        }
+        if (listeners.isEmpty()) {
+            if (automaticDownloadsEnabled(app)) {
+                runAutomaticUpdate(app, null);
+            } else {
+                notifyIfNeeded(app, release);
+            }
         }
     }
 
-    private static void recordCheckSuccess(Context context, long at, boolean installedAhead,
-                                           String latestVersion) {
-        String status = installedAhead
-                ? "Installed build is newer than the latest published stable release (" + latestVersion + ")."
-                : "Last check completed successfully.";
-        preferences(context).edit()
+    private static void recordCheckSuccess(Context context, long at, CheckOutcome outcome) {
+        String status = outcome.release != null
+                ? "Stable YTArk " + outcome.release.displayVersion + " is available."
+                : outcome.installedAhead
+                ? "Installed build is newer than the latest published stable release (" + outcome.latestVersion + ")."
+                : "Last check completed successfully; no newer stable release is available.";
+        SharedPreferences.Editor editor = preferences(context).edit()
                 .putLong("last_check_at", at)
                 .putLong("last_success_at", at)
                 .putLong("retry_after_at", 0L)
                 .putLong("rate_limit_until", 0L)
                 .putString("last_check_status", status)
+                .putString("updater_state", outcome.release == null ? STATE_UP_TO_DATE : STATE_AVAILABLE)
+                .putLong("updater_state_at", at)
+                .remove("updater_error")
                 .remove("last_check_error")
-                .remove("last_check_reason")
-                .apply();
+                .remove("last_check_reason");
+        if (outcome.release == null) {
+            editor.remove("available_tag").remove("available_version");
+            clearSelectedRelease(editor);
+        } else {
+            editor.putString("available_tag", outcome.release.tag)
+                    .putString("available_version", outcome.release.displayVersion);
+        }
+        editor.apply();
     }
 
     private static void recordCheckFailure(Context context, Exception error, long at) {
@@ -306,6 +605,9 @@ final class YtarkUpdater {
                 .putString("last_check_status", status)
                 .putString("last_check_reason", reason.name())
                 .putString("last_check_error", friendlyMessage(error, reason))
+                .putString("updater_state", STATE_FAILED)
+                .putLong("updater_state_at", at)
+                .putString("updater_error", friendlyMessage(error, reason))
                 .apply();
     }
 
@@ -682,9 +984,18 @@ final class YtarkUpdater {
         if (manager != null) manager.cancel(NOTIFICATION_UPDATE);
     }
 
+    static boolean isReleaseSkipped(Context context, String tag) {
+        return tag != null && tag.equals(preferences(context).getString("skipped_tag", ""));
+    }
+
+    static boolean isAutomaticDownloadSuppressed(Context context, String tag) {
+        return tag != null && tag.equals(preferences(context).getString("cancelled_download_tag", ""));
+    }
+
     static void skipRelease(Context context, String tag) {
         if (tag == null || tag.length() == 0) return;
         preferences(context).edit().putString("skipped_tag", tag).apply();
+        setUpdaterState(context, STATE_IDLE, "YTArk " + tag + " was skipped; automatic downloads will not select it.");
         NotificationManager manager = notificationManager(context);
         if (manager != null) manager.cancel(NOTIFICATION_UPDATE);
     }
@@ -695,24 +1006,89 @@ final class YtarkUpdater {
         operation.cancelled.set(true);
         HttpURLConnection connection = operation.connection;
         if (connection != null) connection.disconnect();
+        if (operation.release != null) {
+            preferences(context).edit().putString("cancelled_download_tag", operation.release.tag).apply();
+        }
+        setUpdaterState(context, STATE_CANCELLED, "Download cancelled. Matching partial bytes are retained; automatic download for this release is paused until you resume it or enable downloads again.");
+    }
+
+    static void cancelAutomaticDownload(Context context) {
+        DownloadOperation operation = ACTIVE_DOWNLOAD.get();
+        if (operation == null || !operation.automatic) return;
+        operation.cancelled.set(true);
+        HttpURLConnection connection = operation.connection;
+        if (connection != null) connection.disconnect();
+        setUpdaterState(context, STATE_CANCELLED, "Automatic download was turned off; matching partial bytes are retained.");
     }
 
     static boolean isDownloadInProgress() {
         return ACTIVE_DOWNLOAD.get() != null;
     }
 
-    static void downloadAndVerify(Context context, ReleaseInfo release, DownloadCallback callback) {
-        final Context app = context.getApplicationContext();
-        final DownloadOperation operation = new DownloadOperation();
+    static ReleaseInfo activeDownloadRelease() {
+        DownloadOperation operation = ACTIVE_DOWNLOAD.get();
+        return operation == null ? null : operation.release;
+    }
+
+    private static String reserveDownload(Context app, ReleaseInfo release,
+                                          DownloadOperation operation, boolean automatic) {
+        if (automatic && !automaticDownloadsEnabled(app)) {
+            return "Automatic downloads are turned off; no background transfer was started.";
+        }
+        if (handoffInFlight(app) || installRequested(app)) {
+            return "An Android install request is active; finish or cancel it before starting another download.";
+        }
         if (!ACTIVE_DOWNLOAD.compareAndSet(null, operation)) {
-            if (callback != null) MAIN.post(() -> callback.onError(UpdateFailure.DOWNLOAD_FAILED,
-                    "A YTArk download is already running."));
+            return "A YTArk download is already running.";
+        }
+        if (!automatic && isAutomaticDownloadSuppressed(app, release.tag)) {
+            preferences(app).edit().remove("cancelled_download_tag").apply();
+        }
+        saveSelectedRelease(app, release);
+        return null;
+    }
+
+    static void downloadAndVerify(Context context, ReleaseInfo release, DownloadCallback callback) {
+        downloadAndVerify(context, release, false, callback);
+    }
+
+    static void downloadAndVerify(Context context, ReleaseInfo release, boolean automatic,
+                                  DownloadCallback callback) {
+        final Context app = context.getApplicationContext();
+        final DownloadOperation operation = new DownloadOperation(automatic, release);
+        String unavailable;
+        if (automatic) {
+            // Serialize reservation with JobService cancellation: either the
+            // cancellation flag wins, or it sees and cancels the active transfer.
+            synchronized (AUTOMATIC_LOCK) {
+                if (automaticCancellationRequested) {
+                    unavailable = "The scheduled automatic update was cancelled by Android.";
+                } else {
+                    synchronized (UPDATE_FILES_LOCK) {
+                        unavailable = reserveDownload(app, release, operation, automatic);
+                    }
+                }
+            }
+        } else {
+            synchronized (UPDATE_FILES_LOCK) {
+                unavailable = reserveDownload(app, release, operation, automatic);
+            }
+        }
+        if (unavailable != null) {
+            if (callback != null) {
+                final String message = unavailable;
+                MAIN.post(() -> callback.onError(UpdateFailure.DOWNLOAD_FAILED, message));
+            }
             return;
         }
+        setUpdaterState(app, STATE_DOWNLOADING, "");
+        preferences(app).edit().putLong("downloaded_bytes", 0L)
+                .putLong("download_total_bytes", release.assetSize).apply();
         WORKER.execute(() -> {
             try {
                 File apk = downloadRelease(app, release, callback, operation);
                 operation.throwIfCancelled();
+                setUpdaterState(app, STATE_VALIDATING, "");
                 MAIN.post(() -> { if (callback != null) callback.onVerifying(); });
                 verifyDownloadedApk(app, apk, release);
                 operation.throwIfCancelled();
@@ -723,7 +1099,7 @@ final class YtarkUpdater {
                 });
                 showStatusNotification(app, "YTArk update verified",
                         "YTArk " + release.displayVersion
-                                + " is ready. Select to open the Android installer.",
+                                + " is ready. Open YTArk Updates to review it in Android's installer.",
                         ACTION_INSTALL);
             } catch (Exception error) {
                 Exception reportedError = operation.cancelled.get()
@@ -731,6 +1107,7 @@ final class YtarkUpdater {
                 Log.w(TAG, "Update download or verification failed", error);
                 final UpdateFailure reason = failureReason(reportedError, UpdateFailure.DOWNLOAD_FAILED);
                 final String message = friendlyMessage(reportedError, reason);
+                setUpdaterState(app, reportedError instanceof UpdateCancelledException ? STATE_CANCELLED : STATE_FAILED, message);
                 MAIN.post(() -> {
                     cancelDownloadNotification(app);
                     if (callback != null) callback.onError(reason, message);
@@ -747,15 +1124,20 @@ final class YtarkUpdater {
     static void verifyPendingUpdate(Context context, ReleaseInfo release, File apk,
                                     DownloadCallback callback) {
         final Context app = context.getApplicationContext();
+        setUpdaterState(app, STATE_VALIDATING, "");
         WORKER.execute(() -> {
             try {
                 MAIN.post(() -> { if (callback != null) callback.onVerifying(); });
                 verifyDownloadedApk(app, apk, release);
+                setUpdaterState(app, canRequestPackageInstalls(app)
+                        ? STATE_READY_TO_INSTALL : STATE_PERMISSION_NEEDED, "");
                 MAIN.post(() -> {
                     if (callback != null) callback.onReady(apk);
                 });
             } catch (Exception error) {
                 Log.w(TAG, "Saved update failed verification", error);
+                setUpdaterState(app, STATE_FAILED, friendlyMessage(error,
+                        failureReason(error, UpdateFailure.VALIDATION_FAILED)));
                 clearPendingUpdate(app);
                 final UpdateFailure reason = failureReason(error, UpdateFailure.VALIDATION_FAILED);
                 final String message = friendlyMessage(error, reason);
@@ -963,6 +1345,8 @@ final class YtarkUpdater {
 
     private static void reportProgress(Context context, ReleaseInfo release, long downloaded,
                                        long total, DownloadCallback callback) {
+        preferences(context).edit().putLong("downloaded_bytes", downloaded)
+                .putLong("download_total_bytes", total).apply();
         MAIN.post(() -> {
             if (callback != null) callback.onProgress(downloaded, total);
         });
@@ -1103,6 +1487,7 @@ final class YtarkUpdater {
     }
 
     private static void savePendingUpdate(Context context, File apk, ReleaseInfo release) {
+        saveSelectedRelease(context, release);
         preferences(context).edit()
                 .putString("pending_path", apk.getAbsolutePath())
                 .putString("pending_tag", release.tag)
@@ -1115,7 +1500,62 @@ final class YtarkUpdater {
                 .putString("pending_abi", release.nativeAbi)
                 .putLong("pending_version_code", release.versionCode)
                 .putLong("pending_size", release.assetSize)
+                .putString("updater_state", canRequestPackageInstalls(context)
+                        ? STATE_READY_TO_INSTALL : STATE_PERMISSION_NEEDED)
+                .putLong("updater_state_at", System.currentTimeMillis())
+                .remove("updater_error")
                 .apply();
+    }
+
+    private static void saveSelectedRelease(Context context, ReleaseInfo release) {
+        if (release == null) return;
+        preferences(context).edit()
+                .putString("selected_tag", release.tag)
+                .putString("selected_version", release.versionName)
+                .putString("selected_display_version", release.displayVersion)
+                .putString("selected_notes", release.notes)
+                .putString("selected_asset", release.assetName)
+                .putString("selected_url", release.downloadUrl)
+                .putString("selected_sha256", release.sha256)
+                .putString("selected_abi", release.nativeAbi)
+                .putLong("selected_version_code", release.versionCode)
+                .putLong("selected_size", release.assetSize)
+                .apply();
+    }
+
+    private static void clearSelectedRelease(SharedPreferences.Editor editor) {
+        editor.remove("selected_tag").remove("selected_version").remove("selected_display_version")
+                .remove("selected_notes").remove("selected_asset").remove("selected_url")
+                .remove("selected_sha256").remove("selected_abi")
+                .remove("selected_version_code").remove("selected_size");
+    }
+
+    static ReleaseInfo selectedRelease(Context context) {
+        SharedPreferences p = preferences(context);
+        String tag = p.getString("selected_tag", "");
+        String version = p.getString("selected_version", "");
+        String display = p.getString("selected_display_version", "");
+        String notes = p.getString("selected_notes", "");
+        String asset = p.getString("selected_asset", "");
+        String url = p.getString("selected_url", "");
+        String digest = p.getString("selected_sha256", "");
+        String abi = p.getString("selected_abi", "");
+        long code = p.getLong("selected_version_code", -1L);
+        long size = p.getLong("selected_size", -1L);
+        if (tag.length() == 0 || version.length() == 0 || asset.length() == 0
+                || url.length() == 0 || digest.length() != 64 || abi.length() == 0
+                || code <= 0 || size <= 0) return null;
+        ReleaseInfo release = new ReleaseInfo(tag, version, display, asset, url, digest, abi, code, size, notes);
+        try {
+            validateReleaseContract(release);
+            if (!isOwnedUpdateFile(context, new File(new File(context.getFilesDir(), "ytark_updates"), asset))) {
+                return null;
+            }
+            return release;
+        } catch (IOException invalid) {
+            Log.w(TAG, "Discarding invalid saved release selection", invalid);
+            return null;
+        }
     }
 
     static File pendingApk(Context context) {
@@ -1167,21 +1607,23 @@ final class YtarkUpdater {
     }
 
     static void clearPendingUpdate(Context context) {
-        File apk = pendingApk(context);
-        if (apk != null && apk.exists() && !apk.delete()) {
-            Log.w(TAG, "Could not remove the verified APK after installation");
+        synchronized (UPDATE_FILES_LOCK) {
+            File apk = pendingApk(context);
+            if (apk != null && apk.exists() && !apk.delete()) {
+                Log.w(TAG, "Could not remove the verified APK after installation");
+            }
+            if (apk != null) {
+                File partial = new File(apk.getParentFile(), apk.getName() + ".part");
+                File partialMetadata = new File(apk.getParentFile(), apk.getName() + ".part.properties");
+                if (partial.exists() && !partial.delete()) Log.w(TAG, "Could not remove partial APK");
+                if (partialMetadata.exists() && !partialMetadata.delete()) Log.w(TAG, "Could not remove partial metadata");
+            }
+            preferences(context).edit().remove("install_requested").remove("handoff_in_flight")
+                    .remove("pending_path").remove("pending_tag")
+                    .remove("pending_version").remove("pending_display_version").remove("pending_notes")
+                    .remove("pending_asset").remove("pending_url").remove("pending_sha256").remove("pending_abi")
+                    .remove("pending_version_code").remove("pending_size").apply();
         }
-        if (apk != null) {
-            File partial = new File(apk.getParentFile(), apk.getName() + ".part");
-            File partialMetadata = new File(apk.getParentFile(), apk.getName() + ".part.properties");
-            if (partial.exists() && !partial.delete()) Log.w(TAG, "Could not remove partial APK");
-            if (partialMetadata.exists() && !partialMetadata.delete()) Log.w(TAG, "Could not remove partial metadata");
-        }
-        preferences(context).edit().remove("install_requested").remove("handoff_in_flight")
-                .remove("pending_path").remove("pending_tag")
-                .remove("pending_version").remove("pending_display_version").remove("pending_notes")
-                .remove("pending_asset").remove("pending_url").remove("pending_sha256").remove("pending_abi")
-                .remove("pending_version_code").remove("pending_size").apply();
     }
 
     static boolean clearPendingIfInstalled(Context context) {
@@ -1196,9 +1638,13 @@ final class YtarkUpdater {
             manager.cancel(NOTIFICATION_DOWNLOAD);
             manager.cancel(NOTIFICATION_STATUS);
         }
-        preferences(context).edit()
+        SharedPreferences.Editor completed = preferences(context).edit()
                 .putString("installer_return_status", "YTArk " + pending.displayVersion + " is installed.")
-                .apply();
+                .putString("updater_state", STATE_UP_TO_DATE)
+                .putLong("updater_state_at", System.currentTimeMillis())
+                .remove("updater_error");
+        clearSelectedRelease(completed);
+        completed.apply();
         return true;
     }
 
@@ -1273,7 +1719,9 @@ final class YtarkUpdater {
     }
 
     static void setInstallRequested(Context context, boolean requested) {
-        preferences(context).edit().putBoolean("install_requested", requested).apply();
+        synchronized (UPDATE_FILES_LOCK) {
+            preferences(context).edit().putBoolean("install_requested", requested).apply();
+        }
     }
 
     /** True from the moment the installer is opened until Android returns control. */
@@ -1282,7 +1730,9 @@ final class YtarkUpdater {
     }
 
     static void setHandoffInFlight(Context context, boolean inFlight) {
-        preferences(context).edit().putBoolean("handoff_in_flight", inFlight).apply();
+        synchronized (UPDATE_FILES_LOCK) {
+            preferences(context).edit().putBoolean("handoff_in_flight", inFlight).apply();
+        }
     }
 
     /** A verified APK for a newer release is saved and still present on disk. */
@@ -1302,6 +1752,66 @@ final class YtarkUpdater {
                 canRequestPackageInstalls(context), handoffInFlight(context));
     }
 
+    static final class UpdateFileCleanup {
+        final long bytesRemoved;
+        final int filesRemoved;
+        final boolean protectedByActiveWork;
+        final boolean incomplete;
+
+        UpdateFileCleanup(long bytesRemoved, int filesRemoved, boolean protectedByActiveWork,
+                          boolean incomplete) {
+            this.bytesRemoved = bytesRemoved;
+            this.filesRemoved = filesRemoved;
+            this.protectedByActiveWork = protectedByActiveWork;
+            this.incomplete = incomplete;
+        }
+    }
+
+    /** Deletes only obsolete, top-level YTArk APK/partial files in the updater-owned directory. */
+    static UpdateFileCleanup clearObsoleteUpdateDownloads(Context context) {
+        Context app = context.getApplicationContext();
+        synchronized (UPDATE_FILES_LOCK) {
+            if (ACTIVE_DOWNLOAD.get() != null || handoffInFlight(app) || installRequested(app)) {
+                return new UpdateFileCleanup(0L, 0, true, false);
+            }
+            File directory = new File(app.getFilesDir(), "ytark_updates");
+            if (!directory.exists()) return new UpdateFileCleanup(0L, 0, false, false);
+            if (!directory.isDirectory()) return new UpdateFileCleanup(0L, 0, false, true);
+            try {
+                File canonicalDirectory = directory.getCanonicalFile();
+                ReleaseInfo pending = pendingRelease(app);
+                ReleaseInfo selected = selectedRelease(app);
+                String keep = pending != null ? pending.assetName
+                        : selected == null ? "" : selected.assetName;
+                File[] files = canonicalDirectory.listFiles();
+                if (files == null) return new UpdateFileCleanup(0L, 0, false, true);
+                long bytes = 0L;
+                int count = 0;
+                boolean incomplete = false;
+                for (File file : files) {
+                    try {
+                        File canonical = file.getCanonicalFile();
+                        if (!canonicalDirectory.equals(canonical.getParentFile()) || !canonical.isFile()
+                                || !UpdateGuards.isStaleUpdateFile(canonical.getName(), keep)) continue;
+                        long size = canonical.length();
+                        if (canonical.delete()) {
+                            bytes += size;
+                            count++;
+                        } else {
+                            incomplete = true;
+                        }
+                    } catch (IOException | SecurityException inaccessible) {
+                        incomplete = true;
+                    }
+                }
+                return new UpdateFileCleanup(bytes, count, false, incomplete);
+            } catch (IOException | SecurityException error) {
+                Log.w(TAG, "Could not safely inspect obsolete updater downloads", error);
+                return new UpdateFileCleanup(0L, 0, false, true);
+            }
+        }
+    }
+
     /**
      * Startup housekeeping, run off the main thread: finish a pending install that
      * already happened, and remove partials and old APKs that no install still needs.
@@ -1311,10 +1821,26 @@ final class YtarkUpdater {
         WORKER.execute(() -> {
             try {
                 clearPendingIfInstalled(app);
-                File directory = new File(app.getFilesDir(), "ytark_updates");
-                ReleaseInfo pending = pendingRelease(app);
-                String keep = pending == null ? "" : pending.assetName;
-                if (directory.isDirectory()) removeStaleUpdateFiles(directory, keep);
+                String priorState = updaterState(app);
+                if (STATE_CHECKING.equals(priorState)) {
+                    setUpdaterState(app, STATE_FAILED,
+                            "The previous release check was interrupted by an app restart. The last successful result is unchanged; check again when eligible.");
+                } else if (STATE_DOWNLOADING.equals(priorState)) {
+                    setUpdaterState(app, STATE_CANCELLED,
+                            "The previous download was interrupted by an app restart. Matching partial bytes are preserved for resume.");
+                } else if (STATE_VALIDATING.equals(priorState)) {
+                    setUpdaterState(app, STATE_FAILED,
+                            "The previous APK validation was interrupted by an app restart. The saved release can be verified again.");
+                }
+                synchronized (UPDATE_FILES_LOCK) {
+                    if (ACTIVE_DOWNLOAD.get() != null || handoffInFlight(app) || installRequested(app)) return;
+                    File directory = new File(app.getFilesDir(), "ytark_updates");
+                    ReleaseInfo pending = pendingRelease(app);
+                    ReleaseInfo selected = selectedRelease(app);
+                    String keep = pending != null ? pending.assetName
+                            : selected == null ? "" : selected.assetName;
+                    if (directory.isDirectory()) removeStaleUpdateFiles(directory, keep);
+                }
             } catch (Exception error) {
                 Log.w(TAG, "Update housekeeping failed", error);
             }

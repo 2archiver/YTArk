@@ -18,9 +18,11 @@
 //                disappear. The values a retired key held are reported once
 //                through getConfigMeta().retiredValues so a feature can finish
 //                its own cleanup (the retired Cobalt user-agent override).
+//   4            YTArk 2.8.0: adds opt-in playback recovery; it defaults off and
+//                merges without changing stored preferences or YouTube session data.
 
 const CONFIG_KEY = 'ytaf-configuration';
-export const CONFIG_SCHEMA_VERSION = 3;
+export const CONFIG_SCHEMA_VERSION = 4;
 
 /**
  * Preferences that no longer exist, with the schema that retired them.
@@ -133,6 +135,8 @@ const defaultConfig = {
   // The guide entry keeps YTArk Settings reachable when the sidebar is minimal.
   enableYtarkGuideEntry: true,
   enableUpdater: true,
+  // Automatic retries are an explicit opt-in because PlayerService.loadVideo is not a general recovery API.
+  enablePlaybackRecovery: false,
   autoFrameRate: false,
   autoFrameRatePauseVideoFor: 0,
   enableSigninReminder: false,
