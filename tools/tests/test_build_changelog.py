@@ -166,7 +166,7 @@ class ChangelogFormatTests(unittest.TestCase):
             parse(text)
 
     def test_versions_sort_like_android_version_codes(self):
-        ordered = ["2.8.0", "2.7.0", "2.6.0", "2.5.0", "2.4.0", "2.3.0", "2.2.0", "2.1.2", "2.1.0", "2.0.4", "2.0.4-ytark.17", "2.0.4-ytark.16", "2.0.2-personal.14"]
+        ordered = ["2.9.0", "2.7.0", "2.6.0", "2.5.0", "2.4.0", "2.3.0", "2.2.0", "2.1.2", "2.1.0", "2.0.4", "2.0.4-ytark.17", "2.0.4-ytark.16", "2.0.2-personal.14"]
         keys = [build_changelog.version_key(version) for version in ordered]
         self.assertEqual(keys, sorted(keys, reverse=True))
         for version in ordered:
@@ -232,9 +232,9 @@ class RepositoryChangelogTests(unittest.TestCase):
     def test_release_notes_section_uses_the_changelog_and_no_other_version_code(self):
         config = validate_release.load_config()
         section = build_changelog.release_notes_section(self.model, config["VERSION_NAME"])
-        self.assertIn("### Added", section)
-        self.assertIn("settings schema 4", section)
-        self.assertIn("CHANGELOG.md", section)
+        self.assertNotIn("###", section)
+        self.assertLessEqual(len(section.split()), 65)
+        self.assertEqual(len([line for line in section.splitlines() if line.startswith("- ")]), 3)
         self.assertIsNone(validate_release.parse_release_version_code(section),
                           "the section must not carry a versionCode the updater could misread")
         self.assertNotRegex(section, r"(?i)personal\s+tube\s+tv")

@@ -90,7 +90,10 @@ public final class UpdateActivity extends Activity {
         super.onCreate(state);
         live = new WeakReference<>(this);
         buildScreen();
-        if (state != null) lastFocusId = state.getInt(STATE_FOCUS_ID, 0);
+        if (state != null) {
+            lastFocusId = state.getInt(STATE_FOCUS_ID, 0);
+            awaitingSettings = state.getBoolean("ytark_awaiting_settings", false);
+        }
         updateInstalledVersion();
         refreshScheduleSummary();
         updateAutomationButtons();
@@ -174,6 +177,7 @@ public final class UpdateActivity extends Activity {
     protected void onSaveInstanceState(Bundle out) {
         super.onSaveInstanceState(out);
         out.putInt(STATE_FOCUS_ID, lastFocusId);
+        out.putBoolean("ytark_awaiting_settings", awaitingSettings);
     }
 
     @Override
@@ -374,7 +378,7 @@ public final class UpdateActivity extends Activity {
                 updateButton, installButton, cancelButton, skipButton, viewReleaseButton,
                 laterButton, notificationButton };
         for (int i = 0; i < focusable.length; i++) {
-            focusable[i].setId(View.generateViewId());
+            focusable[i].setId(0x00a20000 + i);
             focusable[i].setOnFocusChangeListener(remember);
         }
 

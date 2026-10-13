@@ -45,7 +45,7 @@ describe('bundled changelog data', () => {
       return 0;
     });
     assert.deepEqual(keys, sorted, 'newest first');
-    assert.equal(entries[0].version, '2.8.0');
+    assert.equal(entries[0].version, '2.9.0');
     assert.equal(entries[0].status, 'unreleased');
     assert.equal(entries[0].date, null, 'no invented date for unpublished work');
     const published = entries.filter(entry => entry.status === 'published');
@@ -76,11 +76,11 @@ describe('in-app reader', () => {
     const versionRows = titles.filter(title => /^\d+\.\d/.test(title));
     const find = version => YTARK_CHANGELOG.entries.find(entry => entry.version === version);
     assert.equal(versionRows.length, YTARK_CHANGELOG.entries.length);
-    assert.equal(versionRows[0], reader.headlineFor(find('2.8.0')));
+    assert.equal(versionRows[0], reader.headlineFor(find('2.9.0')));
     assert.equal(versionRows[1], reader.headlineFor(find('2.7.0')));
     assert.equal(versionRows[2], reader.headlineFor(find('2.6.0')));
     assert.equal(versionRows.at(-1), reader.headlineFor(find('2.0.2-personal.14')));
-    assert.equal(versionRows[0], '2.8 — Safer storage, opt-in playback recovery and hourly updates');
+    assert.equal(versionRows[0], '2.9 — Settings controls and version information');
     assert.equal(versionRows[1], '2.7 — TV keyboard search, a readable About dialog and a simpler changelog');
     assert.equal(versionRows[2], '2.6 — Added Full Auto Updating');
     assert.equal(versionRows[5], '2.3 — OLED Black, cleaner playback and searchable settings  ·  Installed');
@@ -117,7 +117,7 @@ describe('in-app reader', () => {
     // sections, because it is also the source of its own release notes.
     resolveCommand({ customAction: { action: 'YTARK_CHANGELOG_SHOW', parameters: { update: true } } });
     await press(resolveCommand, findRow(lastModal(recorded, reader.CHANGELOG_MODAL_ID),
-      item => rowTitle(item).startsWith('2.8 — ')));
+      item => rowTitle(item).startsWith('2.9 — ')));
     const current = modalItems(lastModal(recorded, reader.CHANGELOG_VERSION_MODAL_ID))
       .map(messageText).join('\n');
     assert.match(current, /Added\n• Cache & Storage/);

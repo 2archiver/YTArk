@@ -319,7 +319,7 @@ export function liveStatus(text, index = buildSearchIndex()) {
   return tx('ytark.search.liveCount', '{{count}} matching: {{titles}}', { count: results.length, titles });
 }
 
-/** Open the text panel; closing it (OK, Done or Back) applies the text. */
+/** Open the text panel; closing it (Done or Back) applies the text. */
 export function editSearchQuery() {
   const index = buildSearchIndex();
   return openTextEntry({

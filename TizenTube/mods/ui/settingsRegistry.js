@@ -175,9 +175,9 @@ function aboutPanel() {
   // Only reported when the running frontend really publishes its own version;
   // it is the YouTube TV app version, never the YTArk version.
   const youtube = youtubeFrontendVersion();
-  if (youtube) {
-    items.push(overlayMessageRenderer(`${tx('ytark.about.youtubeVersion', 'YouTube TV version')}: ${youtube}`));
-  }
+  items.push(overlayMessageRenderer(`YouTube Frontend Version: ${youtube || 'Unavailable'}`));
+  items.push(overlayMessageRenderer('The YouTube frontend is delivered by YouTube, not bundled with the APK.'));
+  items.push(overlayMessageRenderer('Cobalt Version/Commit: Unavailable (Android base is listed in Build details)'));
   items.push(
     buttonItem(
       {
@@ -855,15 +855,6 @@ export function buildSettingsTree() {
             key: 'enableYtarkGuideEntry',
             keywords: ['guide', 'sidebar', 'entry', 'shortcut', 'navigation', 'settings entry', 'bottom'],
           },
-      {
-        id: 'ytSettingsLayout',
-        type: 'action',
-        title: tx('ytark.ytSettings.title', 'Customize YouTube Settings'),
-        description: tx('ytark.ytSettings.entryDescription', 'Reorder, hide or pin sections of the YouTube Settings page'),
-        icon: 'SETTINGS',
-        keywords: ['youtube settings', 'customize', 'customise', 'reorder', 'hide', 'pin', 'sections', 'layout', 'stock settings'],
-        command: [custom('YTARK_YTS_EDITOR', {})],
-      },
           {
             id: 'misc.whosWatching',
             type: 'menu',

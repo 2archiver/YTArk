@@ -3,7 +3,7 @@
  *
  * Adds one YTArk section (YTArk Settings, Search, YTArk Updates
  * and, when the page layout is customized, a restore entry), records the
- * detected sections for the "Customize YouTube Settings" editor and applies
+ * detected sections for legacy saved layouts and applies
  * the saved layout. Patching is idempotent: revisiting the page never adds a
  * second YTArk section. If anything about the page shape is unexpected, the
  * YTArk entry is still added so YTArk Settings stays reachable.

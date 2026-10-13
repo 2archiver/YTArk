@@ -11,6 +11,10 @@ public final class UpdateGuardsTest {
         freeSpaceBudgetIncludesTheSafetyMargin();
         resumeNeedsOnlyTheRemainingBytes();
         staleFilesAreRemovedButTheKeptReleaseSurvives();
+        assertFalse(UpdateGuards.isStaleUpdateFile(CURRENT + ".part", "YTArk-v2.7.0-armv7.apk", CURRENT),
+                "selected partial survives even with a different pending installer");
+        assertFalse(UpdateGuards.isStaleUpdateFile("YTArk-v2.7.0-armv7.apk", "YTArk-v2.7.0-armv7.apk", CURRENT),
+                "pending installer also survives");
         unrelatedFilesAreNeverTouched();
         cacheCleanupIsConfinedToExplicitRootsAndRetainsRecentOrUnknownFiles();
         minSdkGateUsesTheReleaseMinimum();

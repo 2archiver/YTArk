@@ -21,7 +21,6 @@ update-smoke/
 publish-work/
 candidate/
 candidate-manifest.json
-release-notes.md
 release-notes.identity.md
 android-updater/build/
 build/

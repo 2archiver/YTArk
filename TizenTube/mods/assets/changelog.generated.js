@@ -3,21 +3,21 @@
 export const YTARK_CHANGELOG = {
   "schema": 1,
   "source": "CHANGELOG.md",
-  "sourceSha256": "3a86e5f1ec3fa663628982b133bb2237c91134523c5769a28c1c03fd46b1a8fe",
+  "sourceSha256": "ccd5ba161ac48b89524287dde463d9340f4e1bc2ab005b8d3289910233d1847b",
   "entries": [
     {
-      "version": "2.8.0",
-      "display": "2.8",
+      "version": "2.9.0",
+      "display": "2.9",
       "status": "unreleased",
       "date": null,
       "publishedAt": null,
-      "tag": "v2.8.0",
-      "versionCode": 2080000,
-      "scriptTag": "s27",
-      "title": "YTArk 2.8",
+      "tag": "v2.9.0",
+      "versionCode": 2090000,
+      "scriptTag": "s28",
+      "title": "YTArk 2.9",
       "releaseUrl": null,
-      "facts": "Not yet published. Planned tag v2.8.0 · versionCode 2080000 · userscript s27 · one ARMv7 APK (armeabi-v7a) on TizenTubeCobalt v2.0.2. This is intended as a direct, signed in-place update to published 2.7.0; package ID, signing identity and app data directory stay unchanged.",
-      "summary": "Safer storage, opt-in playback recovery and hourly updates.",
+      "facts": "Not yet published. Planned tag v2.9.0 · versionCode 2090000 · userscript s28 · one ARMv7 APK (armeabi-v7a) on TizenTubeCobalt v2.0.2. This is intended as a direct, signed in-place update to published 2.7.0; package ID, signing identity and app data directory stay unchanged.",
+      "summary": "Settings controls and version information.",
       "sections": [
         {
           "heading": "Added",
@@ -45,6 +45,12 @@ export const YTARK_CHANGELOG = {
         {
           "heading": "Fixed",
           "items": [
+            "Search input stays open when pressing OK; Done submits the query.",
+            "Removed the redundant YouTube Settings editor; existing layouts and their restore action remain.",
+            "About explicitly reports unavailable frontend versions and recognizes the runtime client version field.",
+            "OLED surface gradients no longer cover the black background; full YouTube coverage needs device testing.",
+            "Update-file cleanup requires confirmation and protects both pending installation and resumable downloads.",
+            "Native settings use stable focus IDs and retain permission-return state across activity recreation.",
             "Automatic download selection respects skipped/cancelled releases and preserves matching partial files for an explicit resume. Work interrupted by an app restart is reconciled without treating an installer hand-off as a completed install.",
             "Playback recovery cancels scheduled attempts on navigation and suspends them during PiP; an error arriving after a media load event is not mistaken for healthy playback."
           ]
@@ -59,7 +65,7 @@ export const YTARK_CHANGELOG = {
         {
           "heading": "Validation",
           "items": [
-            "This 2.8.0 entry is unpublished. Test, build and device-run results for the candidate are recorded separately; no release has been published from this work."
+            "This 2.9.0 entry is unpublished. Test, build and device-run results for the candidate are recorded separately; no release has been published from this work."
           ]
         }
       ]

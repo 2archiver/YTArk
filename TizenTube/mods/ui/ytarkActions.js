@@ -15,8 +15,6 @@ import { showChangelog, showChangelogVersion, showChangelogNote, showReleaseQr }
 import { dismissWhatsNew } from '../features/whatsNew.js';
 import { startVersionResolution } from '../features/appVersion.js';
 import {
-  showYtSettingsEditor, showYtSettingsSection, moveYtSettingsSection, toggleYtSettingsSection,
-  showYtSettingsRows, showYtSettingsRow, toggleYtSettingsRowPin, toggleYtSettingsRowHidden,
   showRestoreLayoutConfirm, restoreYtSettingsLayout,
 } from './ytSettingsEditor.js';
 import { tx } from '../translations/text.js';
@@ -132,36 +130,11 @@ export function handleYtarkAction(action, parameters) {
       if (p.refresh === 'changelog') showChangelog({ update: true });
       else showSettingsMenu('root', { update: true, focusId: 'search' });
       return true;
-    case 'YTARK_YTS_EDITOR':
-      showYtSettingsEditor({ update: !!p.update, focusId: p.focusId });
-      return true;
-    case 'YTARK_YTS_SECTION':
-      showYtSettingsSection(p.id);
-      return true;
-    case 'YTARK_YTS_MOVE':
-      moveYtSettingsSection(p.id, p.direction);
-      return true;
-    case 'YTARK_YTS_TOGGLE_HIDDEN':
-      toggleYtSettingsSection(p.id);
-      return true;
-    case 'YTARK_YTS_ROWS':
-      showYtSettingsRows(p.id, { update: !!p.update, focusRow: p.focusRow });
-      return true;
-    case 'YTARK_YTS_ROW':
-      showYtSettingsRow(p.id, p.rowId);
-      return true;
-    case 'YTARK_YTS_ROW_PIN':
-      toggleYtSettingsRowPin(p.id, p.rowId);
-      return true;
-    case 'YTARK_YTS_ROW_HIDE':
-      toggleYtSettingsRowHidden(p.id, p.rowId);
-      return true;
     case 'YTARK_YTS_RESTORE_CONFIRM':
-      showRestoreLayoutConfirm({ refreshEditor: p.refreshEditor === true });
+      showRestoreLayoutConfirm();
       return true;
     case 'YTARK_YTS_RESTORE':
       restoreYtSettingsLayout();
-      if (p.refreshEditor) defer(() => showYtSettingsEditor({ update: true, focusId: '__restore' }));
       return true;
     case 'YTARK_DEFERRED':
       if (typeof p.action === 'string' && p.action.startsWith('YTARK_')) {

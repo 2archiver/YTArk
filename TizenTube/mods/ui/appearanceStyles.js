@@ -143,7 +143,8 @@ ${p}.ytark-entry {
   font-family: "YouTube Noto", Roboto, Arial, sans-serif;
 }
 ${p}.ytark-entry__panel {
-  width: 56rem; max-width: 90%;
+  box-sizing: border-box; width: 56rem; max-width: 90%;
+  max-height: 90vh; overflow-y: auto; overflow-wrap: break-word;
   padding: 2rem 2.5rem;
   border-radius: 1.25rem;
   background-color: ${tokens.surfaceRaised};
@@ -162,16 +163,18 @@ ${p}.ytark-entry__input {
 }
 ${p}.ytark-entry__input:focus { border-color: ${tokens.focusRing}; box-shadow: 0 0.1875rem 0 0 ${tokens.accent}; }
 ${p}.ytark-entry__status { min-height: 2rem; margin: 0.75rem 0; font-size: 1.25rem; color: ${tokens.textSecondary}; }
-${p}.ytark-entry__keys { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+${p}.ytark-entry__keys { display: flex; flex-direction: column; gap: 0.5rem; }
+${p}.ytark-entry__key-row { display: flex; gap: 0.5rem; }
 ${p}.ytark-entry__key {
-  min-width: 4.25rem; height: 3.25rem; padding: 0 0.75rem;
+  flex: 1; min-width: 0; min-height: 3.25rem; padding: 0.25rem;
+  overflow-wrap: break-word;
   font-size: 1.375rem; font-family: inherit;
   color: ${tokens.textPrimary};
   background-color: ${tokens.background};
   border: 0.0625rem solid ${tokens.divider};
   border-radius: 0.625rem;
 }
-${p}.ytark-entry__key--wide { min-width: 9rem; }
+${p}.ytark-entry__key--wide { min-width: 0; }
 ${p}.ytark-entry__key:focus, ${p}.ytark-entry__key.ytark-entry__key--focused {
   outline: 0.1875rem solid ${tokens.focusRing}; outline-offset: 0.125rem;
   background-color: ${tokens.focusRing}; color: ${tokens.focusText};
@@ -188,9 +191,11 @@ export function buildAppearanceCss(oled = OLED_TOKENS, youtube = YOUTUBE_TOKENS)
   return `/* ytark-appearance v2 */
 ${scoped(ROOT_CLASSES.oled, OLED_SURFACE_SELECTORS)} {
   background-color: ${oled.background} !important;
+  background-image: none !important;
 }
 ${scoped(ROOT_CLASSES.oled, OLED_DIALOG_SELECTORS)} {
   background-color: ${oled.background} !important;
+  background-image: none !important;
 }
 ${scoped(ROOT_CLASSES.oled, OLED_FOCUS_SELECTORS)} {
   background-color: ${oled.surfaceFocus} !important;

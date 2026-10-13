@@ -63,6 +63,11 @@ final class UpdateGuards {
         return true;
     }
 
+    /** Pending installer and selected resumable release can be different. */
+    static boolean isStaleUpdateFile(String fileName, String pending, String selected) {
+        return isStaleUpdateFile(fileName, pending) && isStaleUpdateFile(fileName, selected);
+    }
+
     /**
      * True when the device can run the release's declared minimum SDK. An
      * unknown minimum (0 or negative) is not rejected here; Android's installer

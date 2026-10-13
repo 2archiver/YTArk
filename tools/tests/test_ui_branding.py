@@ -115,7 +115,7 @@ class YTArkUiBrandingTests(unittest.TestCase):
             "Hide channel watermark",
             "Remove player dimming",
             "YTARK_SEARCH_OPEN",            # Search settings
-            "YTARK_YTS_EDITOR",             # Customize YouTube Settings
+            "YTARK_YTS_RESTORE_CONFIRM",             # Customize YouTube Settings
             "YTARK_CHANGELOG_SHOW",         # in-app changelog reader
             "v2.0.2-personal.14",           # oldest published release in the bundled history
             "configSchemaVersion",          # explicit settings migration marker

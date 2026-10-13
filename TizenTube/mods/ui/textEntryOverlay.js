@@ -212,6 +212,9 @@ export function openTextEntry(options = {}) {
 
   KEY_ROWS.forEach((row, rowIndex) => {
     keyButtons[rowIndex] = [];
+    const keyRow = d.createElement('div');
+    keyRow.setAttribute('class', 'ytark-entry__key-row');
+    keys.appendChild(keyRow);
     row.forEach((key, colIndex) => {
       const button = d.createElement('button');
       button.setAttribute('type', 'button');
@@ -222,7 +225,7 @@ export function openTextEntry(options = {}) {
       button.textContent = keyLabel(key);
       if (wide) button.setAttribute('aria-label', keyLabel(key));
       button.__ytarkKey = { row: rowIndex, col: colIndex, key };
-      keys.appendChild(button);
+      keyRow.appendChild(button);
       keyButtons[rowIndex][colIndex] = button;
     });
   });
@@ -357,7 +360,9 @@ export function openTextEntry(options = {}) {
     if (target === input) {
       if (code === ENTER) {
         swallow(event, true);
-        close('submit');
+        // Remote OK requests the IME; it must not dismiss the editable field.
+        // Done on the key grid submits on engines without an IME bridge.
+        if (!event.repeat) focusInput();
         return;
       }
       if (code === 40) {
@@ -382,7 +387,7 @@ export function openTextEntry(options = {}) {
       }
       if (code === ENTER || code === 32) {
         swallow(event, true);
-        press(keyInfo.key);
+        if (!event.repeat) press(keyInfo.key);
         return;
       }
       if (code === 8) {

@@ -134,7 +134,6 @@ describe('one authoritative control per behaviour', () => {
       'player.quality': 'preferredVideoQuality',
       'player.hideRelated': 'hideRelatedVideosPlayer',
       'nav.guideEntry': 'enableYtarkGuideEntry',
-      'nav.ytSettingsLayout': null,
     };
     for (const [id, key] of Object.entries(expected)) {
       const node = registry.findNode(tree(), id) || registry.findNode(tree(), id.replace('nav.', ''));
@@ -170,7 +169,9 @@ describe('About YTArk', () => {
     assert.deepEqual(rows, ['Build details', 'Third-party notices and licences', 'Version history'],
       'the About dialog is short and every extra detail is one D-pad press away');
     const lines = items.map(messageText).filter(Boolean);
-    assert.deepEqual(lines, ['About: YTArk is an independent Android TV application. YouTube remains a Google service.'], 'one closing legal line, nothing between the rows');
+    assert.ok(lines.includes('YouTube Frontend Version: Unavailable'));
+    assert.ok(lines.some(line => line.startsWith('Cobalt Version/Commit: Unavailable')));
+    assert.equal(lines.at(-1), 'About: YTArk is an independent Android TV application. YouTube remains a Google service.');
     for (const line of lines) assert.ok(line.length <= 160, 'lines wrap instead of overflowing at 720p');
     const buttons = items.filter(item => item && item.compactLinkRenderer);
     for (const button of buttons) {
@@ -192,9 +193,9 @@ describe('About YTArk', () => {
     assert.ok(build.openPopupAction.popup.overlaySectionRenderer.overlay.overlayTwoPanelRenderer
       .actionPanel.overlayPanelRenderer.content.scrollPaneRenderer, 'D-pad scrollable');
     const details = modalItems(build).map(messageText).join('\n');
-    assert.match(details, /versionName: 2\.8\.0/);
-    assert.match(details, /versionCode: 2080000/);
-    assert.match(details, /YTArk userscript: s27/);
+    assert.match(details, /versionName: 2\.9\.0/);
+    assert.match(details, /versionCode: 2090000/);
+    assert.match(details, /YTArk userscript: s28/);
     assert.match(details, /Android base: v2\.0\.2/);
 
     resolveCommand({ customAction: { action: 'YTARK_PANEL_SHOW', parameters: { id: 'about' } } });
@@ -217,7 +218,7 @@ describe('About YTArk', () => {
     resolveCommand({ customAction: { action: 'YTARK_PANEL_SHOW', parameters: { id: 'about' } } });
     const panel = lastModal(recorded, 'ytark-panel-about');
     const lines = modalItems(panel).map(messageText).filter(Boolean);
-    assert.ok(lines.includes('YouTube TV version: v2.20250101.01.00'));
+    assert.ok(lines.includes('YouTube Frontend Version: v2.20250101.01.00'));
     assert.equal(header(panel).subtitle, 'YTArk 2.3', 'and stays separate from the YTArk version');
     delete windowStub.yt;
   });
@@ -230,7 +231,7 @@ describe('About YTArk', () => {
     await tick(20);
     resolveCommand({ customAction: { action: 'YTARK_PANEL_SHOW', parameters: { id: 'about' } } });
     const panel = lastModal(recorded, 'ytark-panel-about');
-    assert.equal(header(panel).subtitle, 'YTArk 2.8 (build metadata)', "this build's own version, labelled by source");
+    assert.equal(header(panel).subtitle, 'YTArk 2.9 (build metadata)', "this build's own version, labelled by source");
     const lines = modalItems(panel).map(messageText).filter(Boolean);
     assert.ok(lines.some(line => /packaging metadata/.test(line)), 'the source is stated');
     const reread = findRow(panel, 'Read the installed version again');
@@ -266,8 +267,7 @@ describe('YTArk and YouTube settings are told apart', () => {
     assert.match(root.description, /YTArk's own/);
     assert.match(root.description, /YouTube TV app/);
     const layout = registry.findNode(tree(), 'ytSettingsLayout');
-    assert.ok(layout, 'the YouTube Settings layout editor stays in Navigation');
-    assert.equal(layout.title, 'Customize YouTube Settings');
+    assert.equal(layout, null, 'the redundant layout editor is no longer advertised');
     // Upstream account/privacy rows are not duplicated into the YTArk tree: no
     // YTArk node writes a YouTube-owned client setting.
     for (const { id } of nodeTexts()) {

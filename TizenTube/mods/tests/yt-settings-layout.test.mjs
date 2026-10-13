@@ -3,8 +3,7 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  setupEnvironment, initEnglish, lastModal, modalItems, rowTitle, rowSubtitle, findRow, press, selectedIndex,
-  toasts, tick,
+  setupEnvironment, initEnglish, lastModal, findRow, press,
 } from './helpers/ytlr-harness.mjs';
 
 const { recorded } = setupEnvironment();
@@ -172,37 +171,13 @@ describe('ordering, hiding and pinning by stable ids', () => {
   });
 });
 
-describe('editor flow through the real command path', () => {
-  it('moves a section with Move down, keeps focus logic and refreshes the list on Done', async () => {
-    PatchSettings(settingsResponse());
-    resolveCommand({ customAction: { action: 'YTARK_YTS_EDITOR', parameters: {} } });
-    let editor = lastModal(recorded, 'ytark-yt-settings-editor');
-    const generalRow = findRow(editor, 'General');
-    assert.match(rowSubtitle(generalRow), /Shown · Position 3 of 7/);
-    await press(resolveCommand, generalRow);
-    let section = lastModal(recorded, 'ytark-yt-settings-section');
-    await press(resolveCommand, findRow(section, 'Move down'));
-    section = lastModal(recorded, 'ytark-yt-settings-section');
-    assert.equal(section.openPopupAction.updateAction, true, 'the action panel updates in place');
-    assert.equal(selectedIndex(section), 1, 'focus stays on Move down');
-    assert.equal(configRead('ytSettingsLayout').order.indexOf('SETTING_CAT_TVHTML5_GENERAL'), 3);
-    await press(resolveCommand, findRow(section, 'Done'));
-    await tick(10);
-    editor = lastModal(recorded, 'ytark-yt-settings-editor');
-    const titles = modalItems(editor).map(rowTitle);
-    assert.equal(titles.indexOf('General'), 3);
-    assert.equal(selectedIndex(editor), 3, 'focus follows the moved section');
+describe('legacy layout restore through the real command path', () => {
+  it('does not dispatch retired editor actions', async () => {
+    const { handleYtarkAction } = await import('../ui/ytarkActions.js');
+    for (const action of ['YTARK_YTS_EDITOR', 'YTARK_YTS_SECTION', 'YTARK_YTS_MOVE', 'YTARK_YTS_ROWS', 'YTARK_YTS_ROW_PIN']) {
+      assert.equal(handleYtarkAction(action, {}), false);
+    }
   });
-
-  it('refuses to hide a protected section with an explanation', async () => {
-    PatchSettings(settingsResponse());
-    resolveCommand({ customAction: { action: 'YTARK_YTS_SECTION', parameters: { id: 'SETTING_CAT_TVHTML5_ABOUT' } } });
-    const section = lastModal(recorded, 'ytark-yt-settings-section');
-    await press(resolveCommand, findRow(section, 'Always shown'));
-    assert.deepEqual(configRead('ytSettingsLayout').hidden, []);
-    assert.match(toasts(recorded).at(-1).subtitle, /stay visible/);
-  });
-
   it('restores only the layout after a confirmation that names its scope', async () => {
     PatchSettings(settingsResponse());
     configWrite('enableAdBlock', false);
@@ -217,17 +192,4 @@ describe('editor flow through the real command path', () => {
     assert.equal(JSON.stringify(configRead('ytSettingsCatalog')), catalogBefore, 'detected sections stay');
   });
 
-  it('pins and hides entries from the entries list', async () => {
-    PatchSettings(settingsResponse());
-    resolveCommand({ customAction: { action: 'YTARK_YTS_ROWS', parameters: { id: 'SETTING_CAT_TVHTML5_GENERAL' } } });
-    const rows = lastModal(recorded, 'ytark-yt-settings-rows');
-    await press(resolveCommand, findRow(rows, 'Autoplay next video'));
-    let row = lastModal(recorded, 'ytark-yt-settings-row');
-    await press(resolveCommand, findRow(row, 'Pin to the top'));
-    assert.deepEqual(configRead('ytSettingsLayout').pinned, ['item:AUTONAV']);
-    row = lastModal(recorded, 'ytark-yt-settings-row');
-    await press(resolveCommand, findRow(row, 'Hide entry'));
-    assert.deepEqual(configRead('ytSettingsLayout').hiddenRows, ['item:AUTONAV']);
-    assert.deepEqual(configRead('ytSettingsLayout').pinned, [], 'a hidden entry is not also pinned');
-  });
 });
