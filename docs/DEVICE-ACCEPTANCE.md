@@ -10,7 +10,7 @@ until a named device has recorded it. Nothing here is inferred from a previous
 release: evidence belongs to the exact APK whose sha256 is written below.
 
 Device: `__________` (model, Google TV / Android TV version, `ro.product.cpu.abilist`)
-Installed before: `__________` · Candidate/release: `YTArk-v2.6.0-armv7.apk`
+Installed before: `__________` · Candidate/release: `YTArk-v2.7.0-armv7.apk`
 APK sha256: `__________` · Signer SHA-256 matches `signing/YTArk-cert-sha256.txt`: [ ]
 
 | # | Check | Result |
@@ -51,6 +51,11 @@ APK sha256: `__________` · Signer SHA-256 matches `signing/YTArk-cert-sha256.tx
 | 34 | After a completed installation, the next launch or check reads the installed versionCode and reports the new version; the installer result code alone is never reported as success | NOT RUN |
 | 35 | Storage: the download is app-private (no storage permission prompt appears); a too-small free-space case is refused before transfer | NOT RUN |
 | 36 | Bootstrap: a 2.5 install is updated to 2.6 by one manual install of the signed APK over the existing app; sign-in, data and preferences are kept | NOT RUN |
+| 37 | Search settings: selecting Search focuses the real text field and the device's own keyboard appears where the device provides one; typing filters results; Clear empties the field; Back closes the keyboard first, then the panel, and focus returns to the row Search was opened from | NOT RUN |
+| 38 | Search settings without a system keyboard: the on-screen key grid types, the panel says the on-screen keys are in use, and nothing pretends a platform keyboard was requested | NOT RUN |
+| 39 | About YTArk at 720p, 1080p and 4K with TV display scaling: the header shows "About YTArk" and "YTArk <version>", no row overlaps or clips, Build details / Third-party notices and licences / Version history each open and scroll with the D-pad, and Back returns to About | NOT RUN |
+| 40 | YTArk Updates is the only route to the version history: no "What's new" row exists in the top-level YTArk Settings menu or on the YouTube Settings page's YTArk section; the post-update notice points to YTArk Updates | NOT RUN |
+| 41 | Changelog: every version row leads with one short line and the 2.6 entry reads "2.6 — Added Full Auto Updating"; long versions scroll with the D-pad; Back returns | NOT RUN |
 
 Record the result of each row with the date, the device, the APK sha256 and a link
 to the evidence. Do not mark a row passed without that evidence, and do not reuse

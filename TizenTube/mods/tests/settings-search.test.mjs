@@ -14,6 +14,7 @@ await initEnglish();
 const { configRead, configWrite, configKeys, configDefault } = await import('../config.js');
 const registry = await import('../ui/settingsRegistry.js');
 const search = await import('../ui/settingsSearch.js');
+const textEntry = await import('../ui/textEntryOverlay.js');
 const resolve = await import('../resolveCommand.js');
 resolve.patchResolveCommand();
 const resolveCommand = resolve.default;
@@ -25,6 +26,11 @@ const allIds = query => search.searchSettings(index(), query).map(result => resu
 beforeEach(() => {
   recorded.length = 0;
   search.resetSearchState();
+  // No text panel leaks into the next test: opening Search now focuses the real
+  // field straight away, so a test that does not close it would keep its
+  // capture-phase key listener installed.
+  const open = textEntry.activeTextEntry();
+  if (open) open.close('replaced');
 });
 
 describe('shared registry', () => {
@@ -221,9 +227,49 @@ describe('search screen', () => {
     assert.match(toasts(recorded).at(-1).subtitle, /frame-rate bridge/);
   });
 
-  it('types with the on-screen keyboard and Enter, and Back closes the panel without leaving search', async () => {
+  it('opens a real, focused text field and asks only the platform APIs that exist', () => {
+    // The pinned Cobalt base has no keyboard/IME method on its JavaScript
+    // bridge: YTArk must not call one and must not pretend it did.
+    assert.equal(typeof windowStub.h5vcc.tizentube.ShowKeyboard, 'undefined');
+    assert.equal(typeof windowStub.h5vcc.tizentube.showSoftInput, 'undefined');
+    const calls = [];
+    windowStub.navigator = { virtualKeyboard: { show: () => calls.push('virtualKeyboard') } };
+    try {
+      resolveCommand({ customAction: { action: 'YTARK_SEARCH_OPEN', parameters: {} } });
+      const panel = doc.querySelector('[data-ytark-text-entry="true"]');
+      assert.ok(panel, 'opening Search mounts the text panel');
+      const input = panel.querySelector('input');
+      assert.equal(input.tagName.toLowerCase(), 'input', 'a real editable field, not a look-alike');
+      assert.equal(input.getAttribute('type'), 'text');
+      assert.equal(doc.activeElement, input, 'the field takes the caret as soon as it mounts');
+      assert.deepEqual(calls, ['virtualKeyboard'], 'the standard VirtualKeyboard API is used when the engine has it');
+      assert.equal(panel.getAttribute('data-ytark-keyboard'), 'virtualKeyboard');
+      assert.equal(panel.querySelectorAll('[data-key]').length > 20, true, 'the remote key grid stays available');
+    } finally {
+      delete windowStub.navigator;
+    }
+  });
+
+  it('re-asserts the caret if the frontend moves focus, and never fights the key grid', async () => {
     resolveCommand({ customAction: { action: 'YTARK_SEARCH_OPEN', parameters: {} } });
+    const panel = doc.querySelector('[data-ytark-text-entry="true"]');
+    const input = panel.querySelector('input');
+    assert.equal(panel.getAttribute('data-ytark-keyboard'), 'on-screen', 'feature-detected, never assumed');
+    assert.match(panel.querySelector('.ytark-entry__hint').textContent, /on-screen/i,
+      'the panel says which keyboard it is using');
+    // The frontend's own focus handling moves focus out right after mounting.
+    doc.body.focus();
+    await tick(120);
+    assert.equal(doc.activeElement, input, 'the field takes the caret back while it is still the target');
+    // A deliberate move onto the key grid is the user's choice and is not undone.
+    windowStub.dispatchEvent(keyEvent('keydown', 40, input));
+    await tick(400);
+    assert.notEqual(doc.activeElement, input, 'moving down to the keys is respected');
+  });
+
+  it('types with the on-screen keyboard and Enter, and Back closes the panel without leaving search', async () => {
     const keydownBefore = (windowStub.listeners.get('keydown') || []).length;
+    resolveCommand({ customAction: { action: 'YTARK_SEARCH_OPEN', parameters: {} } });
     resolveCommand({ customAction: { action: 'YTARK_SEARCH_EDIT', parameters: {} } });
     const panel = doc.querySelector('[data-ytark-text-entry="true"]');
     assert.ok(panel, 'the text panel opens');

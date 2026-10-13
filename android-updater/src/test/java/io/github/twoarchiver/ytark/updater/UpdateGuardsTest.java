@@ -5,7 +5,7 @@ import java.io.IOException;
 /** Storage, cleanup, minimum-SDK and release-page rules; runs on a host JRE. */
 public final class UpdateGuardsTest {
     private static final long MIB = 1024L * 1024L;
-    private static final String CURRENT = "YTArk-v2.6.0-armv7.apk";
+    private static final String CURRENT = "YTArk-v2.7.0-armv7.apk";
 
     public static void main(String[] args) throws IOException {
         freeSpaceBudgetIncludesTheSafetyMargin();
@@ -75,9 +75,9 @@ public final class UpdateGuardsTest {
     }
 
     private static void officialPageNeedsACleanTag() throws IOException {
-        assertEquals("https://github.com/2archiver/YTArk/releases/tag/v2.6.0",
-                UpdateGuards.officialReleasePage("v2.6.0"), "clean tag gives its release page");
-        String[] unsafe = { "2.6.0", "v2.6", "v2.6.0-rc1", "v2.6.0/../x", "", null };
+        assertEquals("https://github.com/2archiver/YTArk/releases/tag/v2.7.0",
+                UpdateGuards.officialReleasePage("v2.7.0"), "clean tag gives its release page");
+        String[] unsafe = { "2.7.0", "v2.7", "v2.7.0-rc1", "v2.7.0/../x", "", null };
         for (String tag : unsafe) {
             try {
                 UpdateGuards.officialReleasePage(tag);

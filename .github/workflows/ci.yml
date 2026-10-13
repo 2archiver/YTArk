@@ -72,12 +72,14 @@ jobs:
           npm run build
           node --check ../dist/userScript.js
           grep -q "YouTube Premium" ../dist/userScript.js
-          # 2.3-2.6 features and the bundled changelog must be in the artefact.
+          # 2.3-2.7 features and the bundled changelog must be in the artefact.
           for needle in ytark-theme-oled ytark-no-player-scrim featuredChannel YTARK_SEARCH_OPEN \
               YTARK_YTS_EDITOR YTARK_CHANGELOG_SHOW v2.0.2-personal.14 configSchemaVersion \
               enableYtarkGuideEntry recheck-arch "Could not confirm this device" \
               YTARK_GUIDE_SETTINGS_OPEN YTARK_VERSION_REREAD apkAsset \
-              ytark-user-agent-retired ytLrOverlayPanelRendererContent "Newer than the latest stable release"; do
+              ytark-user-agent-retired ytLrOverlayPanelRendererContent "Newer than the latest stable release" \
+              virtualKeyboard data-ytark-keyboard about.buildInfo about.notices \
+              "Third-party notices and licences" "Added Full Auto Updating"; do
             grep -q "$needle" ../dist/userScript.js || { echo "Bundle is missing $needle" >&2; exit 1; }
           done
           # The 2.5 removals must not survive as live code. Two files name the
@@ -124,12 +126,12 @@ jobs:
           python3 tools/check_no_secrets.py --history
           python3 tools/check_workflow_policy.py
           python3 tools/validate_release.py emit-env --file "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'VERSION_NAME=2.6.0' "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'DISPLAY_VERSION=2.6' "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'VERSION_CODE=2060000' "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'VERSION_TAG=v2.6.0' "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'SCRIPT_TAG=s25' "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'APK_ARMV7=YTArk-v2.6.0-armv7.apk' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'VERSION_NAME=2.7.0' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'DISPLAY_VERSION=2.7' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'VERSION_CODE=2070000' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'VERSION_TAG=v2.7.0' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'SCRIPT_TAG=s26' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'APK_ARMV7=YTArk-v2.7.0-armv7.apk' "$RUNNER_TEMP/ytark-release.env"
           # ARMv7 is the only published architecture; an ARM64 asset name must
           # not exist anywhere in the release environment or the active pipeline.
           if grep -q 'ARM64' "$RUNNER_TEMP/ytark-release.env"; then

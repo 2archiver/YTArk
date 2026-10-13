@@ -82,7 +82,8 @@ describe('structural detection and idempotent insertion', () => {
     assert.equal(ids(reparsed).filter(id => id === layout.YTARK_CATEGORY_ID).length, 1);
     const ytark = cat(response, layout.YTARK_CATEGORY_ID);
     assert.deepEqual(ytark.items.map(row => row.settingActionRenderer.itemId),
-      ['tizentube_open_action', 'ytark_search_action', 'ytark_changelog_action', 'ytark_updates_action']);
+      ['tizentube_open_action', 'ytark_search_action', 'ytark_updates_action'],
+      'What\'s new is not duplicated on the YouTube Settings page: it lives in YTArk Updates');
   });
 
   it('records the sections without any account identity', () => {

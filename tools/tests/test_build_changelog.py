@@ -19,6 +19,7 @@ import validate_release  # noqa: E402
 
 # Every stable release published on GitHub (gh release list), newest first.
 PUBLISHED = [
+    ("2.6.0", "v2.6.0", "2026-10-13", 2060000, "s25"),
     ("2.5.0", "v2.5.0", "2026-10-11", 2050000, "s24"),
     ("2.4.0", "v2.4.0", "2026-10-11", 2040000, "s23"),
     ("2.3.0", "v2.3.0", "2026-10-11", 2030000, "s22"),
@@ -109,8 +110,62 @@ class ChangelogFormatTests(unittest.TestCase):
                 with self.assertRaises(build_changelog.ChangelogError):
                     parse(text)
 
+    def test_a_published_version_may_be_one_summary_line(self):
+        text = textwrap.dedent("""\
+            # Changelog
+
+            ## [1.1.0] — Unreleased
+
+            > Not yet published. Planned tag `v1.1.0` · versionCode 1010000 · userscript `s2`
+
+            Summary line.
+
+            ### Added
+            - Current work.
+
+            ## [1.0.0] — 2026-01-02
+
+            > Published 2026-01-02 10:00 UTC as [App 1.0](https://github.com/2archiver/YTArk/releases/tag/v1.0.0) · tag `v1.0.0` · versionCode 1000000 · userscript `s1`
+
+            One short line for an older release.
+            """)
+        model = parse(text)
+        self.assertEqual(model["entries"][1]["sections"], [])
+        self.assertEqual(model["entries"][1]["summary"], "One short line for an older release.")
+
+    def test_an_empty_version_is_rejected(self):
+        text = textwrap.dedent("""\
+            # Changelog
+
+            ## [1.1.0] — Unreleased
+
+            > Not yet published. Planned tag `v1.1.0` · versionCode 1010000 · userscript `s2`
+
+            ### Added
+            - Current work.
+
+            ## [1.0.0] — 2026-01-02
+
+            > Published 2026-01-02 10:00 UTC as [App 1.0](https://github.com/2archiver/YTArk/releases/tag/v1.0.0) · tag `v1.0.0` · versionCode 1000000 · userscript `s1`
+            """)
+        with self.assertRaises(build_changelog.ChangelogError):
+            parse(text)
+
+    def test_the_newest_entry_keeps_sectioned_notes(self):
+        text = textwrap.dedent("""\
+            # Changelog
+
+            ## [1.1.0] — Unreleased
+
+            > Not yet published. Planned tag `v1.1.0` · versionCode 1010000 · userscript `s2`
+
+            Only a summary.
+            """)
+        with self.assertRaises(build_changelog.ChangelogError):
+            parse(text)
+
     def test_versions_sort_like_android_version_codes(self):
-        ordered = ["2.6.0", "2.5.0", "2.4.0", "2.3.0", "2.2.0", "2.1.2", "2.1.0", "2.0.4", "2.0.4-ytark.17", "2.0.4-ytark.16", "2.0.2-personal.14"]
+        ordered = ["2.7.0", "2.6.0", "2.5.0", "2.4.0", "2.3.0", "2.2.0", "2.1.2", "2.1.0", "2.0.4", "2.0.4-ytark.17", "2.0.4-ytark.16", "2.0.2-personal.14"]
         keys = [build_changelog.version_key(version) for version in ordered]
         self.assertEqual(keys, sorted(keys, reverse=True))
         for version in ordered:
@@ -144,6 +199,15 @@ class RepositoryChangelogTests(unittest.TestCase):
         headings = [section["heading"] for section in newest["sections"]]
         for required in ("Added", "Defaults and migration", "Fixed", "Known limitations", "Validation"):
             self.assertIn(required, headings)
+
+    def test_published_releases_stay_one_liners(self):
+        """The simplified history: one short, user-facing line per release."""
+        for entry in self.model["entries"]:
+            self.assertTrue(entry["summary"], entry["version"])
+            self.assertLessEqual(len(entry["summary"]), 140, entry["version"])
+            if entry["status"] == "published":
+                items = sum(len(section["items"]) for section in entry["sections"])
+                self.assertLessEqual(items, 2, f"{entry['version']} should stay a one-line summary")
 
     def test_drafts_are_notes_not_versions(self):
         versions = [entry["version"] for entry in self.model["entries"]]
