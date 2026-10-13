@@ -205,6 +205,7 @@ describe('OLED Black coverage and lifecycle', () => {
       const block = blocks().find(item => item.selectors.some(entry => entry.includes(needle)));
       assert.ok(block, `${selector} is covered by the OLED rule`);
       assert.match(block.declarations, /background-color: #000000 !important/, `${selector} is true black`);
+      assert.match(block.declarations, /background-image: none !important/, 'surface gradients cannot cover black');
     }
   });
 

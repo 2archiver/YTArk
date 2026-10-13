@@ -156,6 +156,8 @@ describe('the YouTube frontend version, kept separate from the YTArk version', (
     assert.equal(youtubeFrontendVersion(), '');
     windowStub.yt = { config_: { INNERTUBE_CONTEXT: { clientInformation: { clientVersion: 'v2.20250101.01.00' } } } };
     assert.equal(youtubeFrontendVersion(), 'v2.20250101.01.00');
+    windowStub.yt = { config_: { INNERTUBE_CONTEXT: { client: { clientVersion: '2.20261013.01.00' } } } };
+    assert.equal(youtubeFrontendVersion(), '2.20261013.01.00');
     windowStub.yt = { config_: { INNERTUBE_CLIENT_VERSION: '2.20250101' } };
     assert.equal(youtubeFrontendVersion(), '2.20250101');
     windowStub.yt = { config_: { INNERTUBE_CLIENT_VERSION: 'not-a-version' } };

@@ -315,6 +315,8 @@ function frontendCandidates() {
     const config = typeof window !== 'undefined' && window.yt && window.yt.config_ ? window.yt.config_ : null;
     if (!config) return [];
     return [
+      config.INNERTUBE_CONTEXT && config.INNERTUBE_CONTEXT.client
+        && config.INNERTUBE_CONTEXT.client.clientVersion,
       config.INNERTUBE_CONTEXT && config.INNERTUBE_CONTEXT.clientInformation
         && config.INNERTUBE_CONTEXT.clientInformation.clientVersion,
       config.INNERTUBE_CLIENT_VERSION,

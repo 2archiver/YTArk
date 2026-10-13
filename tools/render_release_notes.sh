@@ -65,75 +65,14 @@ cat > NOTICE.md <<EOF
 EOF
 
 cat > release-notes.md <<EOF
-# YTArk ${DISPLAY_VERSION}
-
-An independent Android TV / Google TV build based on TizenTubeCobalt ${BASE_TAG}.
-The package retains YouTube's TV frontend and Cobalt player; this APK has passed
-source, packaging, compiled-manifest, ABI, checksum, alignment and signer checks.
-Physical TV installation and playback are not claimed unless separately recorded
-on a named device.
-
-| | |
-|---|---|
-| Release | \`${VERSION_TAG}\` |
-| Android package | \`${APP_ID}\` |
-| Version | ${DISPLAY_VERSION} (${VERSION_NAME}; versionCode ${VERSION_CODE}) |
-| Release signing certificate | SHA-256 \`${SIGNING_CERT_SHA256}\` |
-| APK (only architecture) | \`${APK_ARMV7}\` (armeabi-v7a) |
-| Architectures published | **ARMv7 (\`armeabi-v7a\`) only** — no \`arm64-v8a\` asset |
-| Upstream base | TizenTubeCobalt \`${BASE_TAG}\` |
-
-## What changed in this release
+YTArk ${DISPLAY_VERSION}
 
 ${WHAT_CHANGED}
 
-## Choose and install the APK
+ARMv7 (armeabi-v7a): [Download APK](https://github.com/${GITHUB_REPOSITORY}/releases/download/${VERSION_TAG}/${APK_ARMV7}). Not for arm64-v8a-only devices; a 64-bit CPU alone is insufficient. 4K does not select an APK architecture.
 
-Exactly one APK is published: \`${APK_ARMV7}\` for 32-bit \`armeabi-v7a\`
-userspace. **4K does not select an APK architecture**, and neither does the
-device name or the Android version. A 64-bit
-CPU does not by itself establish whether the OS supports 32-bit applications:
-check \`ro.product.cpu.abilist\` (or the equivalent ABI list from a device
-diagnostic tool) and install only when \`armeabi-v7a\` is reported. On a system
-whose ABI list contains only \`arm64-v8a\`, x86 or another 64-bit ABI, this
-ARMv7-only release is **not installable** — installing is not expected to work
-and no renamed or stripped APK should be used instead.
+Known issues: TV keyboard, native routes and installer require device verification.
 
-Download the versioned APK above, copy it to Google TV (USB or a trusted local
-transfer tool), open it with a file manager, and approve the Android installer.
-Unknown-app installation permission remains a manual Android Settings approval.
-For updates, use the YTArk update screen or install the same package/signer
-build over the existing app; do not uninstall as a default troubleshooting step.
-App data, cookies and the Google session are preserved by an in-place update.
-
-## Update checks and installs
-
-Settings → YTArk Updates checks the official stable release metadata over HTTPS.
-Installs are user-confirmed only. The bundled native updater's own prompt and
-PackageInstaller path are **pending device verification** for this release (see
-the runtime status above). Until that is recorded, use the official release page.
-
-## Upstream YouTube runtime
-
-The YouTube TV frontend and the Cobalt player come from the pinned
-TizenTubeCobalt ${BASE_TAG} base and the frontend is delivered by YouTube's own
-service, so no bundled frontend version is advertised. TizenTubeCobalt
-${BASE_TAG} is also the newest stable release of that project, so this version
-keeps the known-working upstream base instead of adopting an unverified one.
-
-## Privacy
-
-YTArk adds no analytics, telemetry, or crash reporting and never reads or logs
-Google account identifiers, cookies, or OAuth tokens — sign-in stays in the
-stock YouTube TV stack between your TV and Google. SponsorBlock lookups send
-only hashed video-ID prefixes; update checks reach api.github.com over HTTPS.
-Full disclosure: \`docs/PRIVACY.md\` in the source repository.
-
-## Integrity and source
-
-Verify the APK against \`SHA256SUMS.txt\`. The release also includes the pinned
-TizenTubeCobalt base checksum, the exact userscript bundle, and \`NOTICE.md\`.
-Source and upstream attribution: https://github.com/${GITHUB_REPOSITORY}
-and TizenTubeCobalt ${BASE_TAG}.
+<!-- Package ${APP_ID}; ${VERSION_NAME}; versionCode ${VERSION_CODE}; base TizenTubeCobalt ${BASE_TAG}. -->
 EOF
 cp NOTICE.md release-assets/NOTICE.md

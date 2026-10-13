@@ -1779,10 +1779,13 @@ final class YtarkUpdater {
             if (!directory.isDirectory()) return new UpdateFileCleanup(0L, 0, false, true);
             try {
                 File canonicalDirectory = directory.getCanonicalFile();
+                if (!canonicalDirectory.equals(directory.getAbsoluteFile())) {
+                    return new UpdateFileCleanup(0L, 0, false, true);
+                }
                 ReleaseInfo pending = pendingRelease(app);
                 ReleaseInfo selected = selectedRelease(app);
-                String keep = pending != null ? pending.assetName
-                        : selected == null ? "" : selected.assetName;
+                String keep = pending == null ? "" : pending.assetName;
+                String keepSelected = selected == null ? "" : selected.assetName;
                 File[] files = canonicalDirectory.listFiles();
                 if (files == null) return new UpdateFileCleanup(0L, 0, false, true);
                 long bytes = 0L;
@@ -1791,8 +1794,9 @@ final class YtarkUpdater {
                 for (File file : files) {
                     try {
                         File canonical = file.getCanonicalFile();
-                        if (!canonicalDirectory.equals(canonical.getParentFile()) || !canonical.isFile()
-                                || !UpdateGuards.isStaleUpdateFile(canonical.getName(), keep)) continue;
+                        if (!canonical.equals(file.getAbsoluteFile())
+                                || !canonicalDirectory.equals(canonical.getParentFile()) || !canonical.isFile()
+                                || !UpdateGuards.isStaleUpdateFile(canonical.getName(), keep, keepSelected)) continue;
                         long size = canonical.length();
                         if (canonical.delete()) {
                             bytes += size;

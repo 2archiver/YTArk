@@ -21,11 +21,11 @@ Conventions:
 - Capabilities inherited from TizenTube and TizenTubeCobalt are listed under
   "Upstream base and inherited capabilities", not as YTArk additions.
 
-## [2.8.0] — Unreleased
+## [2.9.0] — Unreleased
 
-> Not yet published. Planned tag `v2.8.0` · versionCode 2080000 · userscript `s27` · one ARMv7 APK (armeabi-v7a) on TizenTubeCobalt v2.0.2. This is intended as a direct, signed in-place update to published 2.7.0; package ID, signing identity and app data directory stay unchanged.
+> Not yet published. Planned tag `v2.9.0` · versionCode 2090000 · userscript `s28` · one ARMv7 APK (armeabi-v7a) on TizenTubeCobalt v2.0.2. This is intended as a direct, signed in-place update to published 2.7.0; package ID, signing identity and app data directory stay unchanged.
 
-Safer storage, opt-in playback recovery and hourly updates.
+Settings controls and version information.
 
 ### Added
 - **Cache & Storage for the TV remote.** Measures Android's app-cache directories off the UI thread and can clear only old files there; recently modified or unstatable files are retained. The updater's private files are a separate control. The operation does not scan profile or local-storage directories outside those cache roots, or touch cookies, account data, preferences, databases, watch position, downloads or installer-held APKs. Pause playback first.
@@ -42,6 +42,12 @@ Safer storage, opt-in playback recovery and hourly updates.
 - Native automatic checks and downloads default **on** for this new updater preference. Explicit off choices are retained. The update remains compatible with the published 2.7.0 package and signing identity; no uninstall, data-directory change or Cobalt engine rebuild is part of this update.
 
 ### Fixed
+- Search input stays open when pressing OK; Done submits the query.
+- Removed the redundant YouTube Settings editor; existing layouts and their restore action remain.
+- About explicitly reports unavailable frontend versions and recognizes the runtime client version field.
+- OLED surface gradients no longer cover the black background; full YouTube coverage needs device testing.
+- Update-file cleanup requires confirmation and protects both pending installation and resumable downloads.
+- Native settings use stable focus IDs and retain permission-return state across activity recreation.
 - Automatic download selection respects skipped/cancelled releases and preserves matching partial files for an explicit resume. Work interrupted by an app restart is reconciled without treating an installer hand-off as a completed install.
 - Playback recovery cancels scheduled attempts on navigation and suspends them during PiP; an error arriving after a media load event is not mistaken for healthy playback.
 
@@ -50,7 +56,7 @@ Safer storage, opt-in playback recovery and hourly updates.
 - The pinned base remains TizenTubeCobalt v2.0.2; the Cobalt engine and YouTube TV frontend are not upgraded here. Only ARMv7 (`armeabi-v7a`) is supported by the published release line.
 
 ### Validation
-- This 2.8.0 entry is unpublished. Test, build and device-run results for the candidate are recorded separately; no release has been published from this work.
+- This 2.9.0 entry is unpublished. Test, build and device-run results for the candidate are recorded separately; no release has been published from this work.
 
 ## [2.7.0] — 2026-10-13
 

@@ -291,7 +291,12 @@ describe('search screen', () => {
     input.value = 'oled';
     input.focus();
     windowStub.dispatchEvent(keyEvent('keydown', 13, input));
-    assert.equal(doc.querySelector('[data-ytark-text-entry="true"]'), null, 'Enter closes the panel');
+    assert.ok(doc.querySelector('[data-ytark-text-entry="true"]'), 'OK keeps the real input open');
+    assert.equal(doc.querySelectorAll('.ytark-entry__key-row').length, 6, 'visual rows match the DPAD model');
+    const done = doc.querySelector('[data-key="done"]');
+    done.focus();
+    windowStub.dispatchEvent(keyEvent('keydown', 13, done));
+    assert.equal(doc.querySelector('[data-ytark-text-entry="true"]'), null, 'Done submits');
     assert.equal(search.searchState().query, 'oled');
     const modal = lastModal(recorded, search.SEARCH_MODAL_ID);
     assert.equal(modal.openPopupAction.updateAction, true);

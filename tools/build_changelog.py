@@ -324,17 +324,32 @@ def release_notes_section(model: dict, version: str) -> str:
     entry = next((item for item in model["entries"] if item["version"] == version), None)
     if entry is None:
         raise ChangelogError(f"CHANGELOG.md has no entry for {version}")
-    lines: list[str] = []
-    if entry["summary"]:
-        lines += [entry["summary"], ""]
-    for section in entry["sections"]:
-        lines.append(f"### {section['heading']}")
-        lines.append("")
+    # Release pages are summaries, not copies of the technical changelog.
+    lines = [entry["summary"], ""] if entry["summary"] else []
+    bullets = []
+    priority = {"Fixed": 0, "Changed": 1, "Added": 2, "Removed": 3, "Security": 4}
+    for section in sorted(entry["sections"], key=lambda part: priority.get(part["heading"], 9)):
+        if section["heading"] not in ("Added", "Changed", "Fixed", "Removed", "Security"):
+            continue
         for item in section["items"]:
-            lines.append(("  - " if item["nested"] else "- ") + item["text"])
-        lines.append("")
-    lines.append("The complete version history is in CHANGELOG.md and in YTArk Settings → Changelog.")
+            if item["nested"]:
+                continue
+            text = item["text"]
+            headline = re.match(r"\*\*(.+?)\*\*", text)
+            sentence = headline.group(1) if headline else re.split(r"(?<=[.!?])\s+", text)[0]
+            # Never truncate a sentence into a misleading claim. Long technical
+            # items stay in CHANGELOG.md rather than the public release body.
+            if len(sentence.split()) <= 16 and sentence not in bullets:
+                bullets.append(sentence)
+            if len(bullets) == 3:
+                break
+        if len(bullets) == 3:
+            break
+    lines.extend("- " + bullet for bullet in bullets)
+    if len(bullets) != 3 or len(" ".join(lines).split()) > 65:
+        raise ChangelogError("Release notes need three concise change sentences and a short summary (65 words maximum).")
     return "\n".join(lines).rstrip() + "\n"
+
 
 
 def display_path(path: Path) -> str:
