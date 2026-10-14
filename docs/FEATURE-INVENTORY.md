@@ -11,7 +11,7 @@ Base: TizenTubeCobalt `v2.0.2` (Cobalt runtime and YouTube TV frontend are the
 upstream ones, unchanged). YTArk adds the userscript layer and native updater.
 The complete version history is in [`CHANGELOG.md`](../CHANGELOG.md).
 
-Worktree validation on 2026-10-14: 283 Node tests and 151 Python tests passed;
+Worktree validation on 2026-10-14: 283 Node tests and 158 Python tests passed;
 the userscript built (854,340 bytes) and passed `node --check`; changelog,
 build-info, logo, launcher-art, repacker, workflow-policy and secret-scan checks
 passed. `javac`, `java`, D8, apktool and Android SDK are absent, so native Java

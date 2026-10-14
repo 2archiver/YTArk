@@ -133,7 +133,8 @@ jobs:
           # rule lives in release/bundle-contract.json — one contract shared with
           # ci.yml. Do not reintroduce a second copy of the list here: a stale
           # duplicate is exactly what stopped the 2.9 release before repacking.
-          python3 ../tools/check_bundle_contract.py
+          # Path is relative to the step's working directory (TizenTube/mods).
+          python3 ../../tools/check_bundle_contract.py
           echo "Built YTArk userscript: $(wc -c < ../dist/userScript.js) bytes, sha256 $(sha256sum ../dist/userScript.js | cut -d' ' -f1)"
 
       - name: Load release version

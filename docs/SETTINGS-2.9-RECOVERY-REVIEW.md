@@ -39,6 +39,7 @@ workflow assertions locally against a freshly built bundle.
 | `38433960172` | push `main`, PR #44 merge (`9cb0df3`) | *Build and package-check the ARMv7 APK* → step 9 “Build and test the userscript bundle” | The step carried its **own copy** of the required-symbol list and still required `YTARK_YTS_EDITOR`. PR #44 retired the layout editor, so the symbol no longer exists in the bundle (0 occurrences; the only remaining source reference is the regression test asserting the action is refused). | Step replaced by the shared bundle contract |
 | `38513241473` | push `main`, PR #45 merge (`449218f`) | same job → same step | Same stale duplicate list, untouched by PR #45 | same |
 | `38512750058` | PR #45 (`68bc9a1`) | *Userscript, vector asset, ABI, repacker and updater tests* → step 10 “Test native updater ABI, routes, install recovery, failure phases and storage contracts” | The pure-Java regression fixture `UpdateGuardsTest` called `isStaleUpdateFile("YTArk-v2.6.0-armv7.apk.part", CURRENT, …)` — passing the *active* APK where the *selected* APK belongs, so the “selected partial survives cleanup” case failed. | Repaired in `3f09d57` (“Fix selected APK cleanup regression fixture”); the next run (`38512914154`) passed |
+| `38517448417` | PR #46 (`7ea8143`) | *Userscript, vector asset, ABI, repacker and updater tests* → “Test and build the YTArk userscript” | The repaired step called the shared contract checker as `../tools/check_bundle_contract.py`, but the step runs with `working-directory: TizenTube/mods`, where `../tools` is `TizenTube/tools`. The step exited 2 before any test ran. | Path corrected to `../../tools/check_bundle_contract.py` in both workflows **and** a workflow-policy rule added, so an unreachable step path now fails locally instead of in CI |
 
 Local replay of the old step’s complete assertion list against a freshly built
 bundle (2026-10-14): 24 of 25 checks pass; the single failure is
@@ -46,6 +47,11 @@ bundle (2026-10-14): 24 of 25 checks pass; the single failure is
 Both release runs died **before** “Download and verify the pinned upstream ARMv7
 Cobalt base”, so neither ever compiled the updater, repacked, signed or
 uploaded anything; the publish job was skipped in both.
+
+The PR #46 run is the same class of failure caught one layer earlier: it is not a
+log-forensics case, because the wrong depth is provable locally —
+`python3 ../tools/check_bundle_contract.py` from `TizenTube/mods` fails with
+“No such file or directory” while every suite is green.
 
 ## 3. Repairs applied
 
@@ -76,6 +82,13 @@ uploaded anything; the publish job was skipped in both.
 5. **Identity and documentation consistency** — release identity, generated
    metadata, changelog, workflows, tests and acceptance docs now all carry the
    2.9.0 recovery identity (section 4).
+6. **Step paths are checked, not assumed** — `tools/check_workflow_policy.py`
+   now resolves every `.py`/`.sh` path a `run:` block names against that step's
+   `working-directory` (globs and `$VAR` paths handled) and fails the policy
+   check when the script is unreachable. That is exactly how the PR #46 run
+   died: the shared checker was invoked one directory too shallow. Seven
+   regressions in `tools/tests/test_workflow_script_paths.py`, including the
+   literal `../../tools/check_bundle_contract.py` assertion for both workflows.
 
 ## 4. Version and tag decision
 
@@ -197,7 +210,7 @@ audited set, not a device-observed one.
 
 | Check | Result |
 |---|---|
-| `python3 -m unittest discover -s tools/tests` | **151 passed, 0 failed, 1 skipped** (the skip is the JVM-dependent updater test compile) |
+| `python3 -m unittest discover -s tools/tests` | **158 passed, 0 failed, 1 skipped** (the skip is the JVM-dependent updater test compile) |
 | `cd TizenTube/mods && node --test tests/*.test.mjs` | **283 passed, 0 failed, 69 suites** |
 | `npm run build` + `python3 ../tools/check_bundle_contract.py` | Built 854,340 bytes; **Bundle contract OK** (39 symbols, 828,492 characters) |
 | `python3 tools/build_changelog.py --check`, `build_buildinfo.py --check` | current |
@@ -240,7 +253,7 @@ base-apk-sha256.txt`; `tools/repack_apk.py --base base/cobalt-arm.apk
 `bash tools/sign_apks.sh work`; and `tools/validate_release.py check-apk --apk
 release-assets/YTArk-v2.9.0-armv7.apk --architecture armv7 …`.
 
-Roll-up: **code-complete** for the source changes listed here (Python 151/151 with
+Roll-up: **code-complete** for the source changes listed here (Python 158/158 with
 1 javac-dependent skip; Node 283/283; built userscript 854,340 bytes and
 contract-clean); **build-pass NOT RUN** (no APK was compiled, repacked, signed or
 verified); **device-verified NOT RUN**.
