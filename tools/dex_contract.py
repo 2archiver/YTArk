@@ -58,8 +58,11 @@ def verify_apk_dex(apk):
                 if cls in defined: raise ValueError(f'Duplicate DEX class {cls}')
                 defined[cls]=dex
     required=['UpdateActivity','UpdateBootstrapProvider','PendingUpdateProvider','UpdateCheckJobService','UpdateCoordinator','UpdateState','UpdateRepository','DownloadController','ApkValidator','InstallCoordinator','UpdateSchedule','NativeUpdatesBridge','UpdaterBuildConfig']
-    for cls in [f'Lio/github/twoarchiver/ytark/updater/{n};' for n in required]+['Lkotlin/jvm/internal/Intrinsics;','Lkotlin/collections/CollectionsKt;','Lkotlin/Metadata;','Lcom/android/apksig/ApkVerifier;']:
+    for cls in [f'Lio/github/twoarchiver/ytark/updater/{n};' for n in required]+['Lio/github/twoarchiver/ytark/internal/kotlin/jvm/internal/Intrinsics;','Lio/github/twoarchiver/ytark/internal/kotlin/collections/CollectionsKt;','Lio/github/twoarchiver/ytark/internal/kotlin/Metadata;','Lcom/android/apksig/ApkVerifier;']:
         if cls not in defined: raise ValueError(f'Missing Kotlin updater/runtime definition {cls}')
+    updater = defined['Lio/github/twoarchiver/ytark/updater/UpdateCoordinator;']
+    if any(name.lstrip('[').startswith('Lkotlin/') for name in updater.types):
+        raise ValueError('Updater still references the host Kotlin runtime')
     host='Ldev/cobalt/coat/StarboardBridge;'
     if host not in defined: raise ValueError('Missing Cobalt host bridge')
     dex=defined[host]; code=dex.code(host,'installAppFromURL')

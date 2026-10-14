@@ -29,8 +29,26 @@ printf 'package io.github.twoarchiver.ytark.updater\nobject UpdaterBuildConfig {
 mapfile -t SOURCES < <(find "$SOURCE" -type f -name '*.kt' -print | sort)
 "${KOTLINC[@]}" -jvm-target 1.8 -no-reflect -classpath "$PLATFORM:$STDLIB:$WORK/apksig.jar" \
   -d "$WORK/updater.jar" "${SOURCES[@]}" "$WORK/UpdaterBuildConfig.kt"
+# Cobalt already owns kotlin.* classes. Keep its runtime untouched and give the
+# updater a private, version-pinned runtime, relocating caller references too.
+python3 "$ROOT/tools/shade_kotlin.py" "$WORK/updater.jar" "$WORK/updater-isolated.jar"
+python3 "$ROOT/tools/shade_kotlin.py" "$STDLIB" "$WORK/kotlin-isolated.jar"
+# Execute representative relocated stdlib calls on the JVM before packaging.
+cat > "$WORK/IsolationProbe.kt" <<'KOTLIN'
+fun main() {
+    val values = listOf("one", "two").map { it.uppercase() }
+    check(values.joinToString(",") == "ONE,TWO")
+    val pair = "answer" to 42
+    check(pair.second == 42)
+    check(runCatching { error("expected") }.isFailure)
+    println("Private Kotlin runtime execution passed")
+}
+KOTLIN
+"${KOTLINC[@]}" -jvm-target 1.8 -no-reflect -classpath "$STDLIB" -d "$WORK/probe.jar" "$WORK/IsolationProbe.kt"
+python3 "$ROOT/tools/shade_kotlin.py" "$WORK/probe.jar" "$WORK/probe-isolated.jar"
+java -cp "$WORK/probe-isolated.jar:$WORK/kotlin-isolated.jar" IsolationProbeKt
 # D8 performs language desugaring. Only stdlib is used (no coroutine/framework dependency).
-"$D8" --release --min-api 24 --lib "$PLATFORM" --output "$WORK/dex" "$WORK/updater.jar" "$STDLIB" "$WORK/apksig.jar"
+"$D8" --release --min-api 24 --lib "$PLATFORM" --output "$WORK/dex" "$WORK/updater-isolated.jar" "$WORK/kotlin-isolated.jar" "$WORK/apksig.jar"
 [ -s "$WORK/dex/classes.dex" ] || { echo "D8 produced no classes.dex" >&2; exit 1; }
 [ "$(find "$WORK/dex" -name '*.dex' | wc -l)" -eq 1 ] || { echo "Unexpected updater multidex; update injector before shipping" >&2; exit 1; }
 mkdir -p "$(dirname "$OUT")"
