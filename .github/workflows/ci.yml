@@ -156,6 +156,9 @@ jobs:
           echo "### Native updater validation" >> "$GITHUB_STEP_SUMMARY"
           echo "Policy tests and full Android API $API_LEVEL compilation/D8 passed; classes.dex: $(wc -c < "$RUNNER_TEMP/ytark-updater/classes.dex") bytes. Not device tests." >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Load unsigned repack version
+        run: python3 tools/validate_release.py emit-env --file "$GITHUB_ENV"
+
       - name: Repack the pinned ARMv7 base without signing (integration regression)
         env:
           GH_TOKEN: ${{ github.token }}
@@ -165,8 +168,6 @@ jobs:
           set -euo pipefail
           # Exercise the actual smali assembler/round-trip before merging. Unit
           # fixtures and Kotlin compilation alone cannot validate host DEX edits.
-          python3 tools/validate_release.py emit-env --file "$RUNNER_TEMP/repack.env"
-          source "$RUNNER_TEMP/repack.env"
           gh api "repos/reisxd/TizenTubeCobalt/releases/tags/$BASE_TAG" > "$RUNNER_TEMP/base-release.json"
           python3 tools/fetch_base_apks.py \
             --release-json "$RUNNER_TEMP/base-release.json" --base-tag "$BASE_TAG" \
