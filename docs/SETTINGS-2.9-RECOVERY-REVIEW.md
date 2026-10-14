@@ -89,6 +89,9 @@ log-forensics case, because the wrong depth is provable locally —
    died: the shared checker was invoked one directory too shallow. Seven
    regressions in `tools/tests/test_workflow_script_paths.py`, including the
    literal `../../tools/check_bundle_contract.py` assertion for both workflows.
+   `build-apk.yml` also runs that policy check as a step of its own, before the
+   userscript build it guards, so the release pipeline validates its own
+   paths instead of waiting for PR validation to notice.
 
 ## 4. Version and tag decision
 
@@ -210,7 +213,7 @@ audited set, not a device-observed one.
 
 | Check | Result |
 |---|---|
-| `python3 -m unittest discover -s tools/tests` | **158 passed, 0 failed, 1 skipped** (the skip is the JVM-dependent updater test compile) |
+| `python3 -m unittest discover -s tools/tests` | **159 passed, 0 failed, 1 skipped** (the skip is the JVM-dependent updater test compile) |
 | `cd TizenTube/mods && node --test tests/*.test.mjs` | **283 passed, 0 failed, 69 suites** |
 | `npm run build` + `python3 ../tools/check_bundle_contract.py` | Built 854,340 bytes; **Bundle contract OK** (39 symbols, 828,492 characters) |
 | `python3 tools/build_changelog.py --check`, `build_buildinfo.py --check` | current |
@@ -253,7 +256,7 @@ base-apk-sha256.txt`; `tools/repack_apk.py --base base/cobalt-arm.apk
 `bash tools/sign_apks.sh work`; and `tools/validate_release.py check-apk --apk
 release-assets/YTArk-v2.9.0-armv7.apk --architecture armv7 …`.
 
-Roll-up: **code-complete** for the source changes listed here (Python 158/158 with
+Roll-up: **code-complete** for the source changes listed here (Python 159/159 with
 1 javac-dependent skip; Node 283/283; built userscript 854,340 bytes and
 contract-clean); **build-pass NOT RUN** (no APK was compiled, repacked, signed or
 verified); **device-verified NOT RUN**.

@@ -91,6 +91,15 @@ class WorkflowScriptPathTests(unittest.TestCase):
             check_workflow_policy.check_script_paths(path, failures)
             self.assertEqual(failures, [], f"{path.name}: {failures}")
 
+    def test_the_release_workflow_validates_its_own_paths_before_building(self):
+        text = (WORKFLOWS / "build-apk.yml").read_text(encoding="utf-8")
+        self.assertIn("python3 tools/check_workflow_policy.py", text)
+        self.assertLess(
+            text.index("python3 tools/check_workflow_policy.py"),
+            text.index("name: Build and test the userscript bundle"),
+            "the release workflow must check its own paths before running them",
+        )
+
     def test_both_workflows_run_the_shared_contract_checker_at_the_right_depth(self):
         for name in ("ci.yml", "build-apk.yml"):
             text = (WORKFLOWS / name).read_text(encoding="utf-8")
