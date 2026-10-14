@@ -62,10 +62,13 @@ progress. The explicit YTArk Settings action assigns only the declared
 `StorageActivity` contain the target screens. Exported route activities require
 an app-signature permission, and the public Leanback launcher uses a separate
 proxy. That package-level permission does not attest the initiating web-page
-origin. Inspection of the pinned TizenTubeCobalt v2.0.2 source has not established
-that its runtime dispatches either custom URI to Android. Manifest declarations
-and JavaScript URL assignment are not end-to-end evidence; failure must not be
-described as working. The native screens are not device-tested.
+origin. Inspection of the pinned TizenTubeCobalt v2.0.2 source shows the opposite: the
+content layer has no external-protocol handler (its default cancels such a
+navigation silently) and the base's only web-to-native bridge cannot open a
+screen, so an in-page custom URI starts nothing. Manifest declarations and
+JavaScript URL assignment are not end-to-end evidence; failure must not be
+described as working, and the launcher proxy (TV apps row → Updates → Cache &
+Storage) is the route users can actually reach. The native screens are not device-tested.
 
 **2.9 candidate upgrade boundary.** The target is a direct signed in-place
 update from published 2.8.0 with the same package ID, community signer and app

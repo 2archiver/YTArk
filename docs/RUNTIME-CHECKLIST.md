@@ -187,8 +187,8 @@ exact signed ARMv7 APK has been exercised on a named supported device.
 
 | # | Check | Expected | Result |
 |---|---|---|---|
-| 79 | Settings → Updates native route | Selecting the action dispatches the exact allowlisted route through pinned Cobalt to `UpdateActivity`; focus/back return correctly; failure is visible and actionable rather than a silent no-op | NOT RUN |
-| 80 | Settings → Storage native route | Selecting the action dispatches only `ytark://storage`; active playback is not interrupted, and an invalid route is rejected with an actionable result | NOT RUN |
+| 79 | Settings → Updates native route | On the pinned base the in-page action is expected to be cancelled silently (no external-protocol handler); the **YTArk Updates** entry in the TV apps row opens `UpdateActivity` and focus/back return correctly. Record both the page behaviour and the launcher route; a silent no-op must be visible and actionable, never presented as success | NOT RUN |
+| 80 | Settings → Storage native route | The in-page action is expected to be cancelled silently on the pinned base; from the launcher route, the Update screen's **Cache & Storage** button opens `StorageActivity`, active playback is not interrupted, and an invalid route is rejected with an actionable result | NOT RUN |
 | 81 | Route argument validation | Only `updates` or `storage` and optional `theme=oled|youtube` are accepted; malformed/extra parameters, untrusted sources, packages, components and filesystem paths cannot start native work | NOT RUN |
 | 82 | Native theme handoff | OLED and YouTube theme selections both reach Updates and Storage; theme changes are visible on the next valid route and survive activity/process recreation without changing playback scrim | NOT RUN |
 | 83 | OLED surface audit | At 720p, 1080p and 4K with display scaling, audited browsing/search/settings surfaces are black and readable; focus contrast works; video, artwork, thumbnails, captions and independent player scrim are unchanged | NOT RUN |

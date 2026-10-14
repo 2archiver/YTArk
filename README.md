@@ -58,8 +58,11 @@ upgrade the TizenTubeCobalt `v2.0.2` base, Cobalt engine or YouTube frontend.
   screen-only `ytark://updates` and `ytark://storage` routes with an optional
   theme value; exported routes require a signature-level permission and native
   screens validate their exact screen URI. This is only a source/manifest
-  contract: pinned Cobalt custom-scheme dispatch has not been proven, and the
-  Settings Updates card remains read-only (no JS updater bridge is registered).
+  contract. The pinned Cobalt v2.0.2 base has no external-protocol handler, so
+  an in-page `ytark://` navigation is cancelled silently: the reachable route is
+  the TV apps row (YTArk Updates, whose Cache & Storage button opens the storage
+  screen). The Settings Updates card remains read-only (no JS updater bridge is
+  registered).
 
 The userscript schema 4 migration for the playback-recovery opt-in was part of
 2.8.0. 2.9.0 does not reset or rewrite existing preferences; absent configuration
@@ -147,7 +150,7 @@ imply the earlier ones are complete.
 | Persistent hourly update checks and separate automatic downloads | Yes (`UpdateCheckJobService.java`, `UpdateBootstrapProvider.java`, `YtarkUpdater.java`, `UpdateActivity.java`) | Python tests passed; Java compiler/DEX build and JobScheduler runtime are unavailable here | NOT RUN |
 | Startup-animation availability | Informational row only; no optional YTArk animation/delay hook exists | Settings regression test passed; no toggle or system-splash claim | n/a |
 | Bundled native updater (Java: ABI check, verified download, PackageInstaller hand-off) | Yes (`android-updater/`) | Host-JRE contracts are wired into CI/build scripts but were not run here; no Android compile or DEX packaging | **NOT RUN** — no APK or device install/in-place update recorded |
-| `ytark://updates` / `ytark://storage` → native Updates / Cache & Storage screens | Exact screen routes are declared and URI-validated; exported routes require the app-signature permission; no new JS bridge is registered | Python URL/manifest tests only; pinned Cobalt dispatch is unproven, Android APK validation and on-device navigation not run | **NOT RUN — native navigation pending** |
+| `ytark://updates` / `ytark://storage` → native Updates / Cache & Storage screens | Exact screen routes are declared and URI-validated; exported routes require the app-signature permission; no new JS bridge is registered | Python URL/manifest tests only; the pinned base cannot dispatch the scheme in-page (no external-protocol handler), so the TV-apps-row launcher route is the reachable path; Android APK validation and on-device navigation not run | **NOT RUN — native navigation pending** |
 | ARMv7-only APK, signer, versionCode, checksums | Yes (`tools/`) | Candidate build and `check-apk` in `build-apk.yml` | NOT RUN |
 | Premium header wordmark (cosmetic) | Yes (bundled vector) | Provenance, vector-only and build checks in `ci.yml` | NOT RUN |
 | Ad blocking, sign-in, playback, remote keys | Upstream v2.0.2, kept stock | Not re-tested by CI | NOT RUN |
