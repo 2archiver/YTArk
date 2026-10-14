@@ -15,8 +15,8 @@ public final class UpdateGuardsTest {
                 "selected partial survives even with a different pending installer");
         assertFalse(UpdateGuards.isStaleUpdateFile("YTArk-v2.7.0-armv7.apk", "YTArk-v2.7.0-armv7.apk", CURRENT),
                 "pending installer also survives");
-        assertFalse(UpdateGuards.isStaleUpdateFile("YTArk-v2.6.0-armv7.apk.part", CURRENT,
-                "YTArk-v2.7.0-armv7.apk", "YTArk-v2.8.0-armv7.apk"),
+        assertFalse(UpdateGuards.isStaleUpdateFile("YTArk-v2.6.0-armv7.apk.part",
+                "YTArk-v2.6.0-armv7.apk", "YTArk-v2.7.0-armv7.apk", "YTArk-v2.8.0-armv7.apk"),
                 "selected, pending, and active APK siblings all survive cleanup");
         updateDirectoryAndFileSymlinksAreRejected();
         unrelatedFilesAreNeverTouched();
