@@ -395,6 +395,8 @@ def validate_compiled_manifest(apk: Path, aapt: str) -> None:
 
 
 UPDATER_ACTIVITY_NAME = "io.github.twoarchiver.ytark.updater.UpdateActivity"
+UPDATER_LAUNCHER_ACTIVITY_NAME = "io.github.twoarchiver.ytark.updater.UpdateLauncherActivity"
+UPDATER_SCREEN_PERMISSION = "io.github.twoarchiver.ytark.permission.OPEN_NATIVE_SCREEN"
 
 
 def validate_updater_background_components(tree: str) -> None:
@@ -411,11 +413,15 @@ def validate_updater_background_components(tree: str) -> None:
         storage_found = True
         if not _boolean_attribute_is_true(_attribute_line(activity, "exported")):
             raise ValueError("The YTArk Cache & Storage activity must have its explicit ACTION_VIEW route")
+        if UPDATER_SCREEN_PERMISSION not in (_attribute_line(activity, "permission") or ""):
+            raise ValueError("The YTArk Cache & Storage route must require the app's signature permission")
         if not any("android.intent.action.VIEW" in block
+                   and "android.intent.category.DEFAULT" in block
+                   and "android.intent.category.BROWSABLE" in block
                    and "android:scheme" in block and "ytark" in block
                    and "android:host" in block and "storage" in block
                    for block in _element_blocks(activity, "intent-filter")):
-            raise ValueError("The YTArk Cache & Storage activity has no ytark://storage route")
+            raise ValueError("The YTArk Cache & Storage activity has no bounded ytark://storage route")
         break
     if not storage_found:
         raise ValueError("Compiled manifest has no YTArk Cache & Storage activity")
@@ -438,26 +444,51 @@ def validate_updater_background_components(tree: str) -> None:
 
 
 def validate_updater_launcher(tree: str) -> None:
-    """The YTArk Updates screen must be a real TV launcher entry, not only a deep link."""
+    """Require a protected native screen route and a separate public TV launcher proxy."""
     application_blocks = _element_blocks(tree, "application")
     if not application_blocks:
         raise ValueError("Compiled Android manifest has no application element")
-    for activity in _element_blocks(application_blocks[0], "activity"):
-        name_line = _attribute_line(activity, "name")
-        if not name_line or UPDATER_ACTIVITY_NAME not in name_line:
-            continue
-        label_line = _attribute_line(activity, "label")
-        if not label_line or "YTArk Updates" not in label_line:
-            raise ValueError("The YTArk Updates activity must be labelled 'YTArk Updates'")
-        if not _boolean_attribute_is_true(_attribute_line(activity, "exported")):
-            raise ValueError("The YTArk Updates activity must be explicitly android:exported=true")
-        for intent_filter in _element_blocks(activity, "intent-filter"):
-            if ("android.intent.action.MAIN" in intent_filter
-                    and "android.intent.category.LEANBACK_LAUNCHER" in intent_filter):
-                print("Verified updater TV launcher entry: YTArk Updates (MAIN + LEANBACK_LAUNCHER).")
-                return
-        raise ValueError("The YTArk Updates activity has no MAIN + LEANBACK_LAUNCHER entry")
-    raise ValueError("Compiled manifest has no YTArk Updates activity")
+    app = application_blocks[0]
+    screen_activity = None
+    launcher_activity = None
+    for activity in _element_blocks(app, "activity"):
+        name_line = _attribute_line(activity, "name") or ""
+        if UPDATER_ACTIVITY_NAME in name_line:
+            screen_activity = activity
+        elif UPDATER_LAUNCHER_ACTIVITY_NAME in name_line:
+            launcher_activity = activity
+
+    if screen_activity is None:
+        raise ValueError("Compiled manifest has no YTArk Updates activity")
+    if not _boolean_attribute_is_true(_attribute_line(screen_activity, "exported")):
+        raise ValueError("The YTArk Updates route activity must be explicitly android:exported=true")
+    if UPDATER_SCREEN_PERMISSION not in (_attribute_line(screen_activity, "permission") or ""):
+        raise ValueError("The YTArk Updates route must require the app's signature permission")
+    if UPDATER_SCREEN_PERMISSION not in tree or "android:protectionLevel" not in tree or "signature" not in tree:
+        raise ValueError("Native screen routes must be protected by a declared signature permission")
+    screen_filters = _element_blocks(screen_activity, "intent-filter")
+    has_screen_route = any("android.intent.action.VIEW" in intent_filter
+                           and "android.intent.category.DEFAULT" in intent_filter
+                           and "android.intent.category.BROWSABLE" in intent_filter
+                           and "android:scheme" in intent_filter and "ytark" in intent_filter
+                           and "android:host" in intent_filter and "updates" in intent_filter
+                           for intent_filter in screen_filters)
+    if not has_screen_route:
+        raise ValueError("The YTArk Updates activity has no bounded ytark://updates route")
+    if launcher_activity is None:
+        raise ValueError("The YTArk Updates launcher proxy is missing")
+    label_line = _attribute_line(launcher_activity, "label")
+    if not label_line or "YTArk Updates" not in label_line:
+        raise ValueError("The YTArk Updates launcher proxy must be labelled 'YTArk Updates'")
+    if not _boolean_attribute_is_true(_attribute_line(launcher_activity, "exported")):
+        raise ValueError("The YTArk Updates launcher proxy must be explicitly android:exported=true")
+    launcher_filters = _element_blocks(launcher_activity, "intent-filter")
+    has_launcher = any("android.intent.action.MAIN" in intent_filter
+                       and "android.intent.category.LEANBACK_LAUNCHER" in intent_filter
+                       for intent_filter in launcher_filters)
+    if not has_launcher:
+        raise ValueError("The YTArk Updates launcher proxy has no MAIN + LEANBACK_LAUNCHER entry")
+    print("Verified YTArk Updates route (signature-protected ACTION_VIEW) and separate public Leanback launcher proxy.")
 
 
 def validate_apk(path: str, architecture: str, expected_cert_file: str,

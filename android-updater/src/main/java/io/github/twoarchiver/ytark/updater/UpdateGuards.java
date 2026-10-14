@@ -55,17 +55,39 @@ final class UpdateGuards {
      * {@code keepApkName} and its partial siblings are never reported, so a
      * pending verified APK survives cleanup. Unrelated names are never touched.
      */
-    static boolean isStaleUpdateFile(String fileName, String keepApkName) {
+    static boolean isStaleUpdateFile(String fileName, String... keepApkNames) {
         if (fileName == null || !UPDATE_FILE.matcher(fileName).matches()) return false;
-        if (keepApkName != null && keepApkName.length() > 0) {
-            if (fileName.equals(keepApkName) || fileName.startsWith(keepApkName + ".")) return false;
+        if (keepApkNames != null) {
+            for (String keepApkName : keepApkNames) {
+                if (keepApkName != null && keepApkName.length() > 0
+                        && (fileName.equals(keepApkName) || fileName.startsWith(keepApkName + "."))) {
+                    return false;
+                }
+            }
         }
         return true;
     }
 
-    /** Pending installer and selected resumable release can be different. */
-    static boolean isStaleUpdateFile(String fileName, String pending, String selected) {
-        return isStaleUpdateFile(fileName, pending) && isStaleUpdateFile(fileName, selected);
+    /** Update storage must be a real, direct child of the app-private files directory. */
+    static boolean isSafeUpdateDirectory(java.io.File filesDirectory, java.io.File updateDirectory)
+            throws java.io.IOException {
+        if (filesDirectory == null || updateDirectory == null) return false;
+        java.io.File filesRoot = filesDirectory.getCanonicalFile();
+        java.io.File updateRoot = updateDirectory.getCanonicalFile();
+        return filesRoot.equals(filesDirectory.getAbsoluteFile())
+                && updateRoot.equals(updateDirectory.getAbsoluteFile())
+                && filesRoot.equals(updateRoot.getParentFile());
+    }
+
+    /** Candidate is a non-symlink direct child of a validated updater directory. */
+    static boolean isSafeUpdateFile(java.io.File updateDirectory, java.io.File candidate)
+            throws java.io.IOException {
+        if (updateDirectory == null || candidate == null) return false;
+        java.io.File updateRoot = updateDirectory.getCanonicalFile();
+        java.io.File canonicalCandidate = candidate.getCanonicalFile();
+        return updateRoot.equals(updateDirectory.getAbsoluteFile())
+                && canonicalCandidate.equals(candidate.getAbsoluteFile())
+                && updateRoot.equals(canonicalCandidate.getParentFile());
     }
 
     /**

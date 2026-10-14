@@ -19,6 +19,7 @@ import validate_release  # noqa: E402
 
 # Every stable release published on GitHub (gh release list), newest first.
 PUBLISHED = [
+    ("2.8.0", "v2.8.0", "2026-10-13", 2080000, "s27"),
     ("2.7.0", "v2.7.0", "2026-10-13", 2070000, "s26"),
     ("2.6.0", "v2.6.0", "2026-10-13", 2060000, "s25"),
     ("2.5.0", "v2.5.0", "2026-10-11", 2050000, "s24"),
@@ -166,7 +167,7 @@ class ChangelogFormatTests(unittest.TestCase):
             parse(text)
 
     def test_versions_sort_like_android_version_codes(self):
-        ordered = ["2.9.0", "2.7.0", "2.6.0", "2.5.0", "2.4.0", "2.3.0", "2.2.0", "2.1.2", "2.1.0", "2.0.4", "2.0.4-ytark.17", "2.0.4-ytark.16", "2.0.2-personal.14"]
+        ordered = ["2.9.1", "2.8.0", "2.7.0", "2.6.0", "2.5.0", "2.4.0", "2.3.0", "2.2.0", "2.1.2", "2.1.0", "2.0.4", "2.0.4-ytark.17", "2.0.4-ytark.16", "2.0.2-personal.14"]
         keys = [build_changelog.version_key(version) for version in ordered]
         self.assertEqual(keys, sorted(keys, reverse=True))
         for version in ordered:

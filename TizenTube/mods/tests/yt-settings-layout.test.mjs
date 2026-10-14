@@ -6,7 +6,7 @@ import {
   setupEnvironment, initEnglish, lastModal, findRow, press,
 } from './helpers/ytlr-harness.mjs';
 
-const { recorded } = setupEnvironment();
+const { recorded, video } = setupEnvironment();
 await initEnglish();
 const { configRead, configWrite } = await import('../config.js');
 const layout = await import('../features/ytSettingsLayout.js');
@@ -168,6 +168,31 @@ describe('ordering, hiding and pinning by stable ids', () => {
     assert.equal(account.present, false, 'remembered while absent');
     assert.deepEqual(configRead('ytSettingsLayout').order, ['SETTING_CAT_ACCOUNT_SWITCHER', 'SETTING_CAT_TVHTML5_ABOUT']);
     assert.equal(ids(guest)[1], 'SETTING_CAT_TVHTML5_ABOUT');
+  });
+});
+
+describe('native Android screen routing through the real custom-action path', () => {
+  it('opens only the two YTArk-owned screens and blocks storage while playback is active', async () => {
+    const { handleYtarkAction } = await import('../ui/ytarkActions.js');
+    window.location.href = 'https://www.youtube.com/tv';
+    configWrite('uiTheme', 'oled');
+    assert.equal(handleYtarkAction('YTARK_NATIVE_UPDATES_OPEN', {}), true);
+    assert.equal(window.location.href, 'ytark://updates?theme=oled');
+
+    configWrite('uiTheme', 'youtube');
+    video.paused = true;
+    video.ended = false;
+    video.networkState = 1;
+    assert.equal(handleYtarkAction('YTARK_NATIVE_STORAGE_OPEN', {}), true);
+    assert.equal(window.location.href, 'ytark://storage?theme=youtube');
+
+    window.location.href = 'https://www.youtube.com/tv';
+    video.paused = false;
+    assert.equal(handleYtarkAction('YTARK_NATIVE_STORAGE_OPEN', {}), false);
+    assert.equal(window.location.href, 'https://www.youtube.com/tv',
+      'active playback keeps the storage route closed');
+    assert.equal(handleYtarkAction('YTARK_NATIVE_ADMIN_OPEN', {}), false,
+      'no arbitrary native component is routed');
   });
 });
 

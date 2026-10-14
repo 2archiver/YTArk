@@ -13,7 +13,7 @@ practice, and where YTArk deliberately differs.
 | Inspected commit | `79ffcfa4d718662985e706f2425418da01e15de0` |
 | Files read | `docs/UPDATES.md`, `update/GitHubRepositoryPolicy.kt`, `update/InstallPolicy.kt`, `update/UpdateSchedulePolicy.kt`, `update/UpdatePreferences.kt`, `update/UpdateInfo.kt`, `update/UpdateChecker.kt`, `update/UpdateInstaller.kt`, `update/UpdateManager.kt`, `update/UpdateNotifications.kt`, `ui/SettingsUpdates.kt`, `res/values/strings.xml` |
 | Not read | Hearth's Gradle/release workflow files and `tools/extract_release_notes.py` |
-| Parity claim | Design comparison only. Worktree validation passed: 283 Node tests, 126 Python tests, userscript build/bundle syntax, and static release/manifest checks. Java syntax was parsed only; no Java contract run, Android DEX/APK build or device behavior is verified. This is not a line-by-line port and not a claim that every Hearth feature exists in YTArk; the differences are listed explicitly. |
+| Parity claim | Design comparison only. Current candidate test/build evidence and exact blockers are recorded in [`SETTINGS-2.9.1-REVIEW.md`](SETTINGS-2.9.1-REVIEW.md). Source-level tests do not prove Android/Cobalt dispatch, an Android DEX/APK build or device behavior. This is not a line-by-line port and not a claim that every Hearth feature exists in YTArk; the differences are listed explicitly. |
 
 ## Parity table
 
@@ -30,7 +30,7 @@ practice, and where YTArk deliberately differs.
 | Resumable download only when the partial file still matches the expected asset (`UpdatePreferences` staged metadata, `docs/UPDATES.md` step 2) | Resume requires the same tag, asset name, ABI, size **and** published digest; `Range` requests are validated against `Content-Range` or the partial is discarded | `UpdateResumeContract` + its CI test, `YtarkUpdater.java` resume block |
 | Interrupted/failed download is recoverable and reports actionably (`InstallPolicy.failureMessage`, `docs/UPDATES.md`) | `UpdateActivity` reports the real failure (network, storage, validation) and offers retry/resume; the frontend reports `download_error` with resume | `UpdateActivity.java` state machine, `update-state.test.mjs` ("hides check while busy and always offers one recovery path") |
 | Unknown-app permission is a real state: `PERMISSION_REQUIRED` → Android's settings page → retry (`InstallPolicy.InstallStart.PERMISSION_REQUIRED`, `InstallPolicy.InstallState`) | `UpdateActivity` routes to `ACTION_MANAGE_UNKNOWN_APP_SOURCES` with `startActivityForResult` and resumes into "ready to install" without re-downloading | `UpdateActivity.java`, README "Native updates and release integrity" |
-| Installer hand-off through the system installer (`PackageInstaller`, `docs/UPDATES.md` step 5); a queued request is never called installed | 2.8 starts `ACTION_INSTALL_PACKAGE` on a private, single-file content URI with a read grant; the installer result code is never treated as success. Success is confirmed only by reading the installed versionCode again. Notification `PendingIntent`s are `FLAG_IMMUTABLE` (`YtarkUpdater.immutablePendingFlags`). The `InstallPolicy` names in the reference column are not present in this Java tree | `YtarkUpdater.java` (`prepareInstallerIntent`, `reconcileOnStart`), `InstallGate.java`, `UpdateGuards.java`, `UpdateActivity.java`; Java tests/build not run in this worktree; device NOT RUN |
+| Installer hand-off through the system installer (`PackageInstaller`, `docs/UPDATES.md` step 5); a queued request is never called installed | The 2.9.1 candidate uses `ACTION_INSTALL_PACKAGE` on a private, single-file content URI with a read grant; installer result codes are reconciled with PackageManager, and success is accepted only after the installed version matches the persisted target. Notification `PendingIntent`s are `FLAG_IMMUTABLE` (`YtarkUpdater.immutablePendingFlags`). The `InstallPolicy` names in the reference column are not present in this Java tree | `YtarkUpdater.java`, `InstallGate.java`, `UpdateGuards.java`, `UpdateActivity.java`, `InstallerResultPolicy.java`; Java tests/build not run in this worktree; device NOT RUN |
 | Successful install is confirmed by reading the package metadata again; a staged APK whose build is installed (or older) becomes obsolete (`InstallPolicy.isStagedObsolete`, `UpdateManager.discardObsoleteStaged`) | Pending-update state is reconciled against the real file and the installed version at startup; stale or invalid pending metadata is discarded | `YtarkUpdater.java` ("Discarding stale pending update metadata"), `verifyPendingUpdate` |
 | Progress uses real bytes; indeterminate when the total is unknown (`SettingsUpdates` `ProgressBar`, `update_download_progress`) | `UpdateActivity` shows `downloaded * 100 / total` live and switches the bar to indeterminate when no total is known; the frontend never renders a percentage it does not have | `UpdateActivity.java` (`onProgress`, `setIndeterminate`), `update-state.test.mjs` ("unknown download totals stay indeterminate") |
 | Check cadence and throttling: success cadence, shorter retry cadence after a failure/interrupted attempt, and a rate-limit deadline from `Retry-After` / `X-RateLimit-Reset` that suppresses even manual retries (`UpdateSchedulePolicy`, `UpdatePreferences`) | Same structure (uniform cadence after success, one-hour retry after a failure, `rate_limit_until` from GitHub's headers, `nextEligibleAtMillis`); YTArk requests an hourly JobScheduler interval, which Android may defer | `UpdateSchedulePolicyTest` source and Android CI gates; not run for this worktree; device timing NOT RUN |
@@ -57,17 +57,21 @@ practice, and where YTArk deliberately differs.
 Cobalt registers JavaScript bridge objects in its own `initializeJavaBridge()`;
 a repacked APK does not invent or add one. The userscript's fallback release
 status/check surface therefore cannot stream native download/verification
-progress. The explicit YTArk Settings action requests the declared
-`ytark://updates` Android route; the native `UpdateActivity` owns persisted
-progress, automatic work, permission and installer status. Cache controls use a
-separate `ytark://storage` route. Neither route is a claim that the TV has been
-device-tested.
+progress. The explicit YTArk Settings action assigns only the declared
+`ytark://updates` or `ytark://storage` route; the native `UpdateActivity` and
+`StorageActivity` contain the target screens. Exported route activities require
+an app-signature permission, and the public Leanback launcher uses a separate
+proxy. That package-level permission does not attest the initiating web-page
+origin. Inspection of the pinned TizenTubeCobalt v2.0.2 source has not established
+that its runtime dispatches either custom URI to Android. Manifest declarations
+and JavaScript URL assignment are not end-to-end evidence; failure must not be
+described as working. The native screens are not device-tested.
 
-**2.8 candidate upgrade boundary.** The target is a direct signed in-place
-update from published 2.7.0 with the same package ID, community signer and app
+**2.9.1 candidate upgrade boundary.** The target is a direct signed in-place
+update from published 2.8.0 with the same package ID, community signer and app
 data directory. No bootstrap install or uninstall/reinstall is intended. Actual
 Android signature/version acceptance and Google session/preferences continuity
-are device-only checks and remain NOT RUN for this candidate.
+are device-only checks and remain NOT RUN; the candidate APK has not been built.
 
 ## How to re-run the verification
 

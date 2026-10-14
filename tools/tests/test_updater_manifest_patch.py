@@ -35,16 +35,28 @@ class UpdaterManifestPatchTests(unittest.TestCase):
             repack_apk.patch_updater_manifest(temp, APP_ID)
             return path.read_text(encoding="utf-8")
 
-    def test_the_updater_is_a_labelled_exported_leanback_launcher_entry(self):
+    def test_launcher_proxy_is_public_and_native_screens_require_signature_permission(self):
         xml = self.patched()
+        launcher = re.search(r'<activity\s+android:name="' + re.escape(repack_apk.UPDATER_LAUNCHER_ACTIVITY) + r'".*?</activity>',
+                             xml, re.S)
+        self.assertIsNotNone(launcher)
+        launcher_block = launcher.group(0)
+        self.assertIn('android:label="YTArk Updates"', launcher_block)
+        self.assertIn('android:exported="true"', launcher_block)
+        self.assertIn("android.intent.category.LEANBACK_LAUNCHER", launcher_block)
+        self.assertNotIn('android:name="android.intent.action.VIEW"', launcher_block)
+
         activity = re.search(r'<activity\s+android:name="' + re.escape(repack_apk.UPDATER_ACTIVITY) + r'".*?</activity>',
                              xml, re.S)
         self.assertIsNotNone(activity)
-        block = activity.group(0)
-        self.assertIn('android:label="YTArk Updates"', block)
-        self.assertIn('android:exported="true"', block)
-        self.assertIn("android.intent.category.LEANBACK_LAUNCHER", block)
-        self.assertIn('android:host="updates"', block)
+        route_block = activity.group(0)
+        permission = APP_ID + repack_apk.UPDATER_SCREEN_PERMISSION_SUFFIX
+        self.assertIn(f'<permission android:name="{permission}" android:protectionLevel="signature" />', xml)
+        self.assertIn(f'<uses-permission android:name="{permission}" />', xml)
+        self.assertIn(f'android:permission="{permission}"', route_block)
+        self.assertIn('android:host="updates"', route_block)
+        self.assertIn('android:name="android.intent.action.VIEW"', route_block)
+        self.assertIn('android:name="android.intent.category.BROWSABLE"', route_block)
 
     def test_the_cobalt_main_activity_keeps_its_launcher_entry_first(self):
         xml = self.patched()
@@ -61,7 +73,11 @@ class UpdaterManifestPatchTests(unittest.TestCase):
         storage = re.search(r'<activity\s+android:name="' + re.escape(repack_apk.UPDATER_STORAGE_ACTIVITY) + r'".*?</activity>', xml, re.S)
         self.assertIsNotNone(storage)
         self.assertIn('android:host="storage"', storage.group(0))
+        self.assertIn('android:name="android.intent.action.VIEW"', storage.group(0))
+        self.assertIn('android:name="android.intent.category.DEFAULT"', storage.group(0))
+        self.assertIn('android:name="android.intent.category.BROWSABLE"', storage.group(0))
         self.assertIn('android:exported="true"', storage.group(0))
+        self.assertIn(f'android:permission="{APP_ID}{repack_apk.UPDATER_SCREEN_PERMISSION_SUFFIX}"', storage.group(0))
 
     def test_providers_and_receiver_are_private_and_the_file_provider_is_single_file(self):
         xml = self.patched()

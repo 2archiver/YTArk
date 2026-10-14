@@ -1,11 +1,12 @@
 // YTArk Updates surface.
 //
 // The native Android updater owns release discovery, download, verification
-// and the installer handoff. This module renders its real state on the
-// YouTube TV settings UI through the versioned `window.ytarkUpdater` bridge
-// (contract 1) and, when that bridge is not connected yet, performs an honest
-// read-only stable-release check so the page never shows a blank card or a
-// fabricated status.
+// and the installer handoff. This repacked build does not register a
+// `window.ytarkUpdater` JavaScript interface: the YouTube TV settings card uses
+// an honest read-only stable-release check and manual official-release route.
+// The optional adapter below is compatibility code for a host that explicitly
+// supplies that contract; it is not evidence that Cobalt-to-Android dispatch
+// or native updater commands are wired in this build.
 
 import { settleWithin } from './settlementDeadline.js';
 import {

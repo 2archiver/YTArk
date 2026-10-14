@@ -39,9 +39,14 @@ javac --release 8 -d "$WORK/test-classes" \
   "$SOURCE/io/github/twoarchiver/ytark/updater/UpdateGuards.java" \
   "$SOURCE/io/github/twoarchiver/ytark/updater/UpdateFailure.java" \
   "$SOURCE/io/github/twoarchiver/ytark/updater/UpdateFailureException.java" \
+  "$SOURCE/io/github/twoarchiver/ytark/updater/NativeRoutePolicy.java" \
+  "$SOURCE/io/github/twoarchiver/ytark/updater/UpdateRedirectPolicy.java" \
+  "$SOURCE/io/github/twoarchiver/ytark/updater/UpdaterFailurePhasePolicy.java" \
+  "$SOURCE/io/github/twoarchiver/ytark/updater/InstallerResultPolicy.java" \
   "$TEST_SOURCE_DIR"/*Test.java
 for test_class in UpdateVersionTest UpdateReleaseContractTest UpdateSchedulePolicyTest \
-    YtarkBrandingTest InstallGateTest UpdateGuardsTest; do
+    YtarkBrandingTest InstallGateTest UpdateGuardsTest NativeRoutePolicyTest \
+    UpdateRedirectPolicyTest UpdaterFailurePhasePolicyTest InstallerResultPolicyTest; do
   java -cp "$WORK/test-classes" "io.github.twoarchiver.ytark.updater.$test_class"
 done
 

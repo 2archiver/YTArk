@@ -6,11 +6,11 @@
  *     discovery, download, verification and the installer handoff.
  *   - YTArk Settings -> Updates renders that state on the TV UI.
  *
- * When the native bridge (`window.ytarkUpdater`, contract 1) is present this
- * module only maps/validates the state the engine reports. When it is missing
- * the frontend performs its own read-only stable-release check against the
- * public GitHub API and reports that honestly, but it never claims a download
- * or installation happened and never invents progress.
+ * This optional contract can map/validate state supplied by a native host.
+ * The current repacked Cobalt build does not register `window.ytarkUpdater`, so
+ * the production Settings card takes the read-only stable-release path against
+ * GitHub. That path does not claim a download or installation and never
+ * invents progress. Parser tests exercise data validation, not a live bridge.
  */
 
 export const BRIDGE_NAME = 'ytarkUpdater';

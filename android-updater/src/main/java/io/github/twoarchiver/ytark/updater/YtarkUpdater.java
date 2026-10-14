@@ -36,11 +36,9 @@ import java.net.URL;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Properties;
-import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -69,13 +67,14 @@ final class YtarkUpdater {
     static final String STATE_PERMISSION_NEEDED = "permission_needed";
     static final String STATE_READY_TO_INSTALL = "ready_to_install";
     static final String STATE_INSTALLING = "installing";
+    static final String STATE_INSTALL_CANCELLED = "install_cancelled";
     static final String STATE_CANCELLED = "cancelled";
     static final String STATE_FAILED = "failed";
     private static final long SNOOZE_MILLIS = 24L * 60L * 60L * 1000L;
     private static final int MAX_METADATA_BYTES = 1024 * 1024;
     private static final int MAX_RELEASE_NOTES_CHARS = 8000;
+    private static final int MAX_REDIRECTS = 5;
     private static final long MAX_APK_BYTES = 512L * 1024L * 1024L;
-    private static final Set<String> RELEASE_DOWNLOAD_HOSTS = releaseDownloadHosts();
 
     static final String ACTION_CHECK = "io.github.twoarchiver.ytark.action.CHECK_UPDATES";
     static final String ACTION_UPDATE = "io.github.twoarchiver.ytark.action.UPDATE_NOW";
@@ -179,15 +178,6 @@ final class YtarkUpdater {
 
     private YtarkUpdater() { }
 
-    private static Set<String> releaseDownloadHosts() {
-        Set<String> hosts = new HashSet<>();
-        hosts.add("github.com");
-        hosts.add("release-assets.githubusercontent.com");
-        hosts.add("objects.githubusercontent.com");
-        hosts.add("github-releases.githubusercontent.com");
-        return hosts;
-    }
-
     static void ensureNotificationChannel(Context context) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return;
         NotificationManager manager = (NotificationManager)
@@ -277,6 +267,26 @@ final class YtarkUpdater {
         return preferences(context).getString("updater_error", "");
     }
 
+    static String updaterErrorPhase(Context context) {
+        return UpdaterFailurePhasePolicy.normalize(
+                preferences(context).getString("updater_error_phase", ""));
+    }
+
+    static String nativeTheme(Context context) {
+        String theme = preferences(context).getString("native_theme", NativeRoutePolicy.THEME_YOUTUBE);
+        return NativeRoutePolicy.THEME_OLED.equals(theme)
+                ? NativeRoutePolicy.THEME_OLED : NativeRoutePolicy.THEME_YOUTUBE;
+    }
+
+    static boolean persistNativeTheme(Context context, String theme) {
+        if (!NativeRoutePolicy.THEME_OLED.equals(theme)
+                && !NativeRoutePolicy.THEME_YOUTUBE.equals(theme)) return false;
+        SharedPreferences prefs = preferences(context);
+        if (theme.equals(prefs.getString("native_theme", NativeRoutePolicy.THEME_YOUTUBE))) return false;
+        prefs.edit().putString("native_theme", theme).apply();
+        return true;
+    }
+
     static long downloadBytes(Context context) {
         return preferences(context).getLong("downloaded_bytes", 0L);
     }
@@ -286,11 +296,23 @@ final class YtarkUpdater {
     }
 
     static void setUpdaterState(Context context, String state, String error) {
+        setUpdaterState(context, state, error, null);
+    }
+
+    static void setUpdaterFailure(Context context, String error, String phase) {
+        setUpdaterState(context, STATE_FAILED, error, phase);
+    }
+
+    private static void setUpdaterState(Context context, String state, String error, String failurePhase) {
         SharedPreferences.Editor editor = preferences(context).edit()
                 .putString("updater_state", state)
                 .putLong("updater_state_at", System.currentTimeMillis());
         if (error == null || error.length() == 0) editor.remove("updater_error");
         else editor.putString("updater_error", error);
+        String normalizedPhase = STATE_FAILED.equals(state)
+                ? UpdaterFailurePhasePolicy.normalize(failurePhase) : null;
+        if (normalizedPhase == null) editor.remove("updater_error_phase");
+        else editor.putString("updater_error_phase", normalizedPhase);
         editor.apply();
     }
 
@@ -343,8 +365,14 @@ final class YtarkUpdater {
             return;
         }
         if (handoffInFlight(app) || installRequested(app)) {
-            setUpdaterState(app, handoffInFlight(app) ? STATE_INSTALLING : STATE_FAILED,
-                    "An install request is pending; automatic checks and downloads are paused until the installer flow is reconciled.");
+            if (handoffInFlight(app)) {
+                setUpdaterState(app, STATE_INSTALLING,
+                        "An install request is pending; automatic checks and downloads are paused until the installer flow is reconciled.");
+            } else {
+                setUpdaterFailure(app,
+                        "An install request is pending; automatic checks and downloads are paused until the installer flow is reconciled.",
+                        UpdaterFailurePhasePolicy.INSTALL);
+            }
             finishAutomaticRun(false);
             return;
         }
@@ -487,7 +515,7 @@ final class YtarkUpdater {
                 .putString("last_check_status", "Checking for stable updates…")
                 .putString("updater_state", STATE_CHECKING)
                 .putLong("updater_state_at", System.currentTimeMillis())
-                .remove("updater_error").apply();
+                .remove("updater_error").remove("updater_error_phase").apply();
         WORKER.execute(() -> {
             InstalledVersion installed = null;
             CheckOutcome outcome = null;
@@ -565,9 +593,11 @@ final class YtarkUpdater {
                 .putLong("retry_after_at", 0L)
                 .putLong("rate_limit_until", 0L)
                 .putString("last_check_status", status)
+                .putString("latest_version", outcome.latestVersion)
                 .putString("updater_state", outcome.release == null ? STATE_UP_TO_DATE : STATE_AVAILABLE)
                 .putLong("updater_state_at", at)
                 .remove("updater_error")
+                .remove("updater_error_phase")
                 .remove("last_check_error")
                 .remove("last_check_reason");
         if (outcome.release == null) {
@@ -608,6 +638,7 @@ final class YtarkUpdater {
                 .putString("updater_state", STATE_FAILED)
                 .putLong("updater_state_at", at)
                 .putString("updater_error", friendlyMessage(error, reason))
+                .putString("updater_error_phase", UpdaterFailurePhasePolicy.CHECK)
                 .apply();
     }
 
@@ -797,14 +828,12 @@ final class YtarkUpdater {
     }
 
     private static String httpGet(String address, int maximumBytes) throws IOException {
-        HttpURLConnection connection = openConnection(address);
+        boolean releaseApi = RELEASES_API.equals(address);
+        HttpURLConnection connection = openTrustedConnection(address, "application/vnd.github+json",
+                null, releaseApi, null);
         try {
-            connection.setRequestProperty("Accept", "application/vnd.github+json");
             int status = connection.getResponseCode();
-            requireTrustedHttpGetRedirect(connection, address);
-            if (status < 200 || status >= 300) {
-                throw responseException(connection, status);
-            }
+            if (status < 200 || status >= 300) throw responseException(connection, status);
             try (InputStream input = connection.getInputStream();
                  ByteArrayOutputStream output = new ByteArrayOutputStream()) {
                 byte[] buffer = new byte[8192];
@@ -822,18 +851,58 @@ final class YtarkUpdater {
         }
     }
 
-    private static HttpURLConnection openConnection(String address) throws IOException {
-        URL url = new URL(address);
-        if (!"https".equalsIgnoreCase(url.getProtocol()) || url.getUserInfo() != null) {
-            throw new IOException("The YTArk update service returned a non-HTTPS address.");
+    /** Manually validates every redirect before issuing the next HTTPS request. */
+    private static HttpURLConnection openTrustedConnection(String address, String accept,
+                                                            String range, boolean releaseApi,
+                                                            DownloadOperation operation)
+            throws IOException {
+        if (releaseApi ? !UpdateRedirectPolicy.isTrustedReleaseApiUrl(address)
+                : !UpdateRedirectPolicy.isTrustedReleaseAssetUrl(address)) {
+            throw new SecurityException("The YTArk update service returned an untrusted official URL.");
         }
-        HttpURLConnection connection = (HttpURLConnection) url.openConnection();
-        connection.setConnectTimeout(15000);
-        connection.setReadTimeout(60000);
-        connection.setInstanceFollowRedirects(true);
-        connection.setRequestProperty("User-Agent", "YTArk-Android-Updater");
-        connection.setRequestProperty("Accept-Encoding", "identity");
-        return connection;
+        URL initial = new URL(address);
+        URL current = initial;
+        HttpURLConnection connection = null;
+        try {
+            for (int redirects = 0; redirects <= MAX_REDIRECTS; redirects++) {
+                if (operation != null) operation.throwIfCancelled();
+                connection = (HttpURLConnection) current.openConnection();
+                connection.setConnectTimeout(15000);
+                connection.setReadTimeout(60000);
+                connection.setInstanceFollowRedirects(false);
+                connection.setRequestProperty("User-Agent", "YTArk-Android-Updater");
+                connection.setRequestProperty("Accept-Encoding", "identity");
+                connection.setRequestProperty("Accept", accept);
+                if (range != null) connection.setRequestProperty("Range", range);
+                if (operation != null) operation.connection = connection;
+
+                int status = connection.getResponseCode();
+                if (operation != null) operation.throwIfCancelled();
+                if (!UpdateRedirectPolicy.isRedirectStatus(status)) return connection;
+                if (redirects >= MAX_REDIRECTS) {
+                    throw new IOException("The official YTArk asset redirected too many times.");
+                }
+                String location = connection.getHeaderField("Location");
+                if (location == null || location.trim().length() == 0) {
+                    throw new IOException("The official YTArk server returned a redirect without a destination.");
+                }
+                URL target = new URL(current, location.trim());
+                if (!UpdateRedirectPolicy.isAllowedRedirect(address, target.toExternalForm(), releaseApi)) {
+                    throw new SecurityException(releaseApi
+                            ? "The YTArk release API redirected to an untrusted address."
+                            : "The YTArk APK download redirected to an untrusted host or path.");
+                }
+                connection.disconnect();
+                if (operation != null) operation.connection = null;
+                connection = null;
+                current = target;
+            }
+            throw new IOException("The official YTArk server returned too many redirects.");
+        } catch (IOException | RuntimeException failure) {
+            if (connection != null) connection.disconnect();
+            if (operation != null) operation.connection = null;
+            throw failure;
+        }
     }
 
     private static HttpStatusException responseException(HttpURLConnection connection, int status) {
@@ -848,31 +917,6 @@ final class YtarkUpdater {
         long retryAt = rateLimited
                 ? UpdateSchedulePolicy.retryDeadlineMillis(retryAfter, reset, now) : 0L;
         return new HttpStatusException(status, retryAt, rateLimited);
-    }
-
-    private static void requireTrustedDownloadRedirect(HttpURLConnection connection)
-            throws IOException {
-        URL finalUrl = connection.getURL();
-        if (!"https".equalsIgnoreCase(finalUrl.getProtocol())
-                || finalUrl.getUserInfo() != null
-                || !RELEASE_DOWNLOAD_HOSTS.contains(finalUrl.getHost().toLowerCase(Locale.US))) {
-            throw new SecurityException("The YTArk APK download redirected to an untrusted host.");
-        }
-    }
-
-    private static void requireTrustedHttpGetRedirect(HttpURLConnection connection, String address)
-            throws IOException {
-        if (!RELEASES_API.equals(address)) {
-            requireTrustedDownloadRedirect(connection);
-            return;
-        }
-        URL finalUrl = connection.getURL();
-        if (!"https".equalsIgnoreCase(finalUrl.getProtocol())
-                || finalUrl.getUserInfo() != null
-                || !"api.github.com".equalsIgnoreCase(finalUrl.getHost())
-                || !"/repos/2archiver/YTArk/releases/latest".equals(finalUrl.getPath())) {
-            throw new SecurityException("The YTArk release API redirected to an untrusted address.");
-        }
     }
 
     private static InstalledVersion getInstalledVersion(Context context) throws Exception {
@@ -1085,14 +1129,22 @@ final class YtarkUpdater {
         preferences(app).edit().putLong("downloaded_bytes", 0L)
                 .putLong("download_total_bytes", release.assetSize).apply();
         WORKER.execute(() -> {
+            String failurePhase = UpdaterFailurePhasePolicy.DOWNLOAD;
             try {
                 File apk = downloadRelease(app, release, callback, operation);
                 operation.throwIfCancelled();
                 setUpdaterState(app, STATE_VALIDATING, "");
+                failurePhase = UpdaterFailurePhasePolicy.VALIDATION;
                 MAIN.post(() -> { if (callback != null) callback.onVerifying(); });
                 verifyDownloadedApk(app, apk, release);
                 operation.throwIfCancelled();
+                failurePhase = UpdaterFailurePhasePolicy.INSTALL;
                 savePendingUpdate(app, apk, release);
+                try {
+                    removeStaleUpdateFiles(updateDirectory(app, false), release.assetName);
+                } catch (IOException | SecurityException cleanupError) {
+                    Log.w(TAG, "Could not clean old update files after saving the verified APK", cleanupError);
+                }
                 MAIN.post(() -> {
                     cancelDownloadNotification(app);
                     if (callback != null) callback.onReady(apk);
@@ -1107,7 +1159,14 @@ final class YtarkUpdater {
                 Log.w(TAG, "Update download or verification failed", error);
                 final UpdateFailure reason = failureReason(reportedError, UpdateFailure.DOWNLOAD_FAILED);
                 final String message = friendlyMessage(reportedError, reason);
-                setUpdaterState(app, reportedError instanceof UpdateCancelledException ? STATE_CANCELLED : STATE_FAILED, message);
+                if (reportedError instanceof UpdateCancelledException) {
+                    setUpdaterState(app, STATE_CANCELLED, message);
+                } else {
+                    if (reason == UpdateFailure.VALIDATION_FAILED) {
+                        failurePhase = UpdaterFailurePhasePolicy.VALIDATION;
+                    }
+                    setUpdaterFailure(app, message, failurePhase);
+                }
                 MAIN.post(() -> {
                     cancelDownloadNotification(app);
                     if (callback != null) callback.onError(reason, message);
@@ -1136,8 +1195,9 @@ final class YtarkUpdater {
                 });
             } catch (Exception error) {
                 Log.w(TAG, "Saved update failed verification", error);
-                setUpdaterState(app, STATE_FAILED, friendlyMessage(error,
-                        failureReason(error, UpdateFailure.VALIDATION_FAILED)));
+                setUpdaterFailure(app, friendlyMessage(error,
+                        failureReason(error, UpdateFailure.VALIDATION_FAILED)),
+                        UpdaterFailurePhasePolicy.VALIDATION);
                 clearPendingUpdate(app);
                 final UpdateFailure reason = failureReason(error, UpdateFailure.VALIDATION_FAILED);
                 final String message = friendlyMessage(error, reason);
@@ -1148,23 +1208,52 @@ final class YtarkUpdater {
         });
     }
 
+    private static File updateDirectory(Context context, boolean create) throws IOException {
+        File files = context.getFilesDir();
+        if (files == null) throw new IOException("YTArk private app storage is unavailable.");
+        File directory = new File(files, "ytark_updates");
+        if (create && !directory.exists() && !directory.mkdirs()) {
+            throw new IOException("YTArk could not create secure update storage.");
+        }
+        if (directory.exists() && !directory.isDirectory()) {
+            throw new IOException("YTArk update storage is not a directory.");
+        }
+        if (!UpdateGuards.isSafeUpdateDirectory(files, directory)) {
+            throw new SecurityException("YTArk update storage resolves outside its private app directory.");
+        }
+        return directory;
+    }
+
+    private static File safeUpdateFile(File directory, String name) throws IOException {
+        if (name == null || name.length() == 0) {
+            throw new IOException("The YTArk update file name is empty.");
+        }
+        File file = new File(directory, name);
+        if (!UpdateGuards.isSafeUpdateFile(directory, file)) {
+            throw new SecurityException("A YTArk update file resolves outside its private update directory.");
+        }
+        return file;
+    }
+
     private static File downloadRelease(Context context, ReleaseInfo release,
                                         DownloadCallback callback, DownloadOperation operation)
             throws Exception {
         validateReleaseContract(release);
         operation.throwIfCancelled();
-        File directory = new File(context.getFilesDir(), "ytark_updates");
-        if (!directory.exists() && !directory.mkdirs()) {
-            throw new IOException("YTArk could not create secure update storage.");
-        }
-        // A new selection replaces an older verified APK, and leftover partial or
-        // old-version files are removed before any new bytes are written.
-        ReleaseInfo previous = pendingRelease(context);
-        if (previous != null && !sameRelease(previous, release)) clearPendingUpdate(context);
-        removeStaleUpdateFiles(directory, release.assetName);
-        File apk = new File(directory, release.assetName);
-        File partial = new File(directory, release.assetName + ".part");
-        File partialMetadata = new File(directory, release.assetName + ".part.properties");
+        File directory = updateDirectory(context, true);
+        // A different release may already be verified and awaiting installer
+        // confirmation. Keep it intact until this candidate has passed every
+        // check and atomically becomes the replacement pending APK.
+        ReleaseInfo pending = pendingRelease(context);
+        ReleaseInfo selected = selectedRelease(context);
+        ReleaseInfo active = activeDownloadRelease();
+        removeStaleUpdateFiles(directory, release.assetName,
+                pending == null ? null : pending.assetName,
+                selected == null ? null : selected.assetName,
+                active == null ? null : active.assetName);
+        File apk = safeUpdateFile(directory, release.assetName);
+        File partial = safeUpdateFile(directory, release.assetName + ".part");
+        File partialMetadata = safeUpdateFile(directory, release.assetName + ".part.properties");
 
         if (apk.isFile()) {
             try {
@@ -1173,7 +1262,13 @@ final class YtarkUpdater {
                 deleteIfPresent(partialMetadata);
                 return apk;
             } catch (Exception invalid) {
-                if (!apk.delete()) Log.w(TAG, "Could not remove invalid cached update", invalid);
+                try {
+                    deleteIfPresent(apk);
+                } catch (IOException | SecurityException cleanupError) {
+                    invalid.addSuppressed(cleanupError);
+                    throw cleanupError;
+                }
+                Log.w(TAG, "Removed an invalid cached update", invalid);
             }
         }
 
@@ -1201,17 +1296,13 @@ final class YtarkUpdater {
         }
         if (!partial.isFile()) writePartialMetadata(partialMetadata, release);
 
-        HttpURLConnection connection = openConnection(release.downloadUrl);
-        operation.connection = connection;
         long startOffset = existing;
         long lastProgress = 0L;
+        HttpURLConnection connection = openTrustedConnection(release.downloadUrl, UPDATE_MIME_TYPE,
+                existing > 0 ? "bytes=" + existing + "-" : null, false, operation);
         try {
             operation.throwIfCancelled();
-            connection.setRequestProperty("Accept", UPDATE_MIME_TYPE);
-            if (existing > 0) connection.setRequestProperty("Range", "bytes=" + existing + "-");
             int status = connection.getResponseCode();
-            requireTrustedDownloadRedirect(connection);
-            operation.throwIfCancelled();
             boolean append = UpdateResumeContract.shouldAppend(existing, status);
             if (append) {
                 String contentRange = connection.getHeaderField("Content-Range");
@@ -1281,8 +1372,12 @@ final class YtarkUpdater {
             throw new UpdateFailureException(UpdateFailure.VALIDATION_FAILED,
                     "The downloaded APK failed its SHA-256 integrity check and was discarded.");
         }
-        if (apk.exists() && !apk.delete()) throw new IOException("Could not replace the cached APK.");
-        if (!partial.renameTo(apk)) throw new IOException("Could not finalize the verified APK download.");
+        deleteIfPresent(apk);
+        if (!UpdateGuards.isSafeUpdateFile(directory, partial)
+                || !UpdateGuards.isSafeUpdateFile(directory, apk)
+                || !partial.renameTo(apk)) {
+            throw new IOException("Could not safely finalize the verified APK download.");
+        }
         deleteIfPresent(partialMetadata);
         return apk;
     }
@@ -1292,14 +1387,21 @@ final class YtarkUpdater {
         return message != null && (message.contains("ENOSPC") || message.contains("No space left"));
     }
 
-    /** Deletes leftover YTArk update files (old partials, old APKs) except the named release. */
-    private static void removeStaleUpdateFiles(File directory, String keepAssetName) {
-        File[] children = directory.listFiles();
-        if (children == null) return;
-        for (File child : children) {
-            if (UpdateGuards.isStaleUpdateFile(child.getName(), keepAssetName) && child.isFile()) {
+    /** Delete only stale direct-child updater files; retained APKs and partial siblings are untouched. */
+    private static void removeStaleUpdateFiles(File directory, String... keepAssetNames) {
+        if (directory == null || !directory.isDirectory()) return;
+        try {
+            File canonicalDirectory = directory.getCanonicalFile();
+            if (!canonicalDirectory.equals(directory.getAbsoluteFile())) return;
+            File[] children = canonicalDirectory.listFiles();
+            if (children == null) return;
+            for (File child : children) {
+                if (!UpdateGuards.isStaleUpdateFile(child.getName(), keepAssetNames)) continue;
+                if (!UpdateGuards.isSafeUpdateFile(canonicalDirectory, child) || !child.isFile()) continue;
                 if (!child.delete()) Log.w(TAG, "Could not remove stale update file");
             }
+        } catch (IOException | SecurityException unsafeDirectory) {
+            Log.w(TAG, "Could not safely inspect stale update files", unsafeDirectory);
         }
     }
 
@@ -1322,7 +1424,7 @@ final class YtarkUpdater {
         properties.setProperty("sha256", release.sha256);
         properties.setProperty("size", Long.toString(release.assetSize));
         properties.setProperty("abi", release.nativeAbi);
-        File temporary = new File(metadata.getParentFile(), metadata.getName() + ".tmp");
+        File temporary = safeUpdateFile(metadata.getParentFile(), metadata.getName() + ".tmp");
         try (FileOutputStream output = new FileOutputStream(temporary)) {
             properties.store(output, "YTArk verified resume metadata");
             output.getFD().sync();
@@ -1338,6 +1440,10 @@ final class YtarkUpdater {
     }
 
     private static void deleteIfPresent(File file) throws IOException {
+        if (file == null || file.getParentFile() == null
+                || !UpdateGuards.isSafeUpdateFile(file.getParentFile(), file)) {
+            throw new SecurityException("Refusing to delete an updater file outside its direct private directory.");
+        }
         if (file.exists() && !file.delete()) {
             throw new IOException("Could not discard stale YTArk update data.");
         }
@@ -1486,7 +1592,11 @@ final class YtarkUpdater {
         return result.toString();
     }
 
-    private static void savePendingUpdate(Context context, File apk, ReleaseInfo release) {
+    private static void savePendingUpdate(Context context, File apk, ReleaseInfo release)
+            throws IOException {
+        if (!isOwnedUpdateFile(context, apk) || !apk.isFile()) {
+            throw new SecurityException("The verified update APK is no longer in YTArk private update storage.");
+        }
         saveSelectedRelease(context, release);
         preferences(context).edit()
                 .putString("pending_path", apk.getAbsolutePath())
@@ -1566,13 +1676,12 @@ final class YtarkUpdater {
     }
 
     private static boolean isOwnedUpdateFile(Context context, File file) {
-        if (file == null) return false;
+        if (context == null || file == null) return false;
         try {
-            File updates = new File(context.getFilesDir(), "ytark_updates").getCanonicalFile();
-            File canonical = file.getCanonicalFile();
-            return updates.equals(canonical.getParentFile())
-                    && canonical.getName().matches("YTArk-v(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)-armv7\\.apk");
-        } catch (IOException invalid) {
+            File updates = updateDirectory(context, false);
+            return UpdateGuards.isSafeUpdateFile(updates, file)
+                    && file.getName().matches("YTArk-v(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)-armv7\\.apk");
+        } catch (IOException | SecurityException invalid) {
             return false;
         }
     }
@@ -1609,16 +1718,17 @@ final class YtarkUpdater {
     static void clearPendingUpdate(Context context) {
         synchronized (UPDATE_FILES_LOCK) {
             File apk = pendingApk(context);
-            if (apk != null && apk.exists() && !apk.delete()) {
-                Log.w(TAG, "Could not remove the verified APK after installation");
-            }
             if (apk != null) {
-                File partial = new File(apk.getParentFile(), apk.getName() + ".part");
-                File partialMetadata = new File(apk.getParentFile(), apk.getName() + ".part.properties");
-                if (partial.exists() && !partial.delete()) Log.w(TAG, "Could not remove partial APK");
-                if (partialMetadata.exists() && !partialMetadata.delete()) Log.w(TAG, "Could not remove partial metadata");
+                try {
+                    deleteIfPresent(apk);
+                    deleteIfPresent(safeUpdateFile(apk.getParentFile(), apk.getName() + ".part"));
+                    deleteIfPresent(safeUpdateFile(apk.getParentFile(), apk.getName() + ".part.properties"));
+                } catch (IOException | SecurityException unsafeFile) {
+                    Log.w(TAG, "Could not safely remove the verified update files", unsafeFile);
+                }
             }
             preferences(context).edit().remove("install_requested").remove("handoff_in_flight")
+                    .remove("install_target_version_code")
                     .remove("pending_path").remove("pending_tag")
                     .remove("pending_version").remove("pending_display_version").remove("pending_notes")
                     .remove("pending_asset").remove("pending_url").remove("pending_sha256").remove("pending_abi")
@@ -1631,6 +1741,9 @@ final class YtarkUpdater {
         if (pending == null) return false;
         InstalledVersion installed = getInstalledVersionSafe(context);
         if (installed.versionCode < pending.versionCode) return false;
+        preferences(context).edit()
+                .putLong("completed_update_version_code", pending.versionCode)
+                .apply();
         clearPendingUpdate(context);
         NotificationManager manager = notificationManager(context);
         if (manager != null) {
@@ -1642,7 +1755,8 @@ final class YtarkUpdater {
                 .putString("installer_return_status", "YTArk " + pending.displayVersion + " is installed.")
                 .putString("updater_state", STATE_UP_TO_DATE)
                 .putLong("updater_state_at", System.currentTimeMillis())
-                .remove("updater_error");
+                .remove("updater_error")
+                .remove("updater_error_phase");
         clearSelectedRelease(completed);
         completed.apply();
         return true;
@@ -1724,6 +1838,36 @@ final class YtarkUpdater {
         }
     }
 
+    static void setInstallerTargetVersionCode(Context context, long versionCode) {
+        synchronized (UPDATE_FILES_LOCK) {
+            SharedPreferences.Editor editor = preferences(context).edit();
+            if (versionCode > 0L) {
+                editor.putLong("install_target_version_code", versionCode)
+                        .remove("completed_update_version_code");
+            } else {
+                editor.remove("install_target_version_code");
+            }
+            editor.apply();
+        }
+    }
+
+    static long installerTargetVersionCode(Context context) {
+        return preferences(context).getLong("install_target_version_code", 0L);
+    }
+
+    static long completedUpdateVersionCode(Context context) {
+        return preferences(context).getLong("completed_update_version_code", 0L);
+    }
+
+    static void clearInstallerTargetVersionCode(Context context) {
+        preferences(context).edit().remove("install_target_version_code").apply();
+    }
+
+    static boolean isInstalledVersionAtLeast(Context context, long versionCode) {
+        return InstallerResultPolicy.installedVersionConfirms(
+                getInstalledVersionSafe(context).versionCode, versionCode);
+    }
+
     /** True from the moment the installer is opened until Android returns control. */
     static boolean handoffInFlight(Context context) {
         return preferences(context).getBoolean("handoff_in_flight", false);
@@ -1774,18 +1918,20 @@ final class YtarkUpdater {
             if (ACTIVE_DOWNLOAD.get() != null || handoffInFlight(app) || installRequested(app)) {
                 return new UpdateFileCleanup(0L, 0, true, false);
             }
-            File directory = new File(app.getFilesDir(), "ytark_updates");
-            if (!directory.exists()) return new UpdateFileCleanup(0L, 0, false, false);
-            if (!directory.isDirectory()) return new UpdateFileCleanup(0L, 0, false, true);
             try {
+                File directory = updateDirectory(app, false);
+                if (!directory.exists()) return new UpdateFileCleanup(0L, 0, false, false);
+                if (!directory.isDirectory()) return new UpdateFileCleanup(0L, 0, false, true);
                 File canonicalDirectory = directory.getCanonicalFile();
                 if (!canonicalDirectory.equals(directory.getAbsoluteFile())) {
                     return new UpdateFileCleanup(0L, 0, false, true);
                 }
                 ReleaseInfo pending = pendingRelease(app);
                 ReleaseInfo selected = selectedRelease(app);
+                ReleaseInfo active = activeDownloadRelease();
                 String keep = pending == null ? "" : pending.assetName;
                 String keepSelected = selected == null ? "" : selected.assetName;
+                String keepActive = active == null ? "" : active.assetName;
                 File[] files = canonicalDirectory.listFiles();
                 if (files == null) return new UpdateFileCleanup(0L, 0, false, true);
                 long bytes = 0L;
@@ -1796,7 +1942,8 @@ final class YtarkUpdater {
                         File canonical = file.getCanonicalFile();
                         if (!canonical.equals(file.getAbsoluteFile())
                                 || !canonicalDirectory.equals(canonical.getParentFile()) || !canonical.isFile()
-                                || !UpdateGuards.isStaleUpdateFile(canonical.getName(), keep, keepSelected)) continue;
+                                || !UpdateGuards.isStaleUpdateFile(canonical.getName(), keep,
+                                keepSelected, keepActive)) continue;
                         long size = canonical.length();
                         if (canonical.delete()) {
                             bytes += size;
@@ -1827,23 +1974,28 @@ final class YtarkUpdater {
                 clearPendingIfInstalled(app);
                 String priorState = updaterState(app);
                 if (STATE_CHECKING.equals(priorState)) {
-                    setUpdaterState(app, STATE_FAILED,
-                            "The previous release check was interrupted by an app restart. The last successful result is unchanged; check again when eligible.");
+                    setUpdaterFailure(app,
+                            "The previous release check was interrupted by an app restart. The last successful result is unchanged; check again when eligible.",
+                            UpdaterFailurePhasePolicy.CHECK);
                 } else if (STATE_DOWNLOADING.equals(priorState)) {
                     setUpdaterState(app, STATE_CANCELLED,
                             "The previous download was interrupted by an app restart. Matching partial bytes are preserved for resume.");
                 } else if (STATE_VALIDATING.equals(priorState)) {
-                    setUpdaterState(app, STATE_FAILED,
-                            "The previous APK validation was interrupted by an app restart. The saved release can be verified again.");
+                    setUpdaterFailure(app,
+                            "The previous APK validation was interrupted by an app restart. The saved release can be verified again.",
+                            hasVerifiedPending(app) ? UpdaterFailurePhasePolicy.VALIDATION
+                                    : UpdaterFailurePhasePolicy.DOWNLOAD);
                 }
                 synchronized (UPDATE_FILES_LOCK) {
                     if (ACTIVE_DOWNLOAD.get() != null || handoffInFlight(app) || installRequested(app)) return;
-                    File directory = new File(app.getFilesDir(), "ytark_updates");
+                    File directory = updateDirectory(app, false);
                     ReleaseInfo pending = pendingRelease(app);
                     ReleaseInfo selected = selectedRelease(app);
-                    String keep = pending != null ? pending.assetName
-                            : selected == null ? "" : selected.assetName;
-                    if (directory.isDirectory()) removeStaleUpdateFiles(directory, keep);
+                    ReleaseInfo active = activeDownloadRelease();
+                    removeStaleUpdateFiles(directory,
+                            pending == null ? null : pending.assetName,
+                            selected == null ? null : selected.assetName,
+                            active == null ? null : active.assetName);
                 }
             } catch (Exception error) {
                 Log.w(TAG, "Update housekeeping failed", error);

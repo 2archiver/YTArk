@@ -1,7 +1,7 @@
 # YTArk feature inventory (regression checklist)
 
 Derived from the current source (`TizenTube/mods/config.js` defaults and
-`TizenTube/mods/features`, `ui`, `resolveCommand.js`) for the unpublished 2.8.0 candidate (a planned direct in-place update from published 2.7.0).
+`TizenTube/mods/features`, `ui`, `resolveCommand.js`) for the unpublished 2.9.1 candidate (a planned direct in-place update from published 2.8.0).
 "Code" means the feature is implemented in the bundled userscript and covered by
 a source-level test where noted. "Device" means a physical TV run is recorded;
 **no device run has been recorded for this candidate**, so every device column is
@@ -11,12 +11,15 @@ Base: TizenTubeCobalt `v2.0.2` (Cobalt runtime and YouTube TV frontend are the
 upstream ones, unchanged). YTArk adds the userscript layer and native updater.
 The complete version history is in [`CHANGELOG.md`](../CHANGELOG.md).
 
-Worktree validation: 283 Node tests and 126 Python tests passed; the userscript
-build and bundle syntax check passed. Java syntax was parsed for 24 sources, but
-Android type-checking, Java contract execution, DEX/APK packaging and device
-flows were not run.
+Worktree validation on 2026-10-14: 282 Node tests and 128 Python tests passed;
+the userscript built (850,096 bytes) and passed `node --check`; changelog,
+build-info, logo, launcher-art, repacker, workflow-policy and secret-scan checks
+passed. `javac`, `java`, D8, apktool and Android SDK are absent, so native Java
+contracts, DEX/APK packaging and signing were not run. Candidate evidence and
+requirement statuses are in [`SETTINGS-2.9.1-REVIEW.md`](SETTINGS-2.9.1-REVIEW.md).
+These source checks do not verify Android runtime dispatch or a physical TV.
 
-## 2.8.0 candidate: what each claim is backed by
+## 2.9.1 candidate: what each claim is backed by
 
 Three separate columns, never merged. **Source implemented** means the code exists
 in this repository. **Packaged / CI verified** means a named CI gate or the candidate
@@ -25,12 +28,12 @@ APK. Only the first two can be true before a device run.
 
 | Claim | Source implemented | Packaged / CI verified | Device tested |
 |---|---|---|---|
-| Candidate version 2.8.0 / versionCode 2080000 / `v2.8.0` / `s27` metadata; published 2.7.0 remains v2.7.0 / 2070000 / s26 | Yes (`release/version.properties`, generated `assets/buildInfo.generated.js`) | Python release-contract suite passed; `build_buildinfo.py --check`, changelog check and `validate_release.py emit-env` passed; no APK package built | NOT RUN |
-| Native updater: TV launcher entry *YTArk Updates*, `ytark://updates` link, and the native screen | Yes (`tools/repack_apk.py` `patch_updater_manifest`, `UpdateActivity.java`) | `test_updater_manifest_patch.py`, `test_updater_launcher.py`, `validate_release.py` `validate_updater_launcher` on the compiled manifest | NOT RUN |
+| Candidate version 2.9.1 / versionCode 2090100 / `v2.9.1` / `s29` metadata; published 2.8.0 remains v2.8.0 / 2080000 / s27 | Yes (`release/version.properties`, generated `assets/buildInfo.generated.js`) | Python release-contract suite and generated metadata checks are candidate source checks; no Android APK package built | NOT RUN |
+| Native updater: public TV launcher proxy *YTArk Updates*, signature-protected `ytark://updates` route, and private updater screen | Yes (`UpdateLauncherActivity.java`, `tools/repack_apk.py`, `UpdateActivity.java`) | Python patch/launcher tests cover source manifest; compiled-manifest check and native launch not run here | NOT RUN |
 | Install gate: install only on an explicit press, permission checked with `canRequestPackageInstalls()`, no automatic continuation after a restart, no repeated hand-off | Yes (`InstallGate.java`, `UpdateActivity.java`, `YtarkUpdater.java`) | `InstallGateTest` (host JRE, CI `ci.yml`) | NOT RUN |
 | Storage and compatibility guards: free-space budget, release-file cleanup protection, minimum-SDK check, clean release-page tag | Yes (`UpdateGuards.java`) | `UpdateGuardsTest` is defined for CI; Java/Gradle tests not run in this environment | NOT RUN |
 | Honest release states: "Up to date" only after a fresh successful check; "Newer than the latest stable release" for a newer local build; timestamped cached results | Yes (`features/updater.js`, `features/updateState.js`) | `updates-settings.test.mjs` (honest release-state copy, 2.6) | NOT RUN |
-| Explicit YTArk Settings actions request native Updates/Storage routes without assuming a new JavaScript bridge; the updater's JS fallback remains read-only | Yes (`ui/ytarkActions.js`, `settingsRegistry.js`, manifest routes in `tools/repack_apk.py`) | Python manifest patch tests are defined; end-to-end navigation is device-only and not run | NOT RUN |
+| Settings actions emit only the screen routes `ytark://updates` and `ytark://storage`; no updater JS interface is registered and the frontend fallback remains read-only | Yes (`ui/ytarkActions.js`, `settingsRegistry.js`, manifest routes in `tools/repack_apk.py`) | Node action test and Python manifest-contract tests cover URL/manifest only; pinned Cobalt dispatch is unproven | **NOT RUN — native navigation pending** |
 | Installed-version resolution for About and Updates (async bridge read, bounded retries, labelled build-metadata fallback) | Yes (`features/appVersion.js`, `features/updater.js`) | `app-version.test.mjs`, `updates-settings.test.mjs`; `build_buildinfo.py --check` in `ci.yml` and `build-apk.yml` | NOT RUN |
 | Guide entry opens only on an explicit activation (focus/scroll cannot open it; entry last; Back restores focus) | Yes (`ui/guideEntryActivation.js`, `ui/customGuideAction.js`, `resolveCommand.js`) | `guide-entry-activation.test.mjs`, `guide-entry.test.mjs` | NOT RUN |
 | User-Agent profile, presets/undo and Fix UI removed; retired keys migrated once | Yes (`config.js` `RETIRED_KEYS`, `features/userAgentRetirement.js`) | `settings-cleanup.test.mjs`, `config-migration.test.mjs`, `branding-guest-ua.test.mjs`; retired-symbol and bundle greps in `ci.yml` | NOT RUN |
@@ -48,12 +51,12 @@ APK. Only the first two can be true before a device run.
 | SponsorBlock bounded lookup, strict validation, late-result discard | Yes (`features/settlementDeadline.js`, `sponsorblock*.js`) | `ci.yml` Node tests (28 SponsorBlock tests) | NOT RUN |
 | Settings → YTArk Updates card (Installed / Latest / Status / QR fallback / changelog link) | Yes (`features/updater.js`) | Node tests (`updates-settings.test.mjs`, `changelog-whats-new.test.mjs`) | NOT RUN |
 | Bundled native updater (stable release lookup, ABI/package/signer/version/digest validation, installer hand-off, persistent state) | Yes (`android-updater/`) | Java/JUnit and DEX compile gates are defined in CI; neither was run for this candidate | NOT RUN |
-| Persistent hourly update checks; separate automatic checks/downloads; restart reconciliation and cancellation recovery | Yes (`YtarkUpdater.java`, `UpdateSchedulePolicy.java`, `UpdateCheckJobService.java`, `UpdateBootstrapProvider.java`) | Python manifest/release tests passed; Java syntax parsed; Java contract tests, DEX build and JobScheduler runtime not run | NOT RUN |
+| Persistent hourly update checks; separate automatic checks/downloads; restart reconciliation, install-result polling and phase-specific failures | Yes (`YtarkUpdater.java`, `UpdateSchedulePolicy.java`, `UpdateCheckJobService.java`, `UpdateBootstrapProvider.java`, `InstallerResultPolicy.java`) | Python/Node tests can cover source contracts; Java compiler, host-JRE contracts, DEX build and JobScheduler runtime are blocked/not run | NOT RUN |
 | Remote-friendly Cache & Storage; app-cache roots only, off-thread, recent/unknown-age files retained, updater APKs protected | Yes (`StorageActivity.java`, `YtarkUpdater.java`, `UpdateGuards.java`) | Python manifest/release tests passed; Java syntax parsed; no Android cache behavior test or device run | NOT RUN |
 | Opt-in playback recovery (off by default; bounded retries; navigation/PiP/pause/error/range guards; visible sign-in/age/region text stops retries) | Yes (`features/playbackRecovery.js`, `config.js`) | `playback-recovery.test.mjs` passed; userscript build passed | NOT RUN |
 | Skip-startup-animation availability | Informational row only; no optional YTArk animation/delay hook exists in this base | Settings regression test passed; no control or animation-removal claim | n/a |
-| Direct 2.7.0 → 2.8.0 update preserves package/signer/data path and existing preferences/session | Configured by version/package/signing contract; runtime continuity is an Android/device property | No signed APK upgrade or account/session continuity test run | NOT RUN |
-| `ytark://updates` / `ytark://storage` → native `UpdateActivity` / `StorageActivity` | Manifest intent-filters declared by the repacker and explicit Settings actions | Python manifest tests passed; `check-apk` and end-to-end device navigation not run | **NOT RUN — native navigation pending** |
+| Direct 2.8.0 → 2.9.1 update preserves package/signer/data path and existing preferences/session | Configured by version/package/signing contract; runtime continuity is an Android/device property | No signed APK upgrade or account/session continuity test run | NOT RUN |
+| `ytark://updates` / `ytark://storage` → native `UpdateActivity` / `StorageActivity` | Exact URI policy, separate TV launcher proxy, and app-signature permission on exported route activities | Python URL/manifest tests pass; pinned Cobalt dispatch is unproven and device navigation not run | **NOT RUN — native navigation pending** |
 | ARMv7-only APK, signer, versionCode, checksums | Yes | `build-apk.yml` candidate build and `publish-release` job verify; public assets re-downloaded | NOT RUN |
 | Workflow least privilege (PR read-only, build read-only, publish job alone writes) | Yes | `tools/check_workflow_policy.py` in `ci.yml` | n/a |
 | Automatic publication from a successful `main` build; resumable repair | Yes | `tools/publish_release.py`, covered by `tools/tests/test_publish_release.py` | n/a |
@@ -143,7 +146,7 @@ account, cookie and session storage is never read or written.
 | `ytSettingsCatalog` | Sections detected on the YouTube Settings page (no account identity) |
 | `lastSeenVersion`, `whatsNewVersion`, `whatsNewDismissedVersion` | What's new bookkeeping (version strings only) |
 | `enablePlaybackRecovery` | Opt-in player recovery; new default is off; existing explicit value is preserved |
-| `configSchemaVersion` | Settings schema marker (4 for the 2.8 candidate) |
+| `configSchemaVersion` | Settings schema marker (4; playback-recovery migration was introduced in published 2.8.0) |
 
 ## Branding audit (visible strings)
 
@@ -164,13 +167,14 @@ compatibility: `window.h5vcc.tizentube` (the upstream bridge object),
 
 ## 2.8.0 migration and release boundary
 
-`configSchemaVersion` advances to 4 to add `enablePlaybackRecovery`, default off.
-An existing saved value is retained; a missing value receives the off default. The
-native updater preferences default automatic checks and downloads on, while user
-opt-outs are persisted. No Google credentials/session, cookies, local storage,
-profile data, watch history, preferences other than the new default, package ID,
-signing identity or app-data directory are replaced by this change. These are
-source/configuration claims only: the direct signed upgrade from installed 2.7.0
-and preservation of login/session remain **NOT RUN** until tested on a TV. The
-2.8.0 release is unpublished; the Node/Python suites and userscript build passed,
-but no native APK was built or installed.
+YTArk 2.8.0 was published on 2026-10-13. Its schema-4 migration added
+`enablePlaybackRecovery`, default off; an existing saved value is retained and a
+missing value receives the off default. Native automatic-check/download
+preferences default on while explicit opt-outs are persisted. The published
+release was built and signed, but account/session continuity and device behavior
+are not established by this source inventory.
+
+The 2.9.1 candidate does not reset or rewrite existing preferences, cookies,
+credentials, profile data, watch history, package ID, signing identity or app-data
+directory. Direct signed upgrade from 2.8.0 and session retention remain
+**NOT RUN**; there is no 2.9.1 signed APK in this worktree.
