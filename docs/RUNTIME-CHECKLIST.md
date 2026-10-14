@@ -5,8 +5,8 @@ signature, checksum and unit gates run in CI; they cannot prove that a TV shows
 the wordmark, keeps remote-control focus, or installs an update.
 
 Copy this file per release, fill the header, and record the result of every row.
-For the current candidate, use `versionName=2.9.1`, `versionCode=2090100`,
-`YTArk-v2.9.1-armv7.apk`, userscript `s29`, package
+For the current candidate, use `versionName=2.9.0`, `versionCode=2090000`,
+`YTArk-v2.9.0-armv7.apk`, userscript `s28`, package
 `io.github.twoarchiver.ytark`, and the TizenTubeCobalt v2.0.2 ARMv7 base. The
 candidate is not built or device-verified. A row that has not been executed on a
 device is **NOT RUN** — never mark it PASS from source inspection, a screenshot
@@ -90,7 +90,7 @@ tests do not replace these rows.
 | 34 | Restore default layout | Only the layout resets; YTArk and YouTube settings and the session are unchanged | |
 | 35 | Changelog reader | Version list newest first with the installed version marked; long versions scroll with the D-pad; Back returns; QR opens the release page | |
 | 36 | Section reset | The confirmation lists the defaults; only that section changes | |
-| 37 | In-place update to 2.9.1 | Installs directly over published 2.8.0 without uninstalling; package, signer, session, cookies and preferences are preserved | NOT RUN |
+| 37 | In-place update to 2.9.0 | Installs directly over published 2.8.0 without uninstalling; package, signer, session, cookies and preferences are preserved | NOT RUN |
 
 ## YTArk 2.4 features (updater verdicts, settings categories, guide entry)
 
@@ -142,7 +142,7 @@ painted.
 | 54 | Installed vs available | The Updates card's "Installed" value matches About; "Latest" stays a separate value; a pending asynchronous read shows a brief loading state and then the real version in place (no second panel) | |
 | 55 | No duplicates after heavy use | Repeated opens/closes of YTArk Settings, its submenus, About and the changelog create no duplicate panels, rows or handlers; playback, YouTube's own Settings page and the update check still work | |
 
-## YTArk 2.7 features retained in 2.9.1 (search keyboard, About dialog, simplified changelog)
+## YTArk 2.7 features retained in 2.9.0 (search keyboard, About dialog, simplified changelog)
 
 Every row is **NOT RUN** until recorded on the build under test. The DOM tests and
 CI checks cover focus, layout data and the bundled text, not a TV panel or a
@@ -157,10 +157,10 @@ device input method.
 | 66 | Changelog summaries | Each version row leads with one short line; 2.7 reads exactly "2.7 — TV keyboard search, a readable About dialog and a simpler changelog"; the list stays newest first and long versions scroll with the D-pad; Back returns | NOT RUN |
 | 67 | OLED Black after the relabel | Turning OLED Black on still repaints the supported surfaces to true black immediately and after a restart, the focused row stays distinguishable, and the setting text matches what is actually themed | NOT RUN |
 
-## YTArk 2.8 published features retained in 2.9.1 (storage, recovery and update automation)
+## YTArk 2.8 published features retained in 2.9.0 (storage, recovery and update automation)
 
 YTArk 2.8.0 was published on 2026-10-13. All rows below remain **NOT RUN for the
-2.9.1 candidate** until a physical TV test records the signed APK identity and
+2.9 candidate** until a physical TV test records the signed APK identity and
 device details. Android JobScheduler is best-effort and can defer its hourly
 interval. See [`DEVICE-ACCEPTANCE.md`](DEVICE-ACCEPTANCE.md) for the complete
 candidate acceptance list.
@@ -179,9 +179,9 @@ candidate acceptance list.
 | 77 | Installer reconciliation | Installer launch is not called success; later installed package version decides result; cancellation/restart remains recoverable | NOT RUN |
 | 78 | Startup-animation availability | Informational-only row; no YTArk toggle or claim to remove system splash/YouTube UI; initialization, injection, session restore and migrations still run | NOT RUN |
 
-## YTArk 2.9.1 candidate features (routing, updater recovery, OLED and settings)
+## YTArk 2.9 candidate features (routing, updater recovery, OLED and settings)
 
-These checks are specific to the unpublished 2.9.1 candidate. Source-level tests
+These checks are specific to the unpublished 2.9 candidate. Source-level tests
 are not Android/Cobalt integration evidence. Keep each row **NOT RUN** until the
 exact signed ARMv7 APK has been exercised on a named supported device.
 

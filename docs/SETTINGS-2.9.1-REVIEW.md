@@ -1,3 +1,11 @@
+> **Historical record.** This review documents the abandoned 2.9.1 split of the
+> 2.9 work. That version line was never published: its build runs failed in the
+> userscript step before repacking, so no APK, tag, artefact or release exists
+> for `2.9.1`, `2090100` or `s29`. The identity values in the tables below are
+> the draft's, not the current release contract. See
+> [`SETTINGS-2.9-RECOVERY-REVIEW.md`](SETTINGS-2.9-RECOVERY-REVIEW.md) for the
+> consolidated 2.9 candidate and current evidence.
+
 # YTArk 2.9.1 implementation review
 
 **Review date:** 2026-10-14 (Australia/Brisbane)  
@@ -11,7 +19,7 @@ physical-device result exists in this worktree.
 
 ## Release identity and compatibility boundary
 
-| Property | Candidate target / evidence |
+| Property (abandoned draft identity) | Draft target / evidence |
 |---|---|
 | `versionName` / `displayVersion` | `2.9.1` / `2.9.1` |
 | `versionCode` | `2090100`; exceeds published v2.8.0 (`2080000`) |
