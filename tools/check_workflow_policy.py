@@ -27,6 +27,7 @@ Release pipeline (2.2 onward):
 
 from __future__ import annotations
 
+import glob
 import re
 import sys
 from pathlib import Path
@@ -99,6 +100,94 @@ def writes_releases(block: str) -> list[str]:
     return [m.group(0) for m in TAG_OR_RELEASE_WRITE.finditer(block)]
 
 
+# A repo script referenced from a `run:` step, e.g. `../tools/check.py`.
+SCRIPT_INVOCATION = re.compile(
+    r"(?<![\w./$-])(?P<path>(?:\.{1,2}/)?(?:[A-Za-z0-9_.@-]+/)+[A-Za-z0-9_*.@-]+\.(?:py|sh))(?![\w.-])"
+)
+STEP_START = re.compile(r"^      - name: (.+)$", re.M)
+WORKING_DIRECTORY = re.compile(r"^\s+working-directory:\s*(\S+)\s*$", re.M)
+RUN_KEY = re.compile(r"^(?P<indent>[ \t]+)run:\s*(?P<value>.*)$", re.M)
+
+
+def steps(text: str) -> list[tuple[str, str]]:
+    """Return (step name, step source) pairs without depending on YAML parsing."""
+    starts = list(STEP_START.finditer(text))
+    return [
+        (
+            match.group(1),
+            text[match.start() : starts[index + 1].start() if index + 1 < len(starts) else len(text)],
+        )
+        for index, match in enumerate(starts)
+    ]
+
+
+def run_scripts(step: str) -> list[str]:
+    """Return the body of every `run:` script in a step, block scalar or inline."""
+    bodies: list[str] = []
+    for match in RUN_KEY.finditer(step):
+        indent, value = match.group("indent"), match.group("value").strip()
+        if value in {"|", "|-", "|+", ">", ">-", ">+"}:
+            lines: list[str] = []
+            for line in step[match.end() :].splitlines():
+                if not line.strip():
+                    lines.append("")
+                elif len(line) - len(line.lstrip()) <= len(indent):
+                    break
+                else:
+                    lines.append(line)
+            bodies.append("\n".join(lines))
+        elif value:
+            bodies.append(value)
+    return bodies
+
+
+def uncommented(line: str) -> str:
+    """Drop a trailing `#` comment so commented-out text is not checked."""
+    index = line.find("#")
+    while index != -1:
+        if index == 0 or line[index - 1].isspace():
+            return line[:index]
+        index = line.find("#", index + 1)
+    return line
+
+
+def resolves(token: str, base: Path) -> bool:
+    """True when a script token exists from the step's working directory or the root."""
+    relative = token.startswith("./") or token.startswith("../")
+    for candidate in ([base] if relative else [base, ROOT]):
+        if (candidate / token).exists():
+            return True
+        if "*" in token and glob.glob(str(candidate / token)):
+            return True
+    return False
+
+
+def check_script_paths(path: Path, failures: list[str]) -> None:
+    """Every repo script a step runs must exist from that step's working directory.
+
+    The 2.9 recovery replaced the duplicated symbol list with one shared contract
+    checker, but called it as `../tools/check_bundle_contract.py` from
+    `working-directory: TizenTube/mods`, where `../tools` is `TizenTube/tools`.
+    The run died on a path that no local test could see, so the depth is checked
+    here as well.
+    """
+    text = path.read_text(encoding="utf-8")
+    for step_name, step in steps(text):
+        directory = WORKING_DIRECTORY.search(step)
+        base = ROOT / directory.group(1) if directory else ROOT
+        where = directory.group(1) if directory else "the repository root"
+        for script in run_scripts(step):
+            for line in script.splitlines():
+                for match in SCRIPT_INVOCATION.finditer(uncommented(line)):
+                    token = match.group("path")
+                    if "$" in token or resolves(token, base):
+                        continue
+                    failures.append(
+                        f"{path.name}:{step_name}: `{token}` does not exist relative to "
+                        f"{where}; the step would fail before running anything"
+                    )
+
+
 def check_publication_job(name: str, workflow: str, block: str, failures: list[str]) -> None:
     condition = job_condition(block)
     if f"github.repository == '{TRUSTED_REPOSITORY}'" not in condition:
@@ -148,6 +237,8 @@ def check(path: Path, failures: list[str]) -> None:
         failures.append(f"{name}: staging environment gates were removed; do not reintroduce them")
     if re.search(r"^\s*cancel-in-progress:\s*true", text, re.M):
         failures.append(f"{name}: release publication must never be cancelled mid-upload")
+
+    check_script_paths(path, failures)
 
     for job_name, block in sorted(blocks.items()):
         flat = re.sub(r"\s+", " ", block)

@@ -39,6 +39,7 @@ workflow assertions locally against a freshly built bundle.
 | `38433960172` | push `main`, PR #44 merge (`9cb0df3`) | *Build and package-check the ARMv7 APK* → step 9 “Build and test the userscript bundle” | The step carried its **own copy** of the required-symbol list and still required `YTARK_YTS_EDITOR`. PR #44 retired the layout editor, so the symbol no longer exists in the bundle (0 occurrences; the only remaining source reference is the regression test asserting the action is refused). | Step replaced by the shared bundle contract |
 | `38513241473` | push `main`, PR #45 merge (`449218f`) | same job → same step | Same stale duplicate list, untouched by PR #45 | same |
 | `38512750058` | PR #45 (`68bc9a1`) | *Userscript, vector asset, ABI, repacker and updater tests* → step 10 “Test native updater ABI, routes, install recovery, failure phases and storage contracts” | The pure-Java regression fixture `UpdateGuardsTest` called `isStaleUpdateFile("YTArk-v2.6.0-armv7.apk.part", CURRENT, …)` — passing the *active* APK where the *selected* APK belongs, so the “selected partial survives cleanup” case failed. | Repaired in `3f09d57` (“Fix selected APK cleanup regression fixture”); the next run (`38512914154`) passed |
+| `38517448417` | PR #46 (`7ea8143`) | *Userscript, vector asset, ABI, repacker and updater tests* → “Test and build the YTArk userscript” | The repaired step called the shared contract checker as `../tools/check_bundle_contract.py`, but the step runs with `working-directory: TizenTube/mods`, where `../tools` is `TizenTube/tools`. The step exited 2 before any test ran. | Path corrected to `../../tools/check_bundle_contract.py` in both workflows **and** a workflow-policy rule added, so an unreachable step path now fails locally instead of in CI |
 
 Local replay of the old step’s complete assertion list against a freshly built
 bundle (2026-10-14): 24 of 25 checks pass; the single failure is
@@ -46,6 +47,11 @@ bundle (2026-10-14): 24 of 25 checks pass; the single failure is
 Both release runs died **before** “Download and verify the pinned upstream ARMv7
 Cobalt base”, so neither ever compiled the updater, repacked, signed or
 uploaded anything; the publish job was skipped in both.
+
+The PR #46 run is the same class of failure caught one layer earlier: it is not a
+log-forensics case, because the wrong depth is provable locally —
+`python3 ../tools/check_bundle_contract.py` from `TizenTube/mods` fails with
+“No such file or directory” while every suite is green.
 
 ## 3. Repairs applied
 
@@ -71,11 +77,24 @@ uploaded anything; the publish job was skipped in both.
    gone.
 4. **New native theme regression test** — `NativeThemePolicyTest.java` (OLED is
    exactly `#ff000000`, normal palette, opaque colours, ~3:1 quiet-text contrast,
-   invalid/`null`/whitespace themes fall back to normal). Written but **not yet
-   executed on a JVM** (no `javac` here); it is wired into the shared runner.
+   invalid/`null`/whitespace themes fall back to normal). No `javac` exists
+   in this sandbox, so it was written here and executed in CI instead: the
+   PR #47 run compiled it with `javac --release 8` and ran it on Temurin 17
+   in the shared runner. That is the platform-independent policy layer on a
+   host JRE — **not** an APK or dex compile.
 5. **Identity and documentation consistency** — release identity, generated
    metadata, changelog, workflows, tests and acceptance docs now all carry the
    2.9.0 recovery identity (section 4).
+6. **Step paths are checked, not assumed** — `tools/check_workflow_policy.py`
+   now resolves every `.py`/`.sh` path a `run:` block names against that step's
+   `working-directory` (globs and `$VAR` paths handled) and fails the policy
+   check when the script is unreachable. That is exactly how the PR #46 run
+   died: the shared checker was invoked one directory too shallow. Seven
+   regressions in `tools/tests/test_workflow_script_paths.py`, including the
+   literal `../../tools/check_bundle_contract.py` assertion for both workflows.
+   `build-apk.yml` also runs that policy check as a step of its own, before the
+   userscript build it guards, so the release pipeline validates its own
+   paths instead of waiting for PR validation to notice.
 
 ## 4. Version and tag decision
 
@@ -167,7 +186,7 @@ verified only; the toast path is simulated-DOM verified.
 | Duplicate/retired settings removal | **Implemented + Verified (Node + bundle contract)** | `settings-cleanup.test.mjs`; contract `retiredActions` absence checks | Device |
 | Focus/scroll restore in native + YTArk panels | **Implemented + Verified (source/Node)** | `restoreFocus()` in both activities, panel focus tests | Device |
 | About accuracy (YTArk version vs service-delivered frontend vs base vs engine; missing → “Unavailable”) | **Implemented + Verified (Node)** | `features/appVersion.js` (`FRONTEND_VERSION_PATTERN`, no bundled version is presented as the frontend’s; engine stays unavailable; base tag in Build details) | Device |
-| Native theming of UpdateActivity/StorageActivity | **Implemented + Verified (source)**; test Unverified | `NativeThemePolicy` + new `NativeThemePolicyTest` (JVM not run here) | JVM run |
+| Native theming of UpdateActivity/StorageActivity | **Implemented + Verified (source)**; policy layer Verified (CI host-JRE) | `NativeThemePolicy` + `NativeThemePolicyTest`, compiled and run green by the PR #47 CI run | device render on a TV |
 
 ## 7. OLED surface matrix
 
@@ -197,7 +216,7 @@ audited set, not a device-observed one.
 
 | Check | Result |
 |---|---|
-| `python3 -m unittest discover -s tools/tests` | **151 passed, 0 failed, 1 skipped** (the skip is the JVM-dependent updater test compile) |
+| `python3 -m unittest discover -s tools/tests` | **159 passed, 0 failed, 1 skipped** (the skip is the JVM-dependent updater test compile) |
 | `cd TizenTube/mods && node --test tests/*.test.mjs` | **283 passed, 0 failed, 69 suites** |
 | `npm run build` + `python3 ../tools/check_bundle_contract.py` | Built 854,340 bytes; **Bundle contract OK** (39 symbols, 828,492 characters) |
 | `python3 tools/build_changelog.py --check`, `build_buildinfo.py --check` | current |
@@ -207,6 +226,7 @@ audited set, not a device-observed one.
 | Live version gate (`check-version` against GitHub) | exit 0 (16 releases) |
 | Java sources syntax-parsed (`javalang`, 35 files, incl. new test) | 0 syntax errors — **not** a compile |
 | Signed ARMv7 candidate build / repack / sign / device run | **NOT RUN** (see §9) |
+| PR #47 validation run `38518006997` (`494144e`) | **success**, all 10 steps: first green run of the repaired workflows; the updater step compiled the 15 host policy sources with `javac --release 8` and ran all 11 test classes, `NativeThemePolicyTest` included, on Temurin 17 |
 
 ## 9. Blocked items — exact blockers and next actions
 
@@ -240,7 +260,7 @@ base-apk-sha256.txt`; `tools/repack_apk.py --base base/cobalt-arm.apk
 `bash tools/sign_apks.sh work`; and `tools/validate_release.py check-apk --apk
 release-assets/YTArk-v2.9.0-armv7.apk --architecture armv7 …`.
 
-Roll-up: **code-complete** for the source changes listed here (Python 151/151 with
+Roll-up: **code-complete** for the source changes listed here (Python 159/159 with
 1 javac-dependent skip; Node 283/283; built userscript 854,340 bytes and
 contract-clean); **build-pass NOT RUN** (no APK was compiled, repacked, signed or
 verified); **device-verified NOT RUN**.

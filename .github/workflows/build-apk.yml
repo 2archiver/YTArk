@@ -121,6 +121,15 @@ jobs:
           # the generated module has to match release/version.properties.
           python3 tools/build_buildinfo.py --check
 
+      - name: Validate the release workflow before it runs
+        run: |
+          set -euo pipefail
+          # Same check ci.yml runs. It resolves every script a step names against
+          # that step's working directory, so a wrong relative path — the failure
+          # that stopped this job on 2026-10-14 — is reported here in seconds
+          # instead of after the userscript build.
+          python3 tools/check_workflow_policy.py
+
       - name: Build and test the userscript bundle
         working-directory: TizenTube/mods
         run: |
@@ -133,7 +142,8 @@ jobs:
           # rule lives in release/bundle-contract.json — one contract shared with
           # ci.yml. Do not reintroduce a second copy of the list here: a stale
           # duplicate is exactly what stopped the 2.9 release before repacking.
-          python3 ../tools/check_bundle_contract.py
+          # Path is relative to the step's working directory (TizenTube/mods).
+          python3 ../../tools/check_bundle_contract.py
           echo "Built YTArk userscript: $(wc -c < ../dist/userScript.js) bytes, sha256 $(sha256sum ../dist/userScript.js | cut -d' ' -f1)"
 
       - name: Load release version

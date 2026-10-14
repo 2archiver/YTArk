@@ -76,7 +76,8 @@ jobs:
           # wordmark rule and the product branding. build-apk.yml and the
           # userscript tests read the same file, so a feature cannot be retired
           # in one place and still be required in another.
-          python3 ../tools/check_bundle_contract.py
+          # Path is relative to the step's working directory (TizenTube/mods).
+          python3 ../../tools/check_bundle_contract.py
 
       - name: Validate Python, shell, icon/manifest patcher self-tests and release metadata
         run: |
