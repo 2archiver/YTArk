@@ -136,10 +136,20 @@ jobs:
           # published release as a no-op.
           python3 tools/publish_release.py self-check
 
-      - name: Test native updater ABI, routes, themes, install recovery, failure phases and storage contracts
+      - name: Compile all native updater sources, run policy tests and produce DEX
+        env:
+          ANDROID_HOME: /usr/local/lib/android/sdk
+          API_LEVEL: "34"
+          BUILD_TOOLS: "34.0.0"
         run: |
           set -euo pipefail
-          # One list of policy sources and test classes lives in the script, and
-          # tools/build_android_updater.sh runs the same host tests before it
-          # compiles the DEX, so the two cannot drift apart.
-          bash tools/test_android_updater.sh "$RUNNER_TEMP/ytark-version-tests"
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+          (set +o pipefail; yes | sdkmanager --licenses >/dev/null)
+          sdkmanager "platforms;android-${API_LEVEL}" "build-tools;${BUILD_TOOLS}"
+          # The release build path runs the shared host-JRE policy tests, then
+          # compiles ALL production sources against the real SDK and runs D8.
+          # No signing secrets, release writes or upstream APK are needed.
+          bash tools/build_android_updater.sh "$RUNNER_TEMP/ytark-updater/classes.dex"
+          test -s "$RUNNER_TEMP/ytark-updater/classes.dex"
+          echo "### Native updater validation" >> "$GITHUB_STEP_SUMMARY"
+          echo "Policy tests and full Android API $API_LEVEL compilation/D8 passed; classes.dex: $(wc -c < "$RUNNER_TEMP/ytark-updater/classes.dex") bytes. Not device tests." >> "$GITHUB_STEP_SUMMARY"

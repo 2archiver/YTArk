@@ -200,8 +200,12 @@ class RepositoryChangelogTests(unittest.TestCase):
         self.assertEqual(newest["meta"]["versionCode"], int(config["VERSION_CODE"]))
         self.assertEqual(newest["meta"]["scriptTag"], config["SCRIPT_TAG"])
         headings = [section["heading"] for section in newest["sections"]]
-        for required in ("Added", "Defaults and migration", "Fixed", "Known limitations", "Validation"):
+        for required in ("Removed", "Fixed", "Known limitations"):
             self.assertIn(required, headings)
+        limitations = next(section for section in newest["sections"]
+                           if section["heading"] == "Known limitations")
+        self.assertTrue(any("remain unfinished" in item["text"]
+                            for item in limitations["items"]))
 
     def test_published_releases_stay_one_liners(self):
         """The simplified history: one short, user-facing line per release."""

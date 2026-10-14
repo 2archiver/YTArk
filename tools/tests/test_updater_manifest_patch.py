@@ -1,6 +1,8 @@
 """The repacker's manifest patch: launcher entry, private providers, and no storage permissions."""
 from __future__ import annotations
 
+import ast
+import inspect
 import re
 import sys
 import tempfile
@@ -11,6 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
 
 import repack_apk  # noqa: E402
+import validate_release  # noqa: E402
 
 DECODED = """<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" package="dev.cobalt.app">
@@ -76,6 +79,21 @@ class UpdaterManifestPatchTests(unittest.TestCase):
         self.assertNotIn('StorageActivity', xml)
         self.assertNotIn('android:host="storage"', xml)
         self.assertNotIn('YTArk Cache', xml)
+
+    def test_every_required_apk_manifest_entry_is_generated(self):
+        # Compare the full APK validator's literal requirements to the real
+        # repack output. In 3.0 it both forbade StorageActivity in its background
+        # check and required it later in validate_apk, which could never pass.
+        tree = ast.parse(inspect.getsource(validate_release.validate_apk))
+        requirements = [
+            ast.literal_eval(node.iter) for node in ast.walk(tree)
+            if isinstance(node, ast.For) and isinstance(node.target, ast.Name)
+            and node.target.id == "required"
+        ]
+        self.assertEqual(len(requirements), 1)
+        xml = self.patched()
+        for required in requirements[0]:
+            self.assertIn(required, xml)
 
     def test_providers_and_receiver_are_private_and_the_file_provider_is_single_file(self):
         xml = self.patched()
