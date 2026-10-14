@@ -304,6 +304,81 @@ def _attribute_line(block: str, name: str) -> str | None:
     return match.group(0) if match else None
 
 
+def _own_attribute_lines(block: str) -> list[str]:
+    """Attribute lines that belong to the element itself, never to descendants.
+
+    ``aapt dump xmltree`` prints an element's own attributes between its ``E:``
+    line and the first nested child ``E:`` line. Searching the whole block (as
+    ``_attribute_line`` does) can also match a descendant's attribute, which a
+    scoped declaration check must never do.
+    """
+    own: list[str] = []
+    for line in block.splitlines()[1:]:
+        if re.match(r"^\s*E: ", line):
+            break
+        if re.match(r"^\s*A: ", line):
+            own.append(line)
+    return own
+
+
+def _own_attribute_line(block: str, name: str) -> str | None:
+    """This element's own ``android:<name>`` attribute line, or None."""
+    pattern = re.compile(rf"^\s*A: android:{re.escape(name)}(?:\([^)]*\))?=.*$")
+    for line in _own_attribute_lines(block):
+        if pattern.match(line):
+            return line
+    return None
+
+
+def _direct_element_blocks(parent_block: str, tag: str) -> list[str]:
+    """Blocks of the ``E: <tag>`` elements that are direct children of an element.
+
+    ``_element_blocks`` finds a tag at any depth; declaration checks need the
+    manifest-level elements only, so deeper nested lookalikes never match.
+    """
+    lines = parent_block.splitlines()
+    if not lines:
+        return []
+    parent_indent = len(lines[0]) - len(lines[0].lstrip())
+    child_indent: int | None = None
+    for line in lines[1:]:
+        if re.match(r"^\s*E: ", line):
+            child_indent = len(line) - len(line.lstrip())
+            break
+    if child_indent is None or child_indent <= parent_indent:
+        return []
+    expression = re.compile(rf"^\s*E: {re.escape(tag)}(?:\s|$)")
+    blocks: list[str] = []
+    for start, line in enumerate(lines):
+        if not expression.match(line):
+            continue
+        if len(line) - len(line.lstrip()) != child_indent:
+            continue
+        end = len(lines)
+        for index in range(start + 1, len(lines)):
+            if re.match(r"^\s*E: ", lines[index]):
+                current_indent = len(lines[index]) - len(lines[index].lstrip())
+                if current_indent <= child_indent:
+                    end = index
+                    break
+        blocks.append("\n".join(lines[start:end]))
+    return blocks
+
+
+def _quoted_attribute_value(line: str | None) -> str | None:
+    """The first quoted value after ``=`` in an attribute line, exactly.
+
+    Compiled string attributes print as ``="value" (Raw: "value")``; returning
+    the quoted value lets callers compare names exactly instead of matching a
+    substring of the whole line.
+    """
+    if not line:
+        return None
+    _, _, value = line.partition("=")
+    match = re.match(r'\s*"([^"]*)"', value)
+    return match.group(1) if match else None
+
+
 def _boolean_attribute_is_true(line: str | None) -> bool:
     if not line:
         return False
@@ -397,6 +472,105 @@ def validate_compiled_manifest(apk: Path, aapt: str) -> None:
 UPDATER_ACTIVITY_NAME = "io.github.twoarchiver.ytark.updater.UpdateActivity"
 UPDATER_LAUNCHER_ACTIVITY_NAME = "io.github.twoarchiver.ytark.updater.UpdateLauncherActivity"
 UPDATER_SCREEN_PERMISSION = "io.github.twoarchiver.ytark.permission.OPEN_NATIVE_SCREEN"
+# Android's ProtectionLevel.SIGNATURE is the exact numeric value 2. aapt2/apktool
+# compile android:protectionLevel="signature" into that integer, so the literal
+# word "signature" never survives into the binary manifest.
+SIGNATURE_PROTECTION_LEVEL = 2
+SIGNATURE_PROTECTION_SYMBOL = "signature"
+
+
+def _parse_protection_level(line: str) -> tuple[str, object]:
+    """Parse an ``android:protectionLevel`` attribute line after the ``=``.
+
+    Returns ``(kind, value)`` with kind ``numeric``, ``symbolic`` or
+    ``unresolved``. Compiled aapt output annotates the data type in front of the
+    value — ``A: android:protectionLevel(0x01010009)=(type 0x11)0x2`` — and aapt
+    prints every integer payload as ``0x…``; the resource id in front of the
+    ``=`` and the ``0x11`` type marker are never the attribute value. Decoded
+    textual dumps keep the raw symbol instead: ``="signature" (Raw: "signature")``.
+    Anything else (a resource reference, a missing value, malformed text) is
+    reported as ``unresolved`` so callers can fail closed.
+    """
+    _, _, raw = line.partition("=")
+    value = raw.strip()
+    symbol = re.match(r'^"([^"]*)"', value)
+    if symbol:
+        return "symbolic", symbol.group(1)
+    typed = re.match(r"^\(type\s+0x[0-9a-fA-F]+\)\s*(\S.*?)\s*$", value)
+    if typed:
+        value = typed.group(1).strip()
+    token = value.split()[0] if value.split() else ""
+    number = re.fullmatch(r"0x([0-9a-fA-F]+)|(\d+)", token)
+    if number:
+        if number.group(1) is not None:
+            return "numeric", int(number.group(1), 16)
+        return "numeric", int(number.group(2))
+    return "unresolved", value
+
+
+def _screen_permission_declarations(tree: str) -> list[str]:
+    """Manifest-level ``E: permission`` blocks naming exactly the screen permission.
+
+    Only a direct child ``E: permission`` element of the manifest whose own
+    ``android:name`` equals :data:`UPDATER_SCREEN_PERMISSION` counts. An
+    ``E: uses-permission`` request, an activity attribute, a prefix/suffix
+    lookalike name, a nested element or another permission's declaration never
+    matches.
+    """
+    manifest_blocks = _element_blocks(tree, "manifest")
+    if not manifest_blocks:
+        raise ValueError("Compiled Android manifest has no manifest element")
+    declarations: list[str] = []
+    for block in _direct_element_blocks(manifest_blocks[0], "permission"):
+        if _quoted_attribute_value(_own_attribute_line(block, "name")) == UPDATER_SCREEN_PERMISSION:
+            declarations.append(block)
+    return declarations
+
+
+def require_declared_signature_permission(tree: str) -> None:
+    """Fail closed unless the compiled manifest declares the screen permission signature-only.
+
+    The previous global text search required the literal word ``signature`` to
+    appear somewhere in the dump. apktool/aapt2 compile the enum into the
+    numeric flags value ``(type 0x11)0x2``, so a correctly built APK failed the
+    release gate, while an unrelated occurrence of the word anywhere else in the
+    manifest could wrongly satisfy it. This check reads the protection level
+    from the one declaration it validated, and nothing else.
+    """
+    requirement = "Native screen routes must be protected by a declared signature permission: "
+    declarations = _screen_permission_declarations(tree)
+    if not declarations:
+        raise ValueError(
+            requirement
+            + f"the compiled manifest declares no manifest-level <permission> whose "
+              f"android:name is exactly {UPDATER_SCREEN_PERMISSION}"
+        )
+    if len(declarations) > 1:
+        raise ValueError(
+            requirement
+            + f"{UPDATER_SCREEN_PERMISSION} is declared {len(declarations)} times; "
+              f"duplicate or conflicting declarations are rejected"
+        )
+    level_line = _own_attribute_line(declarations[0], "protectionLevel")
+    if level_line is None:
+        raise ValueError(
+            requirement
+            + f"the declaration of {UPDATER_SCREEN_PERMISSION} carries no "
+              f"android:protectionLevel attribute"
+        )
+    kind, value = _parse_protection_level(level_line)
+    signature_only = (
+        (kind == "numeric" and value == SIGNATURE_PROTECTION_LEVEL)
+        or (kind == "symbolic" and value == SIGNATURE_PROTECTION_SYMBOL)
+    )
+    if not signature_only:
+        raise ValueError(
+            requirement
+            + f"{UPDATER_SCREEN_PERMISSION} has an unexpected android:protectionLevel "
+              f"{value!r} ({kind}); only the exact signature-only value is accepted "
+              f"(numeric {SIGNATURE_PROTECTION_LEVEL} or \"signature\"), never "
+              f"normal/dangerous/signatureOrSystem or combined flags"
+        )
 
 
 def validate_updater_background_components(tree: str) -> None:
@@ -413,7 +587,7 @@ def validate_updater_background_components(tree: str) -> None:
         storage_found = True
         if not _boolean_attribute_is_true(_attribute_line(activity, "exported")):
             raise ValueError("The YTArk Cache & Storage activity must have its explicit ACTION_VIEW route")
-        if UPDATER_SCREEN_PERMISSION not in (_attribute_line(activity, "permission") or ""):
+        if _quoted_attribute_value(_own_attribute_line(activity, "permission")) != UPDATER_SCREEN_PERMISSION:
             raise ValueError("The YTArk Cache & Storage route must require the app's signature permission")
         if not any("android.intent.action.VIEW" in block
                    and "android.intent.category.DEFAULT" in block
@@ -462,10 +636,9 @@ def validate_updater_launcher(tree: str) -> None:
         raise ValueError("Compiled manifest has no YTArk Updates activity")
     if not _boolean_attribute_is_true(_attribute_line(screen_activity, "exported")):
         raise ValueError("The YTArk Updates route activity must be explicitly android:exported=true")
-    if UPDATER_SCREEN_PERMISSION not in (_attribute_line(screen_activity, "permission") or ""):
+    if _quoted_attribute_value(_own_attribute_line(screen_activity, "permission")) != UPDATER_SCREEN_PERMISSION:
         raise ValueError("The YTArk Updates route must require the app's signature permission")
-    if UPDATER_SCREEN_PERMISSION not in tree or "android:protectionLevel" not in tree or "signature" not in tree:
-        raise ValueError("Native screen routes must be protected by a declared signature permission")
+    require_declared_signature_permission(tree)
     screen_filters = _element_blocks(screen_activity, "intent-filter")
     has_screen_route = any("android.intent.action.VIEW" in intent_filter
                            and "android.intent.category.DEFAULT" in intent_filter

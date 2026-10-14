@@ -247,6 +247,20 @@ jobs:
           mkdir -p release-assets
           mv "work/${APK_ARMV7%.apk}.apk" "release-assets/$APK_ARMV7"
           zipalign -c -p 4 "release-assets/$APK_ARMV7"
+          # Capture the compiled-manifest evidence from the exact signed bytes
+          # BEFORE validation. The permission declarations are also emitted as
+          # notice annotations: annotations stay readable through the API even
+          # when raw logs expire or the validation below fails, so the dump that
+          # decides a release gate is never inaccessible again (this is how the
+          # 2026-10-14 compiled protectionLevel failure had to be diagnosed).
+          "$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt" dump xmltree \
+            "release-assets/$APK_ARMV7" AndroidManifest.xml \
+            > work/compiled-manifest.txt
+          awk '/E: permission /{keep=3} keep>0{print; keep--}' work/compiled-manifest.txt
+          awk '/E: permission /{keep=3} keep>0{
+                 line=$0; gsub(/%/, "%25", line); gsub(/\r/, " ", line);
+                 printf "::notice title=Compiled permission declaration evidence::%s\n", line; keep--
+               }' work/compiled-manifest.txt
           python3 tools/validate_release.py check-apk \
             --apk "release-assets/$APK_ARMV7" --architecture armv7 \
             --cert-file signing/YTArk-cert-sha256.txt \
