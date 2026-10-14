@@ -230,6 +230,16 @@ audited set, not a device-observed one.
    `docs/RUNTIME-CHECKLIST.md` on a real ARMv7 Android TV device once an APK
    exists.
 
+For reference, the packaging commands that authorized CI run (in order, after
+sdkmanager/Temurin setup) are: `tools/build_android_updater.sh
+"$RUNNER_TEMP/ytark-updater/classes.dex"`; `tools/fetch_base_apks.py
+--release-json … --base-tag "$BASE_TAG" --output-dir base --checksums-out
+base-apk-sha256.txt`; `tools/repack_apk.py --base base/cobalt-arm.apk
+--architecture armv7 --out "work/YTArk-v2.9.0-armv7-unsigned.apk" --updater-dex …
+--version-code 2090000 --version-name 2.9.0 --apktool … --zipalign …`;
+`bash tools/sign_apks.sh work`; and `tools/validate_release.py check-apk --apk
+release-assets/YTArk-v2.9.0-armv7.apk --architecture armv7 …`.
+
 Roll-up: **code-complete** for the source changes listed here (Python 151/151 with
 1 javac-dependent skip; Node 283/283; built userscript 854,340 bytes and
 contract-clean); **build-pass NOT RUN** (no APK was compiled, repacked, signed or
