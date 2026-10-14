@@ -34,6 +34,22 @@ COBALT_ACTIVITY = """\
 """
 
 
+# Recorded verbatim from the published 2.9.0 build: run 38522902531, step
+# "Verify alignment, sign the ARMv7 APK and validate the compiled package",
+# annotations titled "Compiled permission declaration evidence" — the real
+# `$ANDROID_HOME/build-tools/34.0.0/aapt dump xmltree` output for the signed
+# YTArk-v2.9.0-armv7.apk (sha256 f00188d2479d57c2ce100c499fc61b89a6735e134627cd9209b13e00692e7c3f).
+# The literal word "signature" appears nowhere in that dump: apktool/aapt2
+# compiled android:protectionLevel="signature" into the numeric flags payload
+# (type 0x11)0x2, which is exactly what the old global text search rejected.
+REAL_AAPT_PERMISSION_ELEMENT = (
+    "    E: permission (line=25)\n"
+    '      A: android:name(0x01010003)="io.github.twoarchiver.ytark.permission.OPEN_NATIVE_SCREEN"'
+    ' (Raw: "io.github.twoarchiver.ytark.permission.OPEN_NATIVE_SCREEN")\n'
+    "      A: android:protectionLevel(0x01010009)=(type 0x11)0x2\n"
+)
+
+
 def compiled_permission_element(name=SCREEN_PERMISSION, protection="(type 0x11)0x2",
                                 indent="    "):
     """A manifest-level ``<permission>`` element rendered like ``aapt dump xmltree``.
@@ -243,6 +259,14 @@ class CompiledSignaturePermissionDeclarationTests(unittest.TestCase):
         # Regression evidence: the compiled dump contains no literal "signature".
         self.assertNotIn("signature", tree)
         self.assertIn("A: android:protectionLevel(0x01010009)=(type 0x11)0x2", tree)
+        validate_release.validate_updater_launcher(tree)
+
+    def test_the_recorded_real_aapt_declaration_of_the_published_build_is_accepted(self):
+        tree = manifest(updater_activity(), launcher_proxy(),
+                        permission_block=REAL_AAPT_PERMISSION_ELEMENT)
+        # The declaration recorded from the real signed 2.9.0 APK dump carries
+        # no literal "signature" either, and must validate exactly as built.
+        self.assertNotIn("signature", tree)
         validate_release.validate_updater_launcher(tree)
 
     def test_numeric_signature_payload_variants_are_accepted(self):
