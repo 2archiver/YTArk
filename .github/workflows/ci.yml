@@ -185,8 +185,9 @@ jobs:
 
       - name: Verify compiled updater and JNI bridge definitions
         run: |
-          PYTHONPATH=tools python3 -c 'from dex_contract import verify_apk_dex; verify_apk_dex("work/ci-unsigned.apk")'
+          set -euo pipefail
+          PYTHONPATH=tools python3 -u -c 'from dex_contract import verify_apk_dex; verify_apk_dex("work/ci-unsigned.apk")' 2>&1 | tee "$RUNNER_TEMP/dex-contract.log"
 
       - name: Surface repack integration diagnostics
         if: failure()
-        run: python3 tools/ci_diagnostics.py "$RUNNER_TEMP/repack.log"
+        run: python3 tools/ci_diagnostics.py "$RUNNER_TEMP/repack.log" "$RUNNER_TEMP/dex-contract.log"
