@@ -38,33 +38,21 @@ class UpdaterManifestPatchTests(unittest.TestCase):
             repack_apk.patch_updater_manifest(temp, APP_ID)
             return path.read_text(encoding="utf-8")
 
-    def test_launcher_proxy_is_public_and_native_screens_require_signature_permission(self):
-        xml = self.patched()
-        launcher = re.search(r'<activity\s+android:name="' + re.escape(repack_apk.UPDATER_LAUNCHER_ACTIVITY) + r'".*?</activity>',
-                             xml, re.S)
-        self.assertIsNotNone(launcher)
-        launcher_block = launcher.group(0)
-        self.assertIn('android:label="YTArk Updates"', launcher_block)
-        self.assertIn('android:exported="true"', launcher_block)
-        self.assertIn("android.intent.category.LEANBACK_LAUNCHER", launcher_block)
-        self.assertNotIn('android:name="android.intent.action.VIEW"', launcher_block)
-
-        activity = re.search(r'<activity\s+android:name="' + re.escape(repack_apk.UPDATER_ACTIVITY) + r'".*?</activity>',
-                             xml, re.S)
-        self.assertIsNotNone(activity)
-        route_block = activity.group(0)
-        permission = APP_ID + repack_apk.UPDATER_SCREEN_PERMISSION_SUFFIX
-        self.assertIn(f'<permission android:name="{permission}" android:protectionLevel="signature" />', xml)
-        self.assertIn(f'<uses-permission android:name="{permission}" />', xml)
-        self.assertIn(f'android:permission="{permission}"', route_block)
-        self.assertIn('android:host="updates"', route_block)
-        self.assertIn('android:name="android.intent.action.VIEW"', route_block)
-        self.assertIn('android:name="android.intent.category.BROWSABLE"', route_block)
+    def test_updates_is_private_without_launcher_or_deep_link(self):
+        import xml.etree.ElementTree as ET
+        root = ET.fromstring(self.patched())
+        android = '{http://schemas.android.com/apk/res/android}'
+        activities = root.findall('./application/activity')
+        screen = next(a for a in activities if a.get(android+'name') == repack_apk.UPDATER_ACTIVITY)
+        self.assertEqual(screen.get(android+'exported'), 'false')
+        self.assertEqual(screen.get(android+'label'), 'YTArk Updates')
+        self.assertEqual(screen.findall('intent-filter'), [])
+        self.assertNotIn(repack_apk.UPDATER_LAUNCHER_ACTIVITY, self.patched())
 
     def test_the_cobalt_main_activity_keeps_its_launcher_entry_first(self):
         xml = self.patched()
         self.assertLess(xml.index("dev.cobalt.app.MainActivity"), xml.index(repack_apk.UPDATER_ACTIVITY))
-        self.assertEqual(xml.count("android.intent.category.LEANBACK_LAUNCHER"), 2)
+        self.assertEqual(xml.count("android.intent.category.LEANBACK_LAUNCHER"), 1)
 
     def test_persistent_hourly_job_is_declared_without_exporting_the_service(self):
         xml = self.patched()
@@ -106,13 +94,12 @@ class UpdaterManifestPatchTests(unittest.TestCase):
         self.assertIn('<grant-uri-permission android:path="/update.apk" />', provider)
         self.assertNotIn("file://", xml)
         receiver = re.search(r'<receiver\s+android:name="' + re.escape(repack_apk.UPDATER_RECEIVER) + r'"[^>]*/>', xml)
-        self.assertIsNotNone(receiver)
-        self.assertIn('android:exported="false"', receiver.group(0))
+        self.assertIsNone(receiver, 'obsolete notification receiver is retired')
 
     def test_only_updater_permissions_are_added_and_no_storage_permission(self):
         xml = self.patched()
         self.assertIn('android.permission.REQUEST_INSTALL_PACKAGES', xml)
-        self.assertIn('android.permission.POST_NOTIFICATIONS', xml)
+        self.assertNotIn('android.permission.POST_NOTIFICATIONS', xml)
         self.assertIn('android.permission.RECEIVE_BOOT_COMPLETED', xml)
         for forbidden in ("MANAGE_EXTERNAL_STORAGE", "READ_EXTERNAL_STORAGE", "WRITE_EXTERNAL_STORAGE",
                           "READ_MEDIA_", "READ_MEDIA_IMAGES", "READ_MEDIA_VIDEO"):

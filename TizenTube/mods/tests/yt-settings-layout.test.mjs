@@ -174,9 +174,12 @@ describe('ordering, hiding and pinning by stable ids', () => {
 describe('native Android screen routing through the real custom-action path', () => {
   it('routes only the YTArk-owned updates screen; the removed storage screen is a no-op', async () => {
     const { handleYtarkAction } = await import('../ui/ytarkActions.js');
+    const calls = [];
+    window.h5vcc.tizentube.InstallAppFromURL = route => { calls.push(route); return Promise.resolve(true); };
     window.location.href = 'https://www.youtube.com/tv';
     assert.equal(handleYtarkAction('YTARK_NATIVE_UPDATES_OPEN', {}), true);
-    assert.equal(window.location.href, 'ytark://updates', 'the route carries no theme query any more');
+    assert.deepEqual(calls, ['ytark://updates']);
+    assert.equal(window.location.href, 'https://www.youtube.com/tv', 'no unsupported external navigation');
 
     window.location.href = 'https://www.youtube.com/tv';
     video.paused = false;
@@ -188,33 +191,20 @@ describe('native Android screen routing through the real custom-action path', ()
       'no arbitrary native component is routed');
   });
 
-  it('explains the launcher route when the base ignores the navigation', async () => {
-    // The pinned Cobalt base cancels a ytark:// navigation silently and cannot
-    // report that, so the only observable outcome is that the page stays
-    // visible. The row must then tell the user the route that does work
-    // instead of leaving them on a dead entry.
+  it('reports a missing/rejecting bridge without a launcher workaround', async () => {
     const { handleYtarkAction } = await import('../ui/ytarkActions.js');
     const { toasts } = await import('./helpers/ytlr-harness.mjs');
-    window.location.href = 'https://www.youtube.com/tv';
-    video.paused = true;
-    video.ended = false;
-    video.networkState = 1;
+    delete window.h5vcc.tizentube.InstallAppFromURL;
     const before = toasts(recorded).length;
+    assert.equal(handleYtarkAction('YTARK_NATIVE_UPDATES_OPEN', {}), false);
+    let messages = toasts(recorded).slice(before).map(t => `${t.title} ${t.subtitle}`).join(' ');
+    assert.match(messages, /bridge is unavailable/);
+    assert.doesNotMatch(messages, /apps row/i);
+    window.h5vcc.tizentube.InstallAppFromURL = () => Promise.resolve(false);
     assert.equal(handleYtarkAction('YTARK_NATIVE_UPDATES_OPEN', {}), true);
-    await new Promise(resolve => setTimeout(resolve, 2400));
-    const updates = toasts(recorded).slice(before).map(toast => `${toast.title} ${toast.subtitle}`);
-    assert.ok(updates.some(text => /Open YTArk Updates in the TV apps row\./.test(text)),
-      `the updates fallback names the TV apps row, got ${JSON.stringify(updates)}`);
-
-    // When the platform really takes the navigation over the page is hidden and
-    // no "did not open" guidance may appear.
-    const count = toasts(recorded).length;
-    const previousState = document.visibilityState;
-    document.visibilityState = 'hidden';
-    assert.equal(handleYtarkAction('YTARK_NATIVE_UPDATES_OPEN', {}), true);
-    await new Promise(resolve => setTimeout(resolve, 2400));
-    assert.equal(toasts(recorded).length, count, 'a taken-over navigation shows no fallback');
-    document.visibilityState = previousState;
+    await Promise.resolve();
+    messages = toasts(recorded).slice(before).map(t => `${t.title} ${t.subtitle}`).join(' ');
+    assert.match(messages, /could not open/);
   });
 });
 

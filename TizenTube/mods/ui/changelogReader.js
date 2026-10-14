@@ -13,7 +13,7 @@ import {
   showModal, buttonItem, overlayPanelItemListRenderer, overlayMessageRenderer,
   scrollPaneRenderer, QrCodeRenderer,
 } from './ytUI.js';
-import { qrCodeDataUrl } from '../features/updater.js';
+import { qrCodeDataUrl } from '../features/releaseQr.js';
 import { installedVersion, normalizeVersion, whatsNewState } from '../features/whatsNew.js';
 import { tx } from '../translations/text.js';
 

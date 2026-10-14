@@ -111,7 +111,8 @@ class YTArkUiBrandingTests(unittest.TestCase):
             "enablePremiumLogo",
             # default-on for fresh/missing config; minified in the bundle
             "enablePremiumLogo:!0",
-            "api.github.com/repos/2archiver/YTArk/releases/latest",
+            "InstallAppFromURL", # release discovery lives in Kotlin now
+            "ytark://updates",
             "Hide channel watermark",
             "Remove player dimming",
         ) + tuple(contract["bundle"]["required"]):

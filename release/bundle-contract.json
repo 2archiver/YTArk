@@ -35,12 +35,10 @@
       "v2.0.2-personal.14",
       "configSchemaVersion",
       "enableYtarkGuideEntry",
-      "Could not confirm this device",
       "YTARK_GUIDE_SETTINGS_OPEN",
       "YTARK_VERSION_REREAD",
       "apkAsset",
       "ytark-user-agent-retired",
-      "Newer than the latest stable release",
       "about.buildInfo",
       "about.notices",
       "Third-party notices and licences",
@@ -48,8 +46,11 @@
       "enablePlaybackRecovery",
       "YTARK_NATIVE_UPDATES_OPEN",
       "Automatic playback recovery",
-      "Android's system splash",
-      "fasterStartup"
+      "fasterStartup",
+      "InstallAppFromURL",
+      "ytark://updates",
+      "Faster startup (Experimental)",
+      "ytark-faster-startup-in-progress"
     ],
     "forbidden": [
       "quickControls",
@@ -57,7 +58,9 @@
       "DEVICE_PROFILES",
       "virtualKeyboard",
       "data-ytark-keyboard",
-      "ytark-entry__"
+      "ytark-entry__",
+      "Open updater and check now",
+      "Open YTArk Updates in the TV apps row."
     ]
   },
   "retiredActions": [

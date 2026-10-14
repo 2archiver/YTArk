@@ -3,45 +3,65 @@
 export const YTARK_CHANGELOG = {
   "schema": 1,
   "source": "CHANGELOG.md",
-  "sourceSha256": "2831a7747ec3092c66dbdb166ff66a3b5e39d9675f67c635c07803868e49bf64",
+  "sourceSha256": "102eed52d37fff9f6baf97445ba8cf35a17bf32249e4708c3342bc78dfaacd25",
   "entries": [
     {
-      "version": "3.0.0",
-      "display": "3.0",
+      "version": "3.1.0",
+      "display": "3.1",
       "status": "unreleased",
       "date": null,
       "publishedAt": null,
-      "tag": "v3.0.0",
-      "versionCode": 3000000,
-      "scriptTag": "s29",
-      "title": "YTArk 3.0",
+      "tag": "v3.1.0",
+      "versionCode": 3010000,
+      "scriptTag": "s30",
+      "title": "YTArk 3.1",
       "releaseUrl": null,
-      "facts": "Not yet published. Planned tag v3.0.0 · versionCode 3000000 · userscript s29 · one ARMv7 APK (armeabi-v7a) on TizenTubeCobalt v2.0.2. A direct, signed in-place update to published 2.9.0; package ID, signing identity and app data directory stay unchanged.",
-      "summary": "Removed settings search, Cache & Storage and OLED Black; repaired the 3.0 Android build.",
+      "facts": "Not yet published. Planned tag v3.1.0 · versionCode 3010000 · userscript s30 · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.",
+      "summary": "Kotlin updater, direct Updates entry and opt-in faster mod readiness.",
       "sections": [
         {
-          "heading": "Removed",
+          "heading": "Added",
           "items": [
-            "Settings search and its on-screen keyboard are removed. YouTube content search is unchanged.",
-            "Cache & Storage management is removed, including the native screen, route and Updates-screen button.",
-            "OLED Black and its stored preference are removed; other settings and custom colours are retained."
+            "Kotlin updater with one persisted state, hourly or three-hourly automatic check/download, and Never.",
+            "Faster startup (Experimental) reduces optional mod-readiness polling delay, with a bounded normal fallback; Off by default."
           ]
         },
         {
           "heading": "Fixed",
           "items": [
-            "Removed the stale storage-screen reference that prevented Android compilation, and the obsolete APK manifest requirement.",
-            "PR CI now runs the full Android SDK compilation and D8 build as well as the native policy tests."
+            "Settings opens the private Updates activity through a constrained host bridge instead of unsupported external navigation.",
+            "Verified download retention, install-permission continuation and installed-version reconciliation."
+          ]
+        },
+        {
+          "heading": "Removed",
+          "items": [
+            "The updater-specific launcher icon and intermediate Updates menu. Other settings, Google sessions and playback are not reset."
           ]
         },
         {
           "heading": "Known limitations",
           "items": [
-            "The in-app YTArk Updates page, Faster startup behaviour and reduction of the separate updater app remain unfinished. Use YTArk Updates from the TV apps row; its existing native updater and background checks remain.",
-            "Static build and package checks are not device tests. TV installation, updater runtime, playback and in-place-update behaviour remain unverified for this release."
+            "Real Android permission/installer UI, in-place upgrade and ARMv7 TV runtime checks remain unverified. Startup speed benefit is unverified; no percentage gain is claimed.",
+            "The candidate userscript revision is published only with an authorized release; the unchanged Cobalt engine still loads its userscript from the release CDN."
           ]
         }
       ]
+    },
+    {
+      "version": "3.0.0",
+      "display": "3.0",
+      "status": "published",
+      "date": "2026-10-14",
+      "publishedAt": "2026-10-14T10:17Z",
+      "tag": "v3.0.0",
+      "versionCode": 3000000,
+      "scriptTag": "s29",
+      "title": "YTArk 3.0",
+      "releaseUrl": "https://github.com/2archiver/YTArk/releases/tag/v3.0.0",
+      "facts": "Published 2026-10-14 10:17 UTC as YTArk 3.0 · tag v3.0.0 · versionCode 3000000 · userscript s29",
+      "summary": "Removed settings search, Cache & Storage and OLED Black; repaired the 3.0 Android build.",
+      "sections": []
     },
     {
       "version": "2.9.0",

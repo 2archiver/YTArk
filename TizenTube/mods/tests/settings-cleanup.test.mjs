@@ -164,7 +164,7 @@ describe('About YTArk', () => {
     assert.equal(header(panel).subtitle, 'YTArk 2.3', 'the version appears exactly once, in the header');
     const items = modalItems(panel);
     const rows = items.map(rowTitle).filter(Boolean);
-    assert.deepEqual(rows, ['Build details', 'Third-party notices and licences', 'Version history'],
+    assert.deepEqual(rows, ['Build details', 'Third-party notices and licences', 'YTArk Updates'],
       'the About dialog is short and every extra detail is one D-pad press away');
     const lines = items.map(messageText).filter(Boolean);
     assert.ok(lines.includes('YouTube Frontend Version: Unavailable'));
@@ -191,9 +191,9 @@ describe('About YTArk', () => {
     assert.ok(build.openPopupAction.popup.overlaySectionRenderer.overlay.overlayTwoPanelRenderer
       .actionPanel.overlayPanelRenderer.content.scrollPaneRenderer, 'D-pad scrollable');
     const details = modalItems(build).map(messageText).join('\n');
-    assert.match(details, /versionName: 3\.0\.0/);
-    assert.match(details, /versionCode: 3000000/);
-    assert.match(details, /YTArk userscript: s29/);
+    assert.match(details, /versionName: 3\.1\.0/);
+    assert.match(details, /versionCode: 3010000/);
+    assert.match(details, /YTArk userscript: s30/);
     assert.match(details, /Android base: v2\.0\.2/);
 
     resolveCommand({ customAction: { action: 'YTARK_PANEL_SHOW', parameters: { id: 'about' } } });
@@ -205,10 +205,12 @@ describe('About YTArk', () => {
     assert.match(text, /trademarks/i, 'the attribution stays reachable, just not in the primary dialog');
 
     resolveCommand({ customAction: { action: 'YTARK_PANEL_SHOW', parameters: { id: 'about' } } });
-    const versionHistory = findRow(lastModal(recorded, 'ytark-panel-about'), 'Version history');
+    const calls = [];
+    windowStub.h5vcc.tizentube.InstallAppFromURL = route => { calls.push(route); return true; };
+    const versionHistory = findRow(lastModal(recorded, 'ytark-panel-about'), 'YTArk Updates');
     assert.ok(versionHistory, 'the changelog stays linked from About');
     await press(resolveCommand, versionHistory);
-    assert.ok(lastModal(recorded, 'ytark-changelog'), 'and it opens, inside the YTArk Updates path');
+    assert.deepEqual(calls, ['ytark://updates'], 'opens the one native Updates page directly');
   });
 
   it('shows the YouTube TV version only when it is really published', async () => {
@@ -229,7 +231,7 @@ describe('About YTArk', () => {
     await tick(20);
     resolveCommand({ customAction: { action: 'YTARK_PANEL_SHOW', parameters: { id: 'about' } } });
     const panel = lastModal(recorded, 'ytark-panel-about');
-    assert.equal(header(panel).subtitle, 'YTArk 3.0 (build metadata)', "this build's own version, labelled by source");
+    assert.equal(header(panel).subtitle, 'YTArk 3.1 (build metadata)', "this build's own version, labelled by source");
     const lines = modalItems(panel).map(messageText).filter(Boolean);
     assert.ok(lines.some(line => /packaging metadata/.test(line)), 'the source is stated');
     const reread = findRow(panel, 'Read the installed version again');
@@ -279,7 +281,7 @@ describe('YTArk and YouTube settings are told apart', () => {
   it('groups the retained controls into the documented categories', () => {
     assert.deepEqual(tree().children.map(node => node.id),
       ['playback', 'appearance', 'privacy', 'navigation', 'updates', 'about', 'support']);
-    for (const menuId of ['playback', 'appearance', 'privacy', 'navigation', 'updates']) {
+    for (const menuId of ['playback', 'appearance', 'privacy', 'navigation']) {
       const node = registry.findNode(tree(), menuId);
       assert.ok(node.title && node.description, `${menuId} has a title and a description`);
       assert.ok((node.children || []).length > 0, `${menuId} is not an empty destination`);
@@ -294,9 +296,13 @@ describe('YTArk and YouTube settings are told apart', () => {
     assert.equal(recovery.key, 'enablePlaybackRecovery');
     assert.equal(configDefault('enablePlaybackRecovery'), false);
 
-    const animation = registry.findNode(tree(), 'nav.skipStartupAnimation');
-    assert.equal(animation.type, 'panel', 'there is no setting that could promise an animation skip');
-    assert.match(animation.description, /no optional startup animation to skip/);
-    assert.match(JSON.stringify(animation.panel()), /Android's system splash/);
+    const animation = registry.findNode(tree(), 'nav.fasterStartup');
+    assert.equal(animation.type, 'toggle');
+    assert.equal(animation.key, 'fasterStartup');
+    assert.equal(configDefault('fasterStartup'), false);
+    assert.match(animation.description, /Results may vary/);
+    const updates = registry.findNode(tree(), 'updates');
+    assert.equal(updates.type, 'action');
+    assert.equal(updates.command[0].customAction.action, 'YTARK_NATIVE_UPDATES_OPEN');
   });
 });

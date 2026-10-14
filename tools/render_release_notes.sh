@@ -71,9 +71,9 @@ ${WHAT_CHANGED}
 
 ARMv7 (armeabi-v7a): [Download APK](https://github.com/${GITHUB_REPOSITORY}/releases/download/${VERSION_TAG}/${APK_ARMV7}). Not for arm64-v8a-only devices; a 64-bit CPU alone is insufficient. 4K does not select an APK architecture.
 
-Known issues: in-page native screen links are not dispatched by the pinned
-Cobalt base; open YTArk Updates from the TV apps row. Installation and updater
-runtime still need device verification.
+Known limitations: Android installer/permission-return, in-place upgrade and
+ARMv7 TV runtime still need device verification. Startup speed benefit is
+unverified; the Cobalt/YouTube engine is unchanged.
 
 <!-- Package ${APP_ID}; ${VERSION_NAME}; versionCode ${VERSION_CODE}; base TizenTubeCobalt ${BASE_TAG}. -->
 EOF

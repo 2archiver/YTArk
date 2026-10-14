@@ -16,59 +16,25 @@ import {
 } from './ytSettingsEditor.js';
 import { tx } from '../translations/text.js';
 
-const NATIVE_SCREEN_ROUTES = new Set(['updates']);
-
-/**
- * How the user reaches each native screen without an in-page route.
- *
- * Verified against the pinned TizenTubeCobalt v2.0.2 source: the base does not
- * override ContentBrowserClient::HandleExternalProtocol, so a navigation to
- * `ytark://...` is cancelled silently by content's default implementation and
- * no Android intent is ever built — the page simply stays visible. The launcher
- * entry (UpdateLauncherActivity) opens Updates, and that screen offers Cache &
- * Storage. See docs/SETTINGS-2.9-RECOVERY-REVIEW.md.
+/** The pinned host's existing async Mojo/JNI method is patched at its Java boundary.
+ * It accepts exactly this screen sentinel, rejects URLs, and never installs anything.
+ * No WebView interface or external protocol handling is assumed.
  */
-const NATIVE_SCREEN_FALLBACK = {
-  updates: 'Open YTArk Updates in the TV apps row.',
-};
-
-function nativeFallback(screen) {
-  return NATIVE_SCREEN_FALLBACK[screen]
-    || `Open YTArk Updates in the TV apps row.`;
-}
-
 function openNativeRoute(screen) {
-  const route = NATIVE_SCREEN_ROUTES.has(screen) ? `ytark://${screen}` : '';
-  if (!route) {
-    showToast('YTArk', 'That native screen is not available through YTArk navigation.');
+  if (screen !== 'updates') return false;
+  const host = typeof window !== 'undefined' && window.h5vcc && window.h5vcc.tizentube;
+  if (!host || typeof host.InstallAppFromURL !== 'function') {
+    showToast('YTArk Updates', 'The native Updates bridge is unavailable. This page requires the YTArk 3.1 APK.');
     return false;
   }
   try {
-    if (typeof window === 'undefined' || !window.location) throw new Error('The Android route is unavailable.');
-    // The single YTArk-owned screen route is emitted. The exported native
-    // activity validates the exact scheme/host again; no package, component,
-    // file path, or command can be supplied by this userscript action.
-    //
-    // The assignment is kept because it is harmless and becomes the working
-    // route again if the base ever handles the scheme; the platform cannot tell
-    // us that it ignored the navigation, so the guidance below is shown when the
-    // page is still visible afterwards.
-    const documentAtRequest = typeof document !== 'undefined' ? document : null;
-    if (documentAtRequest) {
-      setTimeout(() => {
-        // Only a hidden page proves the platform navigated away and took over.
-        // An engine that does not report visibility at all is treated as "still
-        // here", which is the observed behaviour of the pinned base.
-        if (documentAtRequest.visibilityState !== 'hidden') {
-          showToast('YTArk', `Updates did not open here. ${nativeFallback(screen)}`);
-        }
-      }, 2200);
-    }
-    window.location.href = route;
+    const result = host.InstallAppFromURL('ytark://updates');
+    Promise.resolve(result).then(ok => {
+      if (ok === false) showToast('YTArk Updates', 'Updates could not open. Return to YTArk and try again.');
+    }).catch(() => showToast('YTArk Updates', 'Updates could not open. Try again.'));
     return true;
-  } catch (error) {
-    showToast('YTArk', `${nativeFallback(screen)}`);
-    console.warn('[YTArk] Could not open a native YTArk screen:', error);
+  } catch (_) {
+    showToast('YTArk Updates', 'Updates could not open. Try again.');
     return false;
   }
 }

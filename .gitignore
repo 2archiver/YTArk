@@ -26,3 +26,5 @@ android-updater/build/
 build/
 *.tmp.apk
 __pycache__/
+
+tools/kotlin/node_modules/

@@ -101,7 +101,9 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: TizenTube/mods/package-lock.json
+          cache-dependency-path: |
+            TizenTube/mods/package-lock.json
+            tools/kotlin/package-lock.json
 
       - name: Verify the bundled Premium vector wordmark before building
         run: |
@@ -192,11 +194,11 @@ jobs:
           YTARK_KEY_PASSWORD: ${{ secrets.YTARK_KEY_PASSWORD }}
         run: bash tools/prepare_signing_key.sh
 
-      - name: Compile native updater and run Java contract tests
+      - name: Compile Kotlin updater and run production contract tests
         run: |
           set -euo pipefail
           chmod +x tools/build_android_updater.sh
-          tools/build_android_updater.sh "$RUNNER_TEMP/ytark-updater/classes.dex"
+          tools/build_android_updater.sh "$RUNNER_TEMP/ytark-updater/classes.dex" 2>&1 | tee "$RUNNER_TEMP/updater-build.log"
 
       - name: Download and verify the pinned upstream ARMv7 Cobalt base
         run: |
@@ -218,6 +220,7 @@ jobs:
             --jq '.assets[] | select(.name == "apktool_3.0.3.jar") | .browser_download_url')"
           test -n "$APKTOOL_URL"
           curl -fsSL --retry 3 "$APKTOOL_URL" -o "$RUNNER_TEMP/apktool.jar"
+          echo "dbf930b076c6b9be08d57c449cacefc3bdd6b71ebd59b3066fc0e1f5b14f9423  $RUNNER_TEMP/apktool.jar" | sha256sum -c -
           java -jar "$RUNNER_TEMP/apktool.jar" --version
 
       - name: Repack the ARMv7 Cobalt base
@@ -232,7 +235,7 @@ jobs:
             --script-url "$SCRIPT_URL" --version-code "$VERSION_CODE" \
             --version-name "$VERSION_NAME" \
             --apktool "java -jar $RUNNER_TEMP/apktool.jar" \
-            --zipalign "$ANDROID_HOME/build-tools/$BUILD_TOOLS/zipalign"
+            --zipalign "$ANDROID_HOME/build-tools/$BUILD_TOOLS/zipalign" 2>&1 | tee "$RUNNER_TEMP/repack.log"
 
       - name: Verify alignment, sign the ARMv7 APK and validate the compiled package
         run: |
@@ -325,6 +328,11 @@ jobs:
           retention-days: 30
           # An Actions artefact is not a public release: the publish job below
           # decides whether these bytes become the stable release.
+
+      - name: Surface build diagnostics if a package step fails
+        if: failure()
+        run: |
+          python3 tools/ci_diagnostics.py "$RUNNER_TEMP/updater-build.log" "$RUNNER_TEMP/repack.log"
 
   publish-release:
     name: Publish the verified ARMv7 APK as the stable release

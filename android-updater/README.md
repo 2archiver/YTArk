@@ -1,80 +1,59 @@
-# Native YTArk updater
+# Kotlin updater (3.1 candidate)
 
-The Android classes here are compiled to DEX by `tools/build_android_updater.sh`
-and injected into the pinned TizenTubeCobalt APK during repackaging. The
-updater, notifications, permissions, and installer handoff are additive; the
-base app's Cobalt classes, YouTube account stack, and playback libraries are not
-replaced.
+Production code is in `src/main/kotlin`. No Java updater implementation remains.
+The existing Java host assertions compile against the Kotlin policies; additional
+Kotlin tests exercise scheduling, state and pending-candidate identity.
 
-## Stable release contract
+## Build and host integration
 
-The updater requests GitHub's canonical
-`https://api.github.com/repos/2archiver/YTArk/releases/latest` endpoint and
-accepts only releases with explicit `draft=false` and `prerelease=false` flags.
-For YTArk 2.2, the stable tag is `v2.2.0`, the release title is `YTArk 2.2`,
-the display version is `2.2`, and Android uses versionName `2.2.0` with
-versionCode `2020000`. The 2.1.2 release (`v2.1.2`, versionCode `2010200`) stays
-published and unchanged. The version code is checked against every published
-stable release, including historical tags. The release asset is named
-`YTArk-v2.2.0-armv7.apk`; ARM64 assets were published up to 2.1.1 and are never
-selected as an update any more.
+This is a **custom Kotlin/JAR/D8/repack pipeline**, not Gradle:
 
-The updater selects only the APK matching the ABI embedded in the installed
-YTArk APK, and only after Android's own ABI list confirms that the userspace can
-still load it. A device that does not report `armeabi-v7a` gets one clear message
-(check `ro.product.cpu.abilist`) instead of a download it cannot install, and an
-installation that still carries `arm64-v8a` native code is told that cross-ABI
-updates are not supported. It verifies the exact official asset URL, release flags, tag and
-version, versionCode, asset size, SHA-256, package ID, native library ABI, and
-signer before exposing Android's PackageInstaller. GitHub's asset digest is
-used when available; otherwise a required entry in `SHA256SUMS.txt` is used.
-There is no guessed download URL or silent installation path.
+- JDK 17, Kotlin 2.1.20-release-217 (npm archive locked with integrity), SDK 34,
+  build-tools 34.0.0, min DEX API 24.
+- `tools/build_android_updater.sh` packages Kotlin stdlib and the APK-verification
+  core from build-tools' apksigner JAR. No coroutines, WorkManager, reflection or
+  third-party UI framework is required. Apache-2.0 notices apply to Kotlin and
+  Android apksig; their upstream licences are retained by their distributions.
+- The pinned Cobalt `StarboardBridge.installAppFromURL(String): boolean` JNI
+  signature is preserved. Its body is replaced by a call to Kotlin
+  `NativeUpdatesBridge.open`. Only the exact `ytark://updates` sentinel is
+  accepted; arbitrary URL installs are disabled. The bridge needs a foreground
+  Cobalt MainActivity and can only open Updates, never download/install.
+- There is no WebView interface, network command listener, companion package,
+  exported screen or updater launcher. The existing Cobalt launcher stays intact.
+- The repacker fails on an unexpected host method and round-trips every upstream
+  smali class. Native libraries retain the existing fixed-length script-URL patch
+  only. Final DEX inspection checks definitions, duplicate classes, runtime and
+  the actual constrained JNI method body.
 
-## TV-friendly update screen
+## Responsibilities and recovery
 
-The YTArk settings menu opens a native `YTArk Updates` screen designed for
-remote/D-pad navigation. It shows the installed version, last/next check and
-retry status, stable release notes, and update/download/verification/install
-states. The user can check again, retry or resume a matching interrupted
-transfer, cancel a download, skip a release, choose Later, or enable Android 13+
-notifications from the screen. Network failures and GitHub rate limits do not
-become false “up to date” results.
+`UpdateRepository` bounds and validates GitHub release metadata/redirects.
+`UpdateCoordinator` serializes application-scoped operations and exposes one
+immutable state. `UpdateStore` writes one snapshot; validated paths are reconciled,
+not trusted across launches. `DownloadController` restarts interrupted partial
+files rather than append unsafe ranges. `ApkValidator` checks checksum, all ZIP
+CRCs, package, numeric version, SDK/ABI, APK cryptographic signatures and signing
+lineage (including installed-data capability). The exposed community signing key
+provides upgrade continuity, **not publisher authentication**; the canonical HTTPS
+release and its published checksum remain required.
 
-Checks use persisted timing: a six-hour successful-check interval, bounded
-retry delay after failures, and Retry-After / GitHub rate-limit reset deadlines.
-They occur shortly after app-process startup when eligible, and periodically
-while that process is alive. Notification permission is requested only after
-the user chooses **Enable Update Notifications**. Downloaded APKs and partial
-files remain in private app storage and are matched against the current release
-metadata before reuse.
+One JobScheduler ID (7280, retained from 3.0) handles 1 hour / 3 hours / Never.
+Intervals are approximate. Foreground overdue checks wait 30 seconds; no release
+fetch runs in provider initialization. Background downloads never launch Android UI.
 
-Before handing the APK to Android, YTArk rechecks the official checksum,
-package ID, version, ABI, and pinned signing certificate. Android's standard
-installer requires the user to confirm the in-place update. YTArk does not
-uninstall the app, clear app data, or claim silent installation. The installed
-package ID and signing identity are held constant so Android can preserve local
-settings and the Cobalt login/cookie store during a compatible update.
+`InstallCoordinator` requires an explicit visible-page action, revalidates off
+main thread and persists the candidate-bound permission request. It checks
+`canRequestPackageInstalls()` on API 26+, uses the package-specific special
+Settings screen, consumes continuation once, and checks visibility again before
+handoff. Installation uses ACTION_INSTALL_PACKAGE with a scoped, read-only
+content URI and RETURN_RESULT. It retains the staged APK through cancellation and
+never interprets a result code as success: installed package/version reconciliation
+is authoritative. No runtime dangerous-permission prompt is used.
 
-## Signing identity warning
+## Verification boundary
 
-The certificate fingerprint is
-`b9cb7e4b4d5179870e672e850f5d3661f02c248f943dbaf10cd78cd0c047eaae`, matching
-Hearth's intentionally public community keystore. Its private key and passwords
-are public; the pin proves signer continuity, **not publisher authenticity**.
-The updater rejects another signer, but anyone with that public key can produce
-a signer-matching APK. Install release assets only from the official YTArk
-repository. The key is retained to avoid stranding existing installs; rotating
-it casually would make an in-place update fail and could require an uninstall
-that erases app data. See `docs/SIGNING.md` for the disclosed exposure and
-coordinated migration options.
-
-## Contract tests
-
-Host-JRE tests exercise SemVer ordering, historical versionCode comparison,
-ARMv7-only ABI selection (a legacy `arm64-v8a` installation, a 64-bit-only ABI
-list and an unknown suffix are all rejected with actionable messages), stable
-release flags, official URLs, SHA-256
-fallback, interrupted-download resume metadata, and persisted retry/rate-limit
-scheduling. These tests do not replace a signed APK build, Android Package
-Installer exercise, physical-TV navigation, or a login-preserving in-place
-upgrade test; those results must be reported separately.
+See `docs/YTARK-3.1-ACCEPTANCE.md`. Compilation/policy/DEX verification is not proof
+of Android system UI, Cobalt runtime, TV focus or login-preserving upgrades. The
+candidate's `s30` userscript endpoint becomes available only after authorized
+publication; neither script tags nor releases are published by branch CI.

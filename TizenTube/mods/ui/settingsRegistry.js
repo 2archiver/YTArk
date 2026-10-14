@@ -195,11 +195,11 @@ function aboutPanel() {
     ),
     buttonItem(
       {
-        title: tx('ytark.about.changelog', 'Version history'),
-        subtitle: tx('ytark.about.changelogSubtitle', 'Opens the changelog in YTArk Updates'),
+        title: 'YTArk Updates',
+        subtitle: 'Updates and release highlights',
       },
       { icon: 'HISTORY' },
-      [custom('YTARK_CHANGELOG_SHOW', {})],
+      [custom('YTARK_NATIVE_UPDATES_OPEN', {})],
     ),
   );
   if (!info.loading && info.source !== VERSION_SOURCES.package) {
@@ -265,17 +265,6 @@ function aboutNoticesPanel() {
   };
 }
 
-function startupAnimationPanel() {
-  return {
-    title: tx('ytark.navigation.skipStartupAnimation.title', 'Skip startup animation'),
-    subtitle: tx('ytark.navigation.skipStartupAnimation.unavailable',
-      'Not available: this YTArk build has no optional startup animation to skip.'),
-    content: overlayPanelItemListRenderer([
-      overlayMessageRenderer(tx('ytark.navigation.skipStartupAnimation.details',
-        "The pinned TizenTubeCobalt base does not provide a separate YTArk startup animation or removable startup delay. No skip toggle is exposed. Android's system splash and YouTube UI are unchanged. Initialization, injection, sign-in/session restore and settings migrations must still run.")),
-    ]),
-  };
-}
 
 function colorsPanel() {
   const lines = [
@@ -787,42 +776,22 @@ export function buildSettingsTree() {
           },
           { id: 'misc.reloadHome', type: 'toggle', title: t('settings.options.misc.options.reloadHomeOnStartup'), key: 'reloadHomeOnStartup' },
           {
-            id: 'nav.skipStartupAnimation',
-            type: 'panel',
-            title: tx('ytark.navigation.skipStartupAnimation.title', 'Skip startup animation'),
-            description: tx('ytark.navigation.skipStartupAnimation.unavailable',
-              'Not available: this YTArk build has no optional startup animation to skip.'),
-            icon: 'INFO',
-            panel: startupAnimationPanel,
+            id: 'nav.fasterStartup',
+            type: 'toggle',
+            key: 'fasterStartup',
+            title: 'Faster startup (Experimental)',
+            description: 'Reduces optional startup delays where supported. Results may vary by device.',
+            icon: 'SPEED',
           },
     ],
     },
     {
       id: 'updates',
-      type: 'menu',
+      type: 'action',
       title: 'YTArk Updates',
-      description: ytarkUpdateSubtitle(),
+      description: 'Check, automatically download and install compatible updates',
       icon: 'SYSTEM_UPDATE',
-      menuId: 'ytark-updates-menu',
-      header: { title: 'YTArk Updates', subtitle: ytarkUpdateSubtitle() },
-      children: [
-        {
-          id: 'updates.open',
-          type: 'action',
-          title: 'Open updater and check now',
-          description: 'Opens the native YTArk updater for real check, download, verification and installation status',
-          icon: 'SYSTEM_UPDATE',
-          command: [custom('YTARK_NATIVE_UPDATES_OPEN', {})],
-        },
-        {
-          id: 'updates.changelog',
-          type: 'action',
-          title: tx('ytark.changelog.entryFromUpdates', 'What\'s new and changelog'),
-          description: tx('ytark.changelog.entryDescription', 'Version history bundled with this build'),
-          icon: 'BOOKMARK_BORDER',
-          command: [custom('YTARK_CHANGELOG_SHOW', {})],
-        },
-      ],
+      command: [custom('YTARK_NATIVE_UPDATES_OPEN', {})],
     },
     {
       id: 'about',

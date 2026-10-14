@@ -499,23 +499,12 @@ def patch_updater_manifest(decoded_dir: str, app_id: str) -> None:
             or UPDATE_FILE_PROVIDER in xml):
         raise SystemExit("ERROR: native YTArk updater components already exist in the manifest.")
 
-    screen_permission = app_id + UPDATER_SCREEN_PERMISSION_SUFFIX
     permissions = (
         "android.permission.INTERNET",
-        "android.permission.POST_NOTIFICATIONS",
         "android.permission.REQUEST_INSTALL_PACKAGES",
         "android.permission.RECEIVE_BOOT_COMPLETED",
     )
     permission_xml = ""
-    declared_permission = re.compile(
-        r'<permission\b[^>]*android:name=["\']' + re.escape(screen_permission) + r'["\']')
-    requested_permission = re.compile(
-        r'<uses-permission\b[^>]*android:name=["\']' + re.escape(screen_permission) + r'["\']')
-    if not declared_permission.search(xml):
-        permission_xml += (f'    <permission android:name="{screen_permission}" '
-                           'android:protectionLevel="signature" />\n')
-    if not requested_permission.search(xml):
-        permission_xml += f'    <uses-permission android:name="{screen_permission}" />\n'
     for permission in permissions:
         if permission not in xml:
             permission_xml += f'    <uses-permission android:name="{permission}" />\n'
@@ -529,33 +518,11 @@ def patch_updater_manifest(decoded_dir: str, app_id: str) -> None:
     <activity
         android:name="{UPDATER_ACTIVITY}"
         android:label="YTArk Updates"
-        android:permission="{screen_permission}"
         android:theme="@android:style/Theme.Material.NoActionBar"
         android:screenOrientation="landscape"
         android:excludeFromRecents="true"
         android:launchMode="singleTop"
-        android:exported="true">
-      <intent-filter>
-        <action android:name="android.intent.action.VIEW" />
-        <category android:name="android.intent.category.DEFAULT" />
-        <category android:name="android.intent.category.BROWSABLE" />
-        <data android:scheme="ytark" android:host="updates" />
-      </intent-filter>
-    </activity>
-    <activity
-        android:name="{UPDATER_LAUNCHER_ACTIVITY}"
-        android:label="YTArk Updates"
-        android:icon="@mipmap/ytark_launcher"
-        android:banner="@drawable/ytark_banner"
-        android:theme="@android:style/Theme.NoDisplay"
-        android:screenOrientation="landscape"
-        android:excludeFromRecents="true"
-        android:exported="true">
-      <intent-filter>
-        <action android:name="android.intent.action.MAIN" />
-        <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
-      </intent-filter>
-    </activity>
+        android:exported="false" />
     <service
         android:name="{UPDATER_JOB_SERVICE}"
         android:permission="android.permission.BIND_JOB_SERVICE"
@@ -572,9 +539,7 @@ def patch_updater_manifest(decoded_dir: str, app_id: str) -> None:
         android:grantUriPermissions="true">
       <grant-uri-permission android:path="/update.apk" />
     </provider>
-    <receiver
-        android:name="{UPDATER_RECEIVER}"
-        android:exported="false" />\n"""
+\n"""
     close_app = xml.rfind("</application>")
     if close_app < 0:
         raise SystemExit("ERROR: could not find </application> in decoded manifest.")
@@ -590,9 +555,9 @@ def inject_updater_dex(decoded_dir: str, updater_dex: str) -> str:
         raise SystemExit(f"ERROR: native updater DEX not found: {updater_dex!r}")
     dex_files = []
     for name in os.listdir(decoded_dir):
-        match = re.fullmatch(r"classes(\d*)\.dex", name)
+        match = re.fullmatch(r"classes(\d*)\.dex", name) or re.fullmatch(r"smali(?:_classes(\d+))?", name)
         if match:
-            dex_files.append((1 if match.group(1) == "" else int(match.group(1)), name))
+            dex_files.append((1 if not match.group(1) else int(match.group(1)), name))
     if not any(index == 1 for index, _name in dex_files):
         raise SystemExit("ERROR: base APK has no classes.dex; cannot inject the updater.")
     next_index = max(index for index, _name in dex_files) + 1
@@ -696,7 +661,7 @@ def validate_base_architecture(base_apk: str, architecture: str) -> None:
 
 
 def verify_preserved_native_and_dex(base_apk: str, rebuilt_apk: str,
-                                    architecture: str, script_url: str) -> None:
+                                    architecture: str, script_url: str, audited_host_patch=False) -> None:
     validate_base_architecture(base_apk, architecture)
     base_native, base_dex = archive_payloads(base_apk)
     rebuilt_native, rebuilt_dex = archive_payloads(rebuilt_apk)
@@ -724,7 +689,7 @@ def verify_preserved_native_and_dex(base_apk: str, rebuilt_apk: str,
         raise SystemExit("ERROR: pinned Cobalt library no longer contains the expected userscript URL literal.")
 
     for name, data in base_dex.items():
-        if rebuilt_dex.get(name) != data:
+        if not audited_host_patch and rebuilt_dex.get(name) != data:
             raise SystemExit(f"ERROR: repacking changed or removed upstream DEX file {name}.")
     if not rebuilt_dex or not set(base_dex).issubset(rebuilt_dex):
         raise SystemExit("ERROR: rebuilt APK is missing an upstream DEX payload.")
@@ -741,7 +706,7 @@ def repack(args) -> None:
     validate_base_architecture(args.base, args.architecture)
 
     print(f"[*] Decoding {args.base} (dex stays raw, resources + manifest decoded)")
-    run(apktool + ["d", "--no-src", "--force",
+    run(apktool + ["d", "--force",
                    "--output", decoded, args.base])
 
     normalize_android_namespace(decoded)
@@ -753,6 +718,8 @@ def repack(args) -> None:
     patch_tv_manifest_compatibility(decoded)
     patch_launcher_icon(decoded)
     patch_updater_manifest(decoded, args.app_id)
+    from patch_cobalt_bridge import patch, verify_roundtrip
+    patch(decoded)
     inject_updater_dex(decoded, args.updater_dex)
     patch_apktool_yml(os.path.join(decoded, "apktool.yml"),
                       args.version_code, args.version_name)
@@ -762,7 +729,10 @@ def repack(args) -> None:
     run(apktool + ["b", decoded, "--output", unsigned])
 
     store_uncompressed(unsigned)
-    verify_preserved_native_and_dex(args.base, unsigned, args.architecture, args.script_url)
+    roundtrip = os.path.join(work, "roundtrip")
+    run(apktool + ["d", "--no-res", "--force", "--output", roundtrip, unsigned])
+    verify_roundtrip(decoded, roundtrip)
+    verify_preserved_native_and_dex(args.base, unsigned, args.architecture, args.script_url, audited_host_patch=True)
 
     aligned = os.path.join(work, "aligned.apk")
     print("[*] zipalign (-f -p 4)")
@@ -909,11 +879,8 @@ def self_test() -> None:
         ('android:banner="@drawable/ytark_banner"' in patched_updater_manifest,
          "Android TV launcher banner changed to YTArk"),
         (UPDATER_ACTIVITY in patched_updater_manifest, "native update activity declared"),
-        (UPDATER_LAUNCHER_ACTIVITY in patched_updater_manifest,
-         "public TV-launcher proxy declared separately"),
-        (UPDATER_SCREEN_PERMISSION_SUFFIX in patched_updater_manifest
-         and 'android:protectionLevel="signature"' in patched_updater_manifest,
-         "native screen routes require the app-signature permission"),
+        (UPDATER_LAUNCHER_ACTIVITY not in patched_updater_manifest,
+         "no updater launcher proxy"),
         (UPDATER_PROVIDER in patched_updater_manifest, "startup provider declared"),
         (UPDATE_FILE_PROVIDER in patched_updater_manifest, "read-only update-file provider declared"),
         ("io.github.twoarchiver.ytark.ytarkupdater.files" in patched_updater_manifest,
@@ -921,8 +888,8 @@ def self_test() -> None:
         ('android:grantUriPermissions="true"' in patched_updater_manifest
          and 'android:path="/update.apk"' in patched_updater_manifest,
          "only the verified update APK can be granted to Android Installer"),
-        ('android:scheme="ytark" android:host="updates"' in patched_updater_manifest,
-         "settings deep link declared"),
+        ('android:scheme="ytark"' not in patched_updater_manifest,
+         "no exported deep link"),
         ("android.permission.REQUEST_INSTALL_PACKAGES" in patched_updater_manifest,
          "install permission declared"),
     ]
