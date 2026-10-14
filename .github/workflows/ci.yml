@@ -183,6 +183,10 @@ jobs:
             --apktool "java -jar $RUNNER_TEMP/apktool.jar" \
             --zipalign "$ANDROID_HOME/build-tools/$BUILD_TOOLS/zipalign" 2>&1 | tee "$RUNNER_TEMP/repack.log"
 
+      - name: Verify compiled updater and JNI bridge definitions
+        run: |
+          PYTHONPATH=tools python3 -c 'from dex_contract import verify_apk_dex; verify_apk_dex("work/ci-unsigned.apk")'
+
       - name: Surface repack integration diagnostics
         if: failure()
         run: python3 tools/ci_diagnostics.py "$RUNNER_TEMP/repack.log"
