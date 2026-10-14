@@ -4,7 +4,8 @@ All notable changes to YTArk are recorded here, newest first.
 
 This file is the single source for the in-app **Changelog / What's new** reader
 (generated into `TizenTube/mods/assets/changelog.generated.js` by
-`python3 tools/build_changelog.py --write`, checked in CI with `--check`) and for
+`python3 tools/build_changelog.py --write`, alongside the shared native
+`ReleaseHighlights.generated.kt` summaries/details; checked in CI with `--check`) and for
 the "What changed in this release" section of each GitHub release
 (`tools/render_release_notes.sh`).
 
@@ -21,9 +22,24 @@ Conventions:
 - Capabilities inherited from TizenTube and TizenTubeCobalt are listed under
   "Upstream base and inherited capabilities", not as YTArk additions.
 
-## [3.1.0] — Unreleased
+## [3.2.0] — Unreleased
 
-> Not yet published. Planned tag `v3.1.0` · versionCode 3010000 · userscript `s30` · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.
+> Not yet published. Planned tag `v3.2.0` · versionCode 3020000 · userscript `s31` · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.
+
+YouTube-style Updates, restored About changelog and compact release highlights.
+
+### Changed
+- Matched Updates to the YouTube dark theme with compact controls and clear remote focus.
+### Fixed
+- Restored Changelog / Version history in About YTArk.
+- Kept current-version highlights short, with release details behind an explicit action.
+### Known limitations
+- Physical TV focus, Android installation and session-preserving upgrades still need device verification.
+- The s31 userscript endpoint becomes live only through the existing release publication workflow.
+
+## [3.1.0] — 2026-10-14
+
+> Published 2026-10-14 11:46 UTC as [YTArk 3.1](https://github.com/2archiver/YTArk/releases/tag/v3.1.0) · tag `v3.1.0` · versionCode 3010000 · userscript `s30` · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.
 
 Kotlin updater, direct Updates entry and opt-in faster mod readiness.
 

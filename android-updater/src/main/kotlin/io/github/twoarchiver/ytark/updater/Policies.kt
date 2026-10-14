@@ -59,13 +59,18 @@ object NativeRoutePolicy {
     @JvmStatic fun isAllowedScreenRoute(raw: String?, expected: String?) = expected != null && expected == screenForRoute(raw)
 }
 object NativeThemePolicy {
-    @JvmStatic fun background() = 0xff0f1218.toInt()
-    @JvmStatic fun card() = 0xff1d232d.toInt()
-    @JvmStatic fun divider() = 0xff353e4c.toInt()
-    @JvmStatic fun primaryText() = 0xffffffff.toInt()
-    @JvmStatic fun secondaryText() = 0xffb8c2d0.toInt()
-    @JvmStatic fun bodyText() = 0xffdae1eb.toInt()
-    @JvmStatic fun quietText() = 0xff949fb1.toInt()
+    // Neutral YouTube dark surfaces; light focus matches the in-page TV rows.
+    @JvmStatic fun background() = 0xff0f0f0f.toInt()
+    @JvmStatic fun card() = 0xff272727.toInt()
+    @JvmStatic fun divider() = 0xff3f3f3f.toInt()
+    @JvmStatic fun primaryText() = 0xfff1f1f1.toInt()
+    @JvmStatic fun secondaryText() = 0xffaaaaaa.toInt()
+    @JvmStatic fun bodyText() = 0xfff1f1f1.toInt()
+    @JvmStatic fun quietText() = 0xffaaaaaa.toInt()
+    @JvmStatic fun focus() = 0xfff1f1f1.toInt()
+    @JvmStatic fun onFocus() = 0xff0f0f0f.toInt()
+    @JvmStatic fun disabledSurface() = 0xff181818.toInt()
+    @JvmStatic fun disabledText() = 0xff888888.toInt()
 }
 object UpdateReleaseContract {
     private val clean = Regex("^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)$")

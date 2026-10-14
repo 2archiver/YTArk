@@ -34,6 +34,12 @@ public final class NativeThemePolicyTest {
         // contrast ratio floor of 3:1, the level widely used for large text.
         double ratio = contrastRatio(NativeThemePolicy.quietText(), NativeThemePolicy.card());
         assertTrue(ratio >= 3.0, "quiet text keeps about 3:1 contrast on a card (was " + ratio + ")");
+        assertTrue(contrastRatio(NativeThemePolicy.onFocus(), NativeThemePolicy.focus()) >= 7.0,
+                "focused rows keep high contrast");
+        assertTrue(contrastRatio(NativeThemePolicy.disabledText(), NativeThemePolicy.disabledSurface()) >= 4.5,
+                "disabled labels remain readable");
+        assertTrue(NativeThemePolicy.disabledSurface() != NativeThemePolicy.card(),
+                "disabled controls are visually distinct");
         System.out.println("NativeThemePolicy tests passed (fixed palette, opacity and contrast).");
     }
 

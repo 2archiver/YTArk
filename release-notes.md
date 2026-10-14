@@ -1,12 +1,13 @@
-YTArk 3.1 — candidate, not published
+YTArk 3.2 — candidate, not published
 
-- Rebuilt the native updater in Kotlin with a single persisted state.
-- Connected Settings directly to the private YTArk Updates screen.
-- Added 1-hour / 3-hour / Never scheduling and retained verified APK installation recovery.
-- Added opt-in faster mod-readiness polling with bounded normal fallback.
+YouTube-style Updates, restored About changelog and compact release highlights.
 
-Device installation, session-preserving upgrade, TV focus and speed benefit remain
-unverified. This is not a Cobalt or YouTube engine upgrade. The candidate's s30
-userscript endpoint is not live until authorized publication.
+- Matched Updates to the YouTube dark theme with compact controls and clear remote focus.
+- Restored Changelog / Version history in About YTArk.
+- Kept current-version highlights short, with release details behind an explicit action.
 
-<!-- Package io.github.twoarchiver.ytark; 3.1.0; versionCode 3010000; base TizenTubeCobalt v2.0.2. -->
+The 3.1 Kotlin updater, signing identity and ARMv7 Cobalt v2.0.2 base are unchanged.
+Physical TV focus, Android installation and session-preserving upgrades remain
+unverified. The s31 userscript endpoint is not live until release publication.
+
+<!-- Package io.github.twoarchiver.ytark; 3.2.0; versionCode 3020000; base TizenTubeCobalt v2.0.2. -->

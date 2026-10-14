@@ -19,6 +19,7 @@ import validate_release  # noqa: E402
 
 # Every stable release published on GitHub (gh release list), newest first.
 PUBLISHED = [
+    ("3.1.0", "v3.1.0", "2026-10-14", 3010000, "s30"),
     ("3.0.0", "v3.0.0", "2026-10-14", 3000000, "s29"),
     ("2.9.0", "v2.9.0", "2026-10-14", 2090000, "s28"),
     ("2.8.0", "v2.8.0", "2026-10-13", 2080000, "s27"),
@@ -201,11 +202,11 @@ class RepositoryChangelogTests(unittest.TestCase):
         self.assertEqual(newest["meta"]["versionCode"], int(config["VERSION_CODE"]))
         self.assertEqual(newest["meta"]["scriptTag"], config["SCRIPT_TAG"])
         headings = [section["heading"] for section in newest["sections"]]
-        for required in ("Removed", "Fixed", "Known limitations"):
+        for required in ("Changed", "Fixed", "Known limitations"):
             self.assertIn(required, headings)
         limitations = next(section for section in newest["sections"]
                            if section["heading"] == "Known limitations")
-        self.assertTrue(any("remain unverified" in item["text"]
+        self.assertTrue(any("still need device verification" in item["text"]
                             for item in limitations["items"]))
 
     def test_published_releases_stay_one_liners(self):
@@ -213,9 +214,9 @@ class RepositoryChangelogTests(unittest.TestCase):
         for entry in self.model["entries"]:
             self.assertTrue(entry["summary"], entry["version"])
             self.assertLessEqual(len(entry["summary"]), 140, entry["version"])
-            if entry["status"] == "published":
-                items = sum(len(section["items"]) for section in entry["sections"])
-                self.assertLessEqual(items, 2, f"{entry['version']} should stay a one-line summary")
+            # Full historical sections may be retained: only the maintained
+            # summary is rendered by default, not the section bodies.
+            self.assertNotIn("\n", build_changelog.short_summary(entry["summary"]))
 
     def test_drafts_are_notes_not_versions(self):
         versions = [entry["version"] for entry in self.model["entries"]]
@@ -228,6 +229,24 @@ class RepositoryChangelogTests(unittest.TestCase):
         self.assertEqual(build_changelog.OUTPUT.read_text(encoding="utf-8"), expected)
         self.assertEqual(build_changelog.render_module(self.model, self.text), expected)
         self.assertEqual(build_changelog.main(["--check"]), 0)
+
+    def test_native_summaries_share_the_bundled_source_and_staleness_gate(self):
+        self.assertEqual(build_changelog.NATIVE_OUTPUT.read_text(),
+                         build_changelog.render_native(self.model, self.text))
+        with tempfile.TemporaryDirectory() as temp:
+            stale = Path(temp) / "ReleaseHighlights.generated.kt"
+            stale.write_text("// stale")
+            with patch.object(build_changelog, "NATIVE_OUTPUT", stale):
+                self.assertEqual(build_changelog.main(["--check"]), 1)
+
+    def test_short_summary_is_plain_bounded_and_never_cuts_words(self):
+        short = build_changelog.short_summary
+        self.assertEqual(short("<b>**Clear**</b> [notes](https://example.com) &amp; `text`"), "Clear notes & text")
+        self.assertEqual(short(""), build_changelog.SUMMARY_FALLBACK)
+        self.assertEqual(short("x" * 500), build_changelog.SUMMARY_FALLBACK)
+        self.assertEqual(short("word " * 60), " ".join(["word"] * 40) + "…")
+        self.assertLessEqual(len(short("release highlights " * 50)), 240)
+        self.assertEqual(short("# First\n- Second"), "First Second")
 
     def test_check_fails_for_a_stale_module(self):
         with tempfile.TemporaryDirectory() as temp:

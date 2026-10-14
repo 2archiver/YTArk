@@ -73,7 +73,7 @@ class UpdaterTestListTests(unittest.TestCase):
         self.assertIn("Policies.kt", self.policies)
         self.assertIn("NativeThemePolicyTest", self.classes)
         policy = (MAIN_DIR / "Policies.kt").read_text(encoding="utf-8")
-        self.assertIn("0xff0f1218", policy, "the fixed dark background is unchanged")
+        self.assertIn("0xff0f0f0f", policy, "Updates matches the neutral YouTube dark background")
         self.assertNotIn("THEME_", policy, "3.0 removed the OLED palette branch")
         self.assertNotIn("isOled", policy, "the palette takes no theme argument any more")
 
@@ -136,13 +136,19 @@ class UpdateScreenRemovalTests(unittest.TestCase):
         text = (MAIN_DIR / "UpdateActivity.kt").read_text()
         created = re.findall(r'(\w+Button)=button\((\d+),', text)
         self.assertEqual([name for name, _ in created],
-                         ['checkButton', 'intervalButton', 'primaryButton', 'cancelButton'])
-        self.assertEqual(len({id for _, id in created}), 4)
+                         ['checkButton', 'intervalButton', 'primaryButton', 'cancelButton', 'currentNotesButton', 'candidateNotesButton'])
+        self.assertEqual(len({id for _, id in created}), 6)
         self.assertIn('findViewById<View>(focusId)', text)
         self.assertIn('currentFocus?.id', text)
         render = text.split('private fun render')[1]
         self.assertNotIn('setContentView', render)
-        self.assertNotIn('requestFocus', render)
+        self.assertIn('if(focused!=null && (!focused.isEnabled || focused.visibility!=View.VISIBLE))', render)
+        self.assertIn('addState(disabled', text)
+        self.assertIn('addState(focused', text)
+        self.assertIn('primaryButton.isEnabled=!s.busy && s.candidate!=null', render)
+        self.assertNotIn('s.candidate?.notes', render, 'raw notes never enter the default view')
+        self.assertIn('ReleaseHighlights.summary(installed)', text)
+        self.assertIn('ReleaseHighlights.summary(it.version)', render)
 
 
 class RepackDefaultsTests(unittest.TestCase):
