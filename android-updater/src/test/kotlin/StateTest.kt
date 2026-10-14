@@ -17,5 +17,26 @@ fun main() {
     check(!PendingInstallPolicy.mayContinue(null,"a",true,true))
     check(UpdateState(phase=UpdatePhase.AwaitingInstaller).busy)
     check(!UpdateState(phase=UpdatePhase.Ready).busy)
+    val current = UpdateState(message="Installed version is current. Latest compatible: 3.1.0.",lastSuccess=1)
+    check(UpdatePresentation.status(current)=="Up to date")
+    check(UpdatePresentation.latest(current)=="3.1.0") // Do not invent 3.2 as latest when running a candidate.
+    check(UpdatePresentation.latest(UpdateState())=="Not available")
+    val candidate = Candidate("v3.2.0",3020000,"asset","url",10485760,"digest","# Very long notes " + "detail ".repeat(1000))
+    val available = UpdateState(UpdatePhase.Available,candidate,"YTArk 3.2.0 is available.")
+    check(UpdatePresentation.status(available)=="Update available")
+    check(UpdatePresentation.latest(available)=="3.2.0")
+    check(UpdatePresentation.status(available.copy(message="Download cancelled. Retry when ready."))=="Download cancelled. Retry when ready.")
+    check(UpdatePresentation.status(available.copy(phase=UpdatePhase.Downloading,bytes=1048576))=="Downloading · 1 / 10 MB")
+    for(phase in listOf(UpdatePhase.Checking,UpdatePhase.Failed,UpdatePhase.AwaitingPermission,UpdatePhase.AwaitingInstaller)) {
+        check(UpdatePresentation.status(UpdateState(phase=phase,message="Guidance"))=="Guidance")
+    }
+    check(ReleaseHighlights.summary("3.2.0").length<=240)
+    check(ReleaseHighlights.summary("v3.2.0")==ReleaseHighlights.summary("3.2.0"))
+    check(ReleaseHighlights.summary("99.0.0")==ReleaseHighlights.FALLBACK)
+    check(ReleaseHighlights.details("3.2.0")!!.contains("Known limitations"))
+    check(!ReleaseHighlights.summary("3.2.0").contains("Known limitations"))
+    check(UpdatePresentation.releaseDetails("# Notes\n- **Clear** <b>text</b> &amp; [link](https://example.com)<!--hidden-->")=="Notes\n• Clear text & link")
+    check(UpdatePresentation.releaseDetails("")=="No release notes provided.")
+    println("Kotlin presentation/highlights tests passed.")
     println("Kotlin state/scheduling/permission identity tests passed (17 assertions).")
 }

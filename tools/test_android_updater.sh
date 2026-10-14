@@ -10,6 +10,8 @@ POLICY_SOURCES=(
   Policies.kt
   UpdateFailure.kt
   UpdateState.kt
+  UpdatePresentation.kt
+  ReleaseHighlights.generated.kt
 )
 TEST_CLASSES=(
   InstallGateTest

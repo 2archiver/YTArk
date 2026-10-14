@@ -32,6 +32,8 @@ import {
 } from './ytUI.js';
 import { YTARK_BUILD_INFO } from '../assets/buildInfo.generated.js';
 import { tx } from '../translations/text.js';
+import { changelogEntryFor } from '../features/whatsNew.js';
+import { YTARK_CHANGELOG } from '../assets/changelog.generated.js';
 
 const qrcodes = {};
 
@@ -154,7 +156,7 @@ function startupDestination(id, titleKey, icon, endpoint) {
  *
  * Layout contract (see the 2.7 acceptance checklist): the header carries the
  * name, the subtitle carries the single "YTArk <version>" line, the content
- * holds at most one informational line plus the navigable subsections, and the
+ * holds identity information, short release highlights and navigable subsections; the
  * closing line is the only legal sentence. Nothing here repeats the version,
  * and no fixed height or absolute position is used: the frontend renders these
  * rows, wraps them and scrolls them at 720p, 1080p and 4K.
@@ -176,6 +178,12 @@ function aboutPanel() {
   items.push(overlayMessageRenderer(`YouTube Frontend Version: ${youtube || 'Unavailable'}`));
   items.push(overlayMessageRenderer('The YouTube frontend is delivered by YouTube, not bundled with the APK.'));
   items.push(overlayMessageRenderer('Cobalt Version/Commit: Unavailable (Android base is listed in Build details)'));
+  const release = changelogEntryFor(info.version);
+  items.push(overlayMessageRenderer(tx('ytark.about.highlights', 'Current-version highlights')));
+  items.push(overlayMessageRenderer(info.loading
+    ? tx('ytark.about.highlightsLoading', 'Reading release highlights…')
+    : (release ? release.summary : YTARK_CHANGELOG.summaryFallback)));
+
   items.push(
     buttonItem(
       {
@@ -195,8 +203,16 @@ function aboutPanel() {
     ),
     buttonItem(
       {
+        title: tx('ytark.about.changelog', 'Changelog / Version history'),
+        subtitle: tx('ytark.about.changelogSubtitle', 'View full release notes and earlier versions'),
+      },
+      { icon: 'HISTORY' },
+      [custom('YTARK_CHANGELOG_SHOW', { focusVersion: info.version || '' })],
+    ),
+    buttonItem(
+      {
         title: 'YTArk Updates',
-        subtitle: 'Updates and release highlights',
+        subtitle: 'Check for and install updates',
       },
       { icon: 'HISTORY' },
       [custom('YTARK_NATIVE_UPDATES_OPEN', {})],

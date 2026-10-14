@@ -3,20 +3,57 @@
 export const YTARK_CHANGELOG = {
   "schema": 1,
   "source": "CHANGELOG.md",
-  "sourceSha256": "102eed52d37fff9f6baf97445ba8cf35a17bf32249e4708c3342bc78dfaacd25",
+  "summaryFallback": "No short highlights available for this version.",
+  "sourceSha256": "b6b456abf8dfabab1020e8b0ffc8fbf109efd2ee73109befb68bf9d9e303883a",
   "entries": [
     {
-      "version": "3.1.0",
-      "display": "3.1",
+      "version": "3.2.0",
+      "display": "3.2",
       "status": "unreleased",
       "date": null,
       "publishedAt": null,
+      "tag": "v3.2.0",
+      "versionCode": 3020000,
+      "scriptTag": "s31",
+      "title": "YTArk 3.2",
+      "releaseUrl": null,
+      "facts": "Not yet published. Planned tag v3.2.0 · versionCode 3020000 · userscript s31 · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.",
+      "summary": "YouTube-style Updates, restored About changelog and compact release highlights.",
+      "sections": [
+        {
+          "heading": "Changed",
+          "items": [
+            "Matched Updates to the YouTube dark theme with compact controls and clear remote focus."
+          ]
+        },
+        {
+          "heading": "Fixed",
+          "items": [
+            "Restored Changelog / Version history in About YTArk.",
+            "Kept current-version highlights short, with release details behind an explicit action."
+          ]
+        },
+        {
+          "heading": "Known limitations",
+          "items": [
+            "Physical TV focus, Android installation and session-preserving upgrades still need device verification.",
+            "The s31 userscript endpoint becomes live only through the existing release publication workflow."
+          ]
+        }
+      ]
+    },
+    {
+      "version": "3.1.0",
+      "display": "3.1",
+      "status": "published",
+      "date": "2026-10-14",
+      "publishedAt": "2026-10-14T11:46Z",
       "tag": "v3.1.0",
       "versionCode": 3010000,
       "scriptTag": "s30",
       "title": "YTArk 3.1",
-      "releaseUrl": null,
-      "facts": "Not yet published. Planned tag v3.1.0 · versionCode 3010000 · userscript s30 · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.",
+      "releaseUrl": "https://github.com/2archiver/YTArk/releases/tag/v3.1.0",
+      "facts": "Published 2026-10-14 11:46 UTC as YTArk 3.1 · tag v3.1.0 · versionCode 3010000 · userscript s30 · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.",
       "summary": "Kotlin updater, direct Updates entry and opt-in faster mod readiness.",
       "sections": [
         {
