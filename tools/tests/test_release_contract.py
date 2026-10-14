@@ -450,6 +450,9 @@ arm64-v8a (a 64-bit-only system) cannot install this release.
                           f"the rendered release notes lost required guidance: {required}")
         self.assertEqual(validate_release.parse_release_version_code(rendered),
                          int(config["VERSION_CODE"]))
+        self.assertEqual(prepare_update_smoke.release_app_id(rendered),
+                         validate_release.APP_ID,
+                         "today's notes must be readable by the next release's prior-APK gate")
         self.assertNotRegex(rendered, r"personal\s+tube\s+tv")
         # Technical history is not dumped into the user-facing release page.
         self.assertNotIn("### Defaults and migration", rendered)
@@ -457,6 +460,39 @@ arm64-v8a (a 64-bit-only system) cannot install this release.
         self.assertIn("Known issues:", rendered)
         self.assertLessEqual(len(rendered.split()), 110)
         self.assertNotIn("${WHAT_CHANGED}", rendered)
+
+    def test_prior_package_metadata_from_published_29_notes(self):
+        # Exact metadata line from v2.9.0 (run 38522902531). The old table-only
+        # reader stopped run 38547734939 before downloading the prior APK.
+        body = "<!-- Package io.github.twoarchiver.ytark; 2.9.0; versionCode 2090000; base TizenTubeCobalt v2.0.2. -->"
+        self.assertEqual(prepare_update_smoke.release_app_id(body), validate_release.APP_ID)
+        self.assertEqual(validate_release.parse_release_version_code(body), 2090000)
+
+    def test_prior_package_metadata_keeps_legacy_formats(self):
+        for label in ("App ID", "Android package"):
+            for separator in ("|", ":"):
+                with self.subTest(label=label, separator=separator):
+                    self.assertEqual(prepare_update_smoke.release_app_id(
+                        f"{label} {separator} `{validate_release.APP_ID}`"),
+                        validate_release.APP_ID)
+
+    def test_prior_package_metadata_is_required_and_unambiguous(self):
+        for body in ("", "YTArk release", "Package io.github.twoarchiver.ytark",
+                     "<!-- Package io.github.twoarchiver.ytark; unclosed"):
+            with self.subTest(body=body), self.assertRaisesRegex(ValueError, "missing its app ID"):
+                prepare_update_smoke.release_app_id(body)
+        comment = f"<!-- Package {validate_release.APP_ID}; 2.9.0; versionCode 2090000; base TizenTubeCobalt v2.0.2. -->"
+        same = f"App ID: `{validate_release.APP_ID}`"
+        self.assertEqual(prepare_update_smoke.release_app_id(comment + same), validate_release.APP_ID)
+        for body in (comment + "App ID: `other.package`",
+                     comment + "<!-- Package other.package; 2.9.0; -->"):
+            with self.subTest(body=body), self.assertRaisesRegex(ValueError, "conflicting app ID"):
+                prepare_update_smoke.release_app_id(body)
+
+    def test_prior_package_metadata_does_not_assume_the_production_app_id(self):
+        self.assertEqual(prepare_update_smoke.release_app_id(
+            "<!-- Package other.package; 2.9.0; versionCode 2090000; base TizenTubeCobalt v2.0.2. -->"),
+            "other.package")
 
     def test_previous_update_smoke_rejects_nonofficial_urls(self):
         name = "YTArk-v2.0.3-ytark.15-armv7.apk"
