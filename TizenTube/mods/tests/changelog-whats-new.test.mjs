@@ -210,7 +210,7 @@ describe('post-update What\'s new', () => {
     resolveCommand({ customAction: { action: 'TT_SETTINGS_SHOW', parameters: [] } });
     const root = lastModal(recorded, 'tt-settings');
     const rootTitles = modalItems(root).map(rowTitle);
-    assert.equal(rootTitles[0], 'Search settings');
+    assert.equal(rootTitles[0], 'Playback', 'the removed search row is gone from the root');
     assert.equal(rootTitles.some(title => /What's new in YTArk/.test(title)), false,
       'no duplicate What\'s new row at the top of YTArk Settings');
     // The card (and its dismiss action) is inside YTArk Updates → changelog.

@@ -22,7 +22,7 @@
 //                merges without changing stored preferences or YouTube session data.
 
 const CONFIG_KEY = 'ytaf-configuration';
-export const CONFIG_SCHEMA_VERSION = 4;
+export const CONFIG_SCHEMA_VERSION = 5;
 
 /**
  * Preferences that no longer exist, with the schema that retired them.
@@ -40,6 +40,10 @@ export const CONFIG_SCHEMA_VERSION = 4;
  *   videoPreferredCodec   legacy duplicate of `preferredVideoCodec`; its value
  *                         is copied to the key the player reads before it is
  *                         dropped (see migrateConfig)
+ *   uiTheme               the OLED/youtube theme choice (the OLED theme was
+ *                         removed in 3.0; the stored value is discarded, the
+ *                         app keeps the normal YouTube/YTArk theming and the
+ *                         user's custom colours)
  */
 export const RETIRED_KEYS = Object.freeze([
   'userAgentProfile',
@@ -48,6 +52,7 @@ export const RETIRED_KEYS = Object.freeze([
   'tvLastPresetSnapshot',
   'tvQuickQuality',
   'videoPreferredCodec',
+  'uiTheme',
 ]);
 /** Presence of YouTube TV's own storage means the app has run before. Only the
  * existence of the key is checked; its contents are never read. */
@@ -55,18 +60,14 @@ const LEANBACK_HISTORY_KEY = 'yt.leanback.default::recurring_actions';
 /** `lastSeenVersion` value for an installation migrated from <= 2.2. */
 export const LEGACY_VERSION_MARKER = 'legacy';
 
-export const THEMES = Object.freeze(['youtube', 'oled']);
-
 /** Defaults of a fresh installation; these are also the product defaults. */
 export const FRESH_INSTALL_DEFAULTS = Object.freeze({
-  uiTheme: 'oled',
   hidePlayerWatermark: true,
   removePlayerScrim: true,
 });
 
 /** Values an installation upgraded from <= 2.2 keeps until the user opts in. */
 export const UPGRADE_DEFAULTS = Object.freeze({
-  uiTheme: 'youtube',
   hidePlayerWatermark: false,
   removePlayerScrim: false,
 });
@@ -135,6 +136,10 @@ const defaultConfig = {
   // The guide entry keeps YTArk Settings reachable when the sidebar is minimal.
   enableYtarkGuideEntry: true,
   enableUpdater: true,
+  // 3.0 experimental: defer non-critical userscript work until after the
+  // first YouTube screen has rendered. Off by default; never delays ad
+  // blocking, theming, login/session restoration or networking readiness.
+  fasterStartup: false,
   // Automatic retries are an explicit opt-in because PlayerService.loadVideo is not a general recovery API.
   enablePlaybackRecovery: false,
   autoFrameRate: false,
@@ -213,9 +218,6 @@ export function sanitizeLayout(value) {
 }
 
 const SANITIZERS = {
-  uiTheme(value, fallback) {
-    return THEMES.includes(value) ? value : fallback;
-  },
   launchToOnStartup(value) {
     return value === null || isJsonObjectString(value) ? value : null;
   },

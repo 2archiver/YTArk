@@ -27,7 +27,6 @@ APK_DESCRIPTORS = (
     b"io/github/twoarchiver/ytark/updater/UpdateBootstrapProvider",
     b"io/github/twoarchiver/ytark/updater/PendingUpdateProvider",
     b"io/github/twoarchiver/ytark/updater/UpdateActivity",
-    b"io/github/twoarchiver/ytark/updater/StorageActivity",
     b"io/github/twoarchiver/ytark/updater/UpdateCheckJobService",
 )
 ANDROID_14_API = 34
@@ -574,31 +573,13 @@ def require_declared_signature_permission(tree: str) -> None:
 
 
 def validate_updater_background_components(tree: str) -> None:
-    """Require persistent JobScheduler and scoped native storage components."""
+    """Require the persistent JobScheduler updater service."""
     application_blocks = _element_blocks(tree, "application")
     if not application_blocks:
         raise ValueError("Compiled Android manifest has no application element")
     app = application_blocks[0]
-    storage_found = False
-    for activity in _element_blocks(app, "activity"):
-        name = _attribute_line(activity, "name") or ""
-        if "io.github.twoarchiver.ytark.updater.StorageActivity" not in name:
-            continue
-        storage_found = True
-        if not _boolean_attribute_is_true(_attribute_line(activity, "exported")):
-            raise ValueError("The YTArk Cache & Storage activity must have its explicit ACTION_VIEW route")
-        if _quoted_attribute_value(_own_attribute_line(activity, "permission")) != UPDATER_SCREEN_PERMISSION:
-            raise ValueError("The YTArk Cache & Storage route must require the app's signature permission")
-        if not any("android.intent.action.VIEW" in block
-                   and "android.intent.category.DEFAULT" in block
-                   and "android.intent.category.BROWSABLE" in block
-                   and "android:scheme" in block and "ytark" in block
-                   and "android:host" in block and "storage" in block
-                   for block in _element_blocks(activity, "intent-filter")):
-            raise ValueError("The YTArk Cache & Storage activity has no bounded ytark://storage route")
-        break
-    if not storage_found:
-        raise ValueError("Compiled manifest has no YTArk Cache & Storage activity")
+    if "io.github.twoarchiver.ytark.updater.StorageActivity" in tree:
+        raise ValueError("Compiled manifest still declares the removed YTArk Cache & Storage activity")
 
     service_found = False
     for service in _element_blocks(app, "service"):

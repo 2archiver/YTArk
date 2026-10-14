@@ -72,7 +72,9 @@ class UpdaterTestListTests(unittest.TestCase):
         self.assertIn("NativeThemePolicy.java", self.policies)
         self.assertIn("NativeThemePolicyTest", self.classes)
         policy = (MAIN_DIR / "NativeThemePolicy.java").read_text(encoding="utf-8")
-        self.assertIn("0xff000000", policy, "OLED must paint opaque true black")
+        self.assertIn("0xff0f1218", policy, "the fixed dark background is unchanged")
+        self.assertNotIn("THEME_", policy, "3.0 removed the OLED palette branch")
+        self.assertNotIn("isOled", policy, "the palette takes no theme argument any more")
 
 
 class RunnerWiringTests(unittest.TestCase):

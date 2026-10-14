@@ -1,12 +1,12 @@
 /**
  * YTArk integration with the native YouTube TV Settings page.
  *
- * Adds one YTArk section (YTArk Settings, Search, YTArk Updates
- * and, when the page layout is customized, a restore entry), records the
- * detected sections for legacy saved layouts and applies
- * the saved layout. Patching is idempotent: revisiting the page never adds a
- * second YTArk section. If anything about the page shape is unexpected, the
- * YTArk entry is still added so YTArk Settings stays reachable.
+ * Adds one YTArk section (YTArk Settings and YTArk Updates, and, when the
+ * page layout is customized, a restore entry), records the detected
+ * sections for legacy saved layouts and applies the saved layout. Patching
+ * is idempotent: revisiting the page never adds a second YTArk section. If
+ * anything about the page shape is unexpected, the YTArk entry is still
+ * added so YTArk Settings stays reachable.
  */
 
 import { SettingActionRenderer, SettingsCategory } from './ytUI.js';
@@ -27,8 +27,6 @@ function actionRow(title, itemId, action, parameters, summary) {
 export function makeYtarkCategory(customized) {
   const rows = [
     actionRow(t('settings.ttSettings.title'), 'tizentube_open_action', 'TT_SETTINGS_SHOW', [], t('settings.ttSettings.summary')),
-    actionRow(tx('ytark.stock.search', 'Search YTArk settings'), 'ytark_search_action', 'YTARK_SEARCH_OPEN', {},
-      tx('ytark.search.entryDescription', 'Find any YTArk setting by name or keyword')),
     actionRow('YTArk Updates', 'ytark_updates_action', 'YTARK_NATIVE_UPDATES_OPEN', {},
       tx('ytark.stock.updatesSummary', 'Check the official stable YTArk release')),
   ];

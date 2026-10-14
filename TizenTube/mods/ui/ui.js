@@ -68,14 +68,9 @@ configChangeEmitter.addEventListener('configPersistError', () => {
   }
 });
 
-/** Custom colours only show with the YouTube default theme. */
+/** Save a red-button colour pick and repaint the managed stylesheet. */
 function saveCustomColor(key, value) {
-  if (configRead('uiTheme') === 'oled') {
-    configWriteMany({ [key]: value, uiTheme: 'youtube' });
-    showToast('YTArk', tx('ytark.appearance.colorsSwitched', 'Theme set to YouTube default so your colours are visible.'));
-  } else {
-    configWrite(key, value);
-  }
+  configWrite(key, value);
   updateStyle();
 }
 
@@ -119,14 +114,15 @@ function execute_once_dom_loaded() {
     startupSteps.css = true;
   }
 
-  // Appearance: apply the managed theme once the TV DOM exists.
+  // Appearance: apply the managed appearance once the TV DOM exists.
   //
-  // ui/theme.js already applies the theme at import time, but that can run
+  // ui/theme.js already applies it at import time, but that can run
   // before <head> exists, and the frontend rebuilds parts of the document as
   // routes load. Re-applying here puts the managed stylesheet in <head> next to
-  // YTArk's own CSS and re-asserts the root classes, which is what makes OLED
-  // Black (and the player/watermark switches) actually paint. Later route
-  // changes are covered by theme.js's own <html class> and <head> observers.
+  // YTArk's own CSS and re-asserts the root classes, which is what makes the
+  // saved custom colours and the player/watermark switches actually paint.
+  // Later route changes are covered by theme.js's own <html class> and <head>
+  // observers.
   if (!startupSteps.theme) {
     startupSteps.theme = true;
     try {

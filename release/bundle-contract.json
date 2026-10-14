@@ -28,40 +28,36 @@
     "required": [
       "YouTube Premium",
       "ytark-premium-ink",
-      "ytark-theme-oled",
       "ytark-no-player-scrim",
       "featuredChannel",
-      "YTARK_SEARCH_OPEN",
       "YTARK_YTS_RESTORE_CONFIRM",
       "YTARK_CHANGELOG_SHOW",
       "v2.0.2-personal.14",
       "configSchemaVersion",
       "enableYtarkGuideEntry",
-      "recheck-arch",
       "Could not confirm this device",
       "YTARK_GUIDE_SETTINGS_OPEN",
       "YTARK_VERSION_REREAD",
       "apkAsset",
       "ytark-user-agent-retired",
-      "ytLrOverlayPanelRendererContent",
       "Newer than the latest stable release",
-      "virtualKeyboard",
-      "data-ytark-keyboard",
       "about.buildInfo",
       "about.notices",
       "Third-party notices and licences",
       "Added Full Auto Updating",
       "enablePlaybackRecovery",
-      "YTARK_NATIVE_STORAGE_OPEN",
       "YTARK_NATIVE_UPDATES_OPEN",
       "Automatic playback recovery",
-      "Cache & Storage",
-      "Android's system splash"
+      "Android's system splash",
+      "fasterStartup"
     ],
     "forbidden": [
       "quickControls",
       "RESET_USER_AGENT_PROFILE",
-      "DEVICE_PROFILES"
+      "DEVICE_PROFILES",
+      "virtualKeyboard",
+      "data-ytark-keyboard",
+      "ytark-entry__"
     ]
   },
   "retiredActions": [
@@ -69,12 +65,22 @@
     "YTARK_YTS_SECTION",
     "YTARK_YTS_MOVE",
     "YTARK_YTS_ROWS",
-    "YTARK_YTS_ROW_PIN"
+    "YTARK_YTS_ROW_PIN",
+    "YTARK_SEARCH_OPEN",
+    "YTARK_SEARCH_SHOW",
+    "YTARK_SEARCH_EDIT",
+    "YTARK_SEARCH_CLEAR",
+    "YTARK_SEARCH_SET_QUERY",
+    "YTARK_SEARCH_OPEN_RESULT",
+    "YTARK_NATIVE_STORAGE_OPEN"
   ],
   "files": {
     "forbidden": [
       "TizenTube/mods/features/userAgentSpoofing.js",
-      "TizenTube/mods/features/tvControls.js"
+      "TizenTube/mods/features/tvControls.js",
+      "TizenTube/mods/ui/settingsSearch.js",
+      "TizenTube/mods/ui/textEntryOverlay.js",
+      "TizenTube/mods/ui/themeTokens.js"
     ]
   },
   "sources": {
@@ -87,7 +93,12 @@
       "enableFixedUI",
       "app-quality-root",
       "tvLastPresetSnapshot",
-      "tvQuickQuality"
+      "tvQuickQuality",
+      "buildSearchIndex",
+      "showSettingsSearch",
+      "textEntryOverlay",
+      "OLED_TOKENS",
+      "ytark-theme-oled"
     ],
     "excludeDirs": [
       "tests",

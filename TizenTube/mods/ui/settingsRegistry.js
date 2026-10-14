@@ -2,11 +2,10 @@
  * The shared YTArk settings registry.
  *
  * One tree describes every YTArk setting: stable id, localized title and
- * description, category (its position in the tree), search keywords, value
- * type and config key, availability and dependency information, and the real
- * action. The YTArk Settings menus (ui/settings.js) and settings search
- * (ui/settingsSearch.js) are both generated from this tree, so they cannot
- * drift apart, and every change goes through the same configuration path.
+ * description, category (its position in the tree), value type and config
+ * key, availability and dependency information, and the real action. The
+ * YTArk Settings menus (ui/settings.js) are generated from this tree, so
+ * every change goes through the same configuration path.
  *
  * Node types
  *   toggle  boolean config key (`invert` shows the opposite, e.g. "Hide Shorts")
@@ -119,16 +118,16 @@ const custom = (action, parameters) => ({ customAction: { action, parameters } }
 
 function sponsorCategories(prefix, mode) {
   const categories = [
-    ['sponsor', 'enableSponsorBlockSponsor', 'MONEY_HEART', ['sponsor', 'sponsored', 'ad read']],
-    ['intro', 'enableSponsorBlockIntro', 'PLAY_CIRCLE', ['intro', 'intermission']],
-    ['outro', 'enableSponsorBlockOutro', null, ['outro', 'endcards', 'credits']],
-    ['interaction', 'enableSponsorBlockInteraction', null, ['interaction', 'subscribe reminder']],
-    ['selfpromo', 'enableSponsorBlockSelfPromo', null, ['self promotion', 'merch']],
-    ['preview', 'enableSponsorBlockPreview', null, ['preview', 'recap']],
-    ['filler', 'enableSponsorBlockFiller', null, ['filler', 'tangent', 'jokes']],
-    ['music_offtopic', 'enableSponsorBlockMusicOfftopic', null, ['music', 'off topic', 'non music']],
+    ['sponsor', 'enableSponsorBlockSponsor', 'MONEY_HEART'],
+    ['intro', 'enableSponsorBlockIntro', 'PLAY_CIRCLE'],
+    ['outro', 'enableSponsorBlockOutro', null],
+    ['interaction', 'enableSponsorBlockInteraction', null],
+    ['selfpromo', 'enableSponsorBlockSelfPromo', null],
+    ['preview', 'enableSponsorBlockPreview', null],
+    ['filler', 'enableSponsorBlockFiller', null],
+    ['music_offtopic', 'enableSponsorBlockMusicOfftopic', null],
   ];
-  return categories.map(([category, key, icon, keywords]) => (mode === 'multi'
+  return categories.map(([category, key, icon]) => (mode === 'multi'
     ? { id: `${prefix}.${category}`, title: t(`settings.options.sponsorblock.options.categories.${category}`), value: category, icon: icon || undefined }
     : {
       id: `${prefix}.${category}`,
@@ -136,7 +135,6 @@ function sponsorCategories(prefix, mode) {
       title: t(`settings.options.sponsorblock.options.categories.${category}`),
       key,
       icon: icon || undefined,
-      keywords: ['sponsorblock', 'segment', 'skip'].concat(keywords),
       dependsOn: { key: 'enableSponsorBlock', title: t('settings.options.sponsorblock.options.enableSB') },
     }));
 }
@@ -280,17 +278,13 @@ function startupAnimationPanel() {
 }
 
 function colorsPanel() {
-  const theme = configRead('uiTheme');
   const lines = [
     tx('ytark.appearance.colors.saved', 'Saved colours: navigation {{focus}}, content {{route}}.', {
       focus: String(configRead('focusContainerColor')),
       route: String(configRead('routeColor')),
     }),
     tx('ytark.appearance.colors.edit', 'Change them in the colour panel opened with the remote\'s red button, or with the focus and route colour settings.'),
-    theme === 'oled'
-      ? tx('ytark.appearance.colors.oled', 'OLED Black is active: the surfaces YTArk can style are true black, and your '
-        + 'colours are kept and come back with YouTube default. YouTube-owned pages keep their own colours.')
-      : tx('ytark.appearance.colors.youtube', 'YouTube default is active, so these colours are in use.'),
+    tx('ytark.appearance.colors.youtube', 'YouTube default is active, so these colours are in use.'),
   ];
   return {
     title: tx('ytark.appearance.colors.title', 'Navigation and content colours'),
@@ -313,22 +307,12 @@ export function buildSettingsTree() {
 
   const children = [
     {
-      id: 'search',
-      type: 'action',
-      search: false,
-      title: tx('ytark.search.entry', 'Search settings'),
-      description: tx('ytark.search.entryDescription', 'Find any YTArk setting by name or keyword'),
-      icon: 'SEARCH',
-      command: [custom('YTARK_SEARCH_OPEN', {})],
-    },
-    {
       id: 'playback',
       type: 'menu',
       title: tx('ytark.categories.playback.title', 'Playback'),
       description: tx('ytark.categories.playback.description', 'Player, video and subtitles'),
       icon: 'PLAY_CIRCLE',
       menuId: 'ytark-playback',
-      keywords: ['playback', 'video', 'player', 'subtitles', 'captions', 'quality'],
       header: { title: tx('ytark.categories.playback.title', 'Playback'), subtitle: tx('ytark.categories.playback.description', 'Player, video and subtitles') },
       resetKeys: ['enablePatchingVideoPlayer', 'enablePreviousNextButtons', 'enableSuperThanksButton', 'enableAIAskButton', 'enableSpeedControlsButton', 'enableMPButton', 'enableSwapMPWithPIP', 'preferredVideoQuality', 'speedSettingsIncrement', 'videoSpeed', 'hideRelatedVideosPlayer', 'preferredVideoCodec', 'autoFrameRate', 'autoFrameRatePauseVideoFor', 'enablePlaybackRecovery', 'enableShowUserLanguage', 'enableShowOtherLanguages'],
       children: [
@@ -339,7 +323,6 @@ export function buildSettingsTree() {
         description: t('settings.options.videoPlayer.subtitle'),
         icon: 'VIDEO_YOUTUBE',
         menuId: 'ytark-video-player',
-        keywords: ['player', 'playback', 'video'],
         header: { title: t('settings.options.videoPlayer.title'), subtitle: t('settings.options.videoPlayer.subtitle') },
         resetKeys: ['enablePatchingVideoPlayer', 'enablePreviousNextButtons', 'enableSuperThanksButton', 'enableAIAskButton',
           'enableSpeedControlsButton', 'enableMPButton', 'enableSwapMPWithPIP', 'preferredVideoQuality', 'speedSettingsIncrement',
@@ -351,21 +334,19 @@ export function buildSettingsTree() {
             title: t('settings.options.videoPlayer.options.patching.title'),
             icon: 'SETTINGS',
             menuId: 'tt-video-player-ui-patching',
-            keywords: ['buttons', 'player buttons', 'controls'],
             children: [
-              { id: 'player.patching.enable', type: 'toggle', title: t('settings.options.videoPlayer.options.patching.options.enableVPUIPatching'), icon: 'SETTINGS', key: 'enablePatchingVideoPlayer', keywords: ['player ui', 'patch'] },
-              { id: 'player.patching.previousNext', type: 'toggle', title: t('settings.options.videoPlayer.options.patching.options.previousNextBtns'), icon: 'SKIP_NEXT', key: 'enablePreviousNextButtons', keywords: ['previous', 'next', 'skip'], dependsOn: patchDependency },
-              { id: 'player.patching.superThanks', type: 'toggle', title: t('settings.options.videoPlayer.options.patching.options.showSuperThxBtn'), icon: 'MONEY_HEART', key: 'enableSuperThanksButton', keywords: ['super thanks', 'shopping'], dependsOn: patchDependency },
-              { id: 'player.patching.askAi', type: 'toggle', title: t('settings.options.videoPlayer.options.patching.options.showAIAskBtn'), icon: 'SPARK', key: 'enableAIAskButton', keywords: ['ai', 'ask'], dependsOn: patchDependency },
-              { id: 'player.patching.speed', type: 'toggle', title: t('settings.options.videoPlayer.options.patching.options.showSpeedCtrlBtn'), icon: 'SLOW_MOTION_VIDEO', key: 'enableSpeedControlsButton', keywords: ['speed', 'playback speed'], dependsOn: patchDependency },
-              { id: 'player.patching.miniPlayer', type: 'toggle', title: t('settings.options.videoPlayer.options.patching.options.addMPBtn'), icon: 'CLEAR_COOKIES', key: 'enableMPButton', keywords: ['mini player', 'miniplayer'], dependsOn: patchDependency },
+              { id: 'player.patching.enable', type: 'toggle', title: t('settings.options.videoPlayer.options.patching.options.enableVPUIPatching'), icon: 'SETTINGS', key: 'enablePatchingVideoPlayer' },
+              { id: 'player.patching.previousNext', type: 'toggle', title: t('settings.options.videoPlayer.options.patching.options.previousNextBtns'), icon: 'SKIP_NEXT', key: 'enablePreviousNextButtons', dependsOn: patchDependency },
+              { id: 'player.patching.superThanks', type: 'toggle', title: t('settings.options.videoPlayer.options.patching.options.showSuperThxBtn'), icon: 'MONEY_HEART', key: 'enableSuperThanksButton', dependsOn: patchDependency },
+              { id: 'player.patching.askAi', type: 'toggle', title: t('settings.options.videoPlayer.options.patching.options.showAIAskBtn'), icon: 'SPARK', key: 'enableAIAskButton', dependsOn: patchDependency },
+              { id: 'player.patching.speed', type: 'toggle', title: t('settings.options.videoPlayer.options.patching.options.showSpeedCtrlBtn'), icon: 'SLOW_MOTION_VIDEO', key: 'enableSpeedControlsButton', dependsOn: patchDependency },
+              { id: 'player.patching.miniPlayer', type: 'toggle', title: t('settings.options.videoPlayer.options.patching.options.addMPBtn'), icon: 'CLEAR_COOKIES', key: 'enableMPButton', dependsOn: patchDependency },
               {
                 id: 'player.patching.swapPip',
                 type: 'toggle',
                 title: t('settings.options.videoPlayer.options.patching.options.swapMPWithPIP'),
                 icon: 'CLEAR_COOKIES',
                 key: 'enableSwapMPWithPIP',
-                keywords: ['picture in picture', 'pip'],
                 dependsOn: patchDependency,
                 unavailable: caps.pictureInPicture ? undefined
                   : tx('ytark.unavailable.pip', 'Not available on this device: Android reports no picture-in-picture support.'),
@@ -380,7 +361,6 @@ export function buildSettingsTree() {
             icon: 'VIDEO_QUALITY',
             key: 'preferredVideoQuality',
             menuId: 'tt-preferred-video-quality',
-            keywords: ['quality', 'resolution', '4k', 'hd', '1080p', '720p', '2160p', '1440p'],
             header: {
               title: t('settings.options.videoPlayer.options.preferredVideoQuality.title'),
               subtitle: t('settings.options.videoPlayer.options.preferredVideoQuality.subtitle'),
@@ -399,14 +379,13 @@ export function buildSettingsTree() {
             icon: 'SLOW_MOTION_VIDEO',
             key: 'speedSettingsIncrement',
             menuId: 'tt-speed-settings-increments',
-            keywords: ['speed', 'increment', 'step'],
             options: [0.05, 0.1, 0.15, 0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5].map(step => ({
               id: `player.speedIncrement.${step}`,
               title: `${step}x`,
               value: step,
             })),
           },
-          { id: 'player.hideRelated', type: 'toggle', title: t('settings.options.videoPlayer.options.hideRelatedVideosPlayer'), icon: 'VISIBILITY_OFF', key: 'hideRelatedVideosPlayer', keywords: ['related', 'suggestions'] },
+          { id: 'player.hideRelated', type: 'toggle', title: t('settings.options.videoPlayer.options.hideRelatedVideosPlayer'), icon: 'VISIBILITY_OFF', key: 'hideRelatedVideosPlayer' },
           {
             id: 'player.recovery',
             type: 'toggle',
@@ -414,8 +393,7 @@ export function buildSettingsTree() {
             description: tx('ytark.playback.recovery.description', 'Retry a stalled or recoverable playback error a limited number of times. Paused, completed, seeking and background playback are excluded.'),
             icon: 'REFRESH',
             key: 'enablePlaybackRecovery',
-            keywords: ['playback recovery', 'stalled video', 'player error', 'retry video'],
-          },
+            },
           {
             id: 'player.codec',
             type: 'choice',
@@ -424,7 +402,6 @@ export function buildSettingsTree() {
             icon: 'VIDEO_QUALITY',
             key: 'preferredVideoCodec',
             menuId: 'tt-preferred-video-codec',
-            keywords: ['codec', 'vp9', 'av1', 'av01', 'h264', 'avc'],
             options: ['any', 'vp9', 'av01', 'avc1'].map(codec => ({
               id: `player.codec.${codec}`,
               title: codec === 'any' ? t('settings.options.videoPlayer.options.codecAny') : codec.toUpperCase(),
@@ -437,7 +414,6 @@ export function buildSettingsTree() {
             title: t('settings.options.videoPlayer.options.afr'),
             icon: 'SLOW_MOTION_VIDEO',
             key: 'autoFrameRate',
-            keywords: ['frame rate', 'afr', 'refresh rate', 'hz', 'fps'],
             unavailable: noFrameRate,
           },
           {
@@ -448,7 +424,6 @@ export function buildSettingsTree() {
             icon: 'TIMER',
             key: 'autoFrameRatePauseVideoFor',
             menuId: 'tt-auto-frame-rate-pause-duration',
-            keywords: ['frame rate', 'afr', 'pause'],
             unavailable: noFrameRate,
             dependsOn: { key: 'autoFrameRate', title: t('settings.options.videoPlayer.options.afr') },
             options: [0, 0.5, 1, 1.5, 2, 2.5, 3, 3.5, 4, 4.5, 5].map(seconds => ({
@@ -459,18 +434,17 @@ export function buildSettingsTree() {
           },
         ],
       },
-          { id: 'misc.longPress', type: 'toggle', title: t('settings.options.misc.options.longPress'), key: 'enableLongPress', keywords: ['long press', 'menu', 'queue'] },
+          { id: 'misc.longPress', type: 'toggle', title: t('settings.options.misc.options.longPress'), key: 'enableLongPress' },
       {
         id: 'subtitles',
         type: 'menu',
         title: t('settings.options.subtitles.title'),
         icon: 'TRANSLATE',
         menuId: 'ytark-subtitles',
-        keywords: ['subtitles', 'captions', 'cc', 'language'],
         resetKeys: ['enableShowUserLanguage', 'enableShowOtherLanguages'],
         children: [
-          { id: 'subtitles.userLanguage', type: 'toggle', title: t('settings.options.subtitles.options.showLocalSubtitle'), key: 'enableShowUserLanguage', keywords: ['subtitles', 'captions', 'language', 'translate'] },
-          { id: 'subtitles.otherLanguages', type: 'toggle', title: t('settings.options.subtitles.options.showHiddenSubtitles'), key: 'enableShowOtherLanguages', keywords: ['subtitles', 'captions', 'languages'] },
+          { id: 'subtitles.userLanguage', type: 'toggle', title: t('settings.options.subtitles.options.showLocalSubtitle'), key: 'enableShowUserLanguage' },
+          { id: 'subtitles.otherLanguages', type: 'toggle', title: t('settings.options.subtitles.options.showHiddenSubtitles'), key: 'enableShowOtherLanguages' },
         ],
       },
     ],
@@ -479,38 +453,11 @@ export function buildSettingsTree() {
       id: 'appearance',
       type: 'menu',
       title: tx('ytark.appearance.title', 'Appearance'),
-      description: tx('ytark.appearance.description', 'Theme, colours, player look and screen behaviour'),
+      description: tx('ytark.appearance.description', 'Colours, player look and screen behaviour'),
       icon: 'DARK_THEME',
       menuId: 'ytark-appearance',
-      keywords: ['appearance', 'look', 'theme', 'colours', 'colors'],
-      resetKeys: ['uiTheme', 'hidePlayerWatermark', 'removePlayerScrim', 'enableScreenDimming', 'dimmingTimeout', 'dimmingOpacity', 'enableHideWatchedVideos', 'hideWatchedVideosThreshold', 'hideWatchedVideosPages', 'enableClock', 'isClock12HourFormat', 'clockShowSeconds', 'clockHideWhenVideoPlaying', 'disableEnlargingThumbnails', 'enableShrinkingThumbnails', 'enableHqThumbnails'],
+      resetKeys: ['hidePlayerWatermark', 'removePlayerScrim', 'enableScreenDimming', 'dimmingTimeout', 'dimmingOpacity', 'enableHideWatchedVideos', 'hideWatchedVideosThreshold', 'hideWatchedVideosPages', 'enableClock', 'isClock12HourFormat', 'clockShowSeconds', 'clockHideWhenVideoPlaying', 'disableEnlargingThumbnails', 'enableShrinkingThumbnails', 'enableHqThumbnails'],
       children: [
-        {
-          id: 'appearance.theme',
-          type: 'choice',
-          title: tx('ytark.appearance.theme.title', 'Theme'),
-          description: tx('ytark.appearance.theme.description', 'YouTube TV colours, or true black on the surfaces YTArk can style'),
-          icon: 'DARK_THEME',
-          key: 'uiTheme',
-          menuId: 'ytark-theme',
-          keywords: ['theme', 'oled', 'black', 'amoled', 'dark', 'true black', 'background', 'colour', 'color'],
-          options: [
-            {
-              id: 'appearance.theme.youtube',
-              title: tx('ytark.appearance.theme.youtube', 'YouTube default'),
-              description: tx('ytark.appearance.theme.youtubeDescription', 'YouTube TV colours with your saved navigation and content colours'),
-              value: 'youtube',
-            },
-            {
-              id: 'appearance.theme.oled',
-              title: tx('ytark.appearance.theme.oled', 'OLED Black'),
-              description: tx('ytark.appearance.theme.oledDescription',
-                'True black for the app backdrop, the browse, search and settings surfaces and YTArk dialogs. '
-                + 'YouTube-owned pages, artwork, thumbnails, video and captions keep their own colours.'),
-              value: 'oled',
-            },
-          ],
-        },
         {
           id: 'appearance.player',
           type: 'menu',
@@ -518,7 +465,6 @@ export function buildSettingsTree() {
           description: tx('ytark.appearance.player.description', 'Watermark and control-overlay dimming'),
           icon: 'VIDEO_YOUTUBE',
           menuId: 'ytark-appearance-player',
-          keywords: ['player', 'playback', 'video'],
           children: [
             {
               id: 'appearance.player.hideWatermark',
@@ -527,8 +473,7 @@ export function buildSettingsTree() {
               description: tx('ytark.appearance.player.hideWatermarkDescription', 'Hide the clickable channel logo over videos.'),
               icon: 'VISIBILITY_OFF',
               key: 'hidePlayerWatermark',
-              keywords: ['watermark', 'channel logo', 'logo', 'branding', 'subscribe', 'overlay', 'corner logo'],
-            },
+              },
             {
               id: 'appearance.player.removeScrim',
               type: 'toggle',
@@ -536,8 +481,7 @@ export function buildSettingsTree() {
               description: tx('ytark.appearance.player.removeScrimDescription', 'Keep the video bright when playback controls are visible.'),
               icon: 'EYE_OFF',
               key: 'removePlayerScrim',
-              keywords: ['dimming', 'dim', 'scrim', 'overlay', 'shadow', 'darken', 'darkening', 'brightness', 'controls', 'gradient'],
-            },
+              },
             {
               id: 'appearance.player.hideEndCards',
               type: 'toggle',
@@ -545,12 +489,10 @@ export function buildSettingsTree() {
               description: tx('ytark.appearance.player.hideEndCardsDescription', 'Removes the clickable cards shown over the last seconds of a video.'),
               icon: 'VISIBILITY_OFF',
               key: 'enableHideEndScreenCards',
-              keywords: ['end screen', 'end cards', 'cards', 'overlay'],
-            },
+              },
             {
               id: 'appearance.player.idleDimming',
               type: 'link',
-              search: false,
               target: 'ui.screenDimming',
               title: tx('ytark.appearance.player.idleDimming', 'Screen dimming when idle'),
               description: tx('ytark.appearance.player.idleDimmingDescription', 'Separate setting under User Interface'),
@@ -565,15 +507,13 @@ export function buildSettingsTree() {
           description: tx('ytark.appearance.premiumLogo.description', 'Local wordmark only; it never grants or claims a paid YouTube subscription.'),
           icon: 'VIDEO_YOUTUBE',
           key: 'enablePremiumLogo',
-          keywords: ['premium', 'logo', 'wordmark', 'header', 'branding'],
-        },
+          },
         {
           id: 'appearance.colors',
           type: 'panel',
           title: tx('ytark.appearance.colors.title', 'Navigation and content colours'),
           description: tx('ytark.appearance.colors.subtitle', 'Your saved custom colours'),
           icon: 'LENS_BLUE',
-          keywords: ['colour', 'color', 'navigation bar', 'background', 'custom colours'],
           panel: colorsPanel,
         },
             {
@@ -583,9 +523,8 @@ export function buildSettingsTree() {
               description: tx('ytark.ui.screenDimmingDescription', 'Dims the app after inactivity; separate from player dimming'),
               icon: 'EYE_OFF',
               menuId: 'tt-screen-dimming-settings',
-              keywords: ['dimming', 'idle', 'inactivity', 'screensaver', 'dim screen', 'burn in'],
               children: [
-                { id: 'ui.screenDimming.enable', type: 'toggle', title: t('settings.options.uiSettings.options.screenDimming.options.enableScreenDimming'), icon: 'EYE_OFF', key: 'enableScreenDimming', keywords: ['dimming', 'idle', 'screensaver'] },
+                { id: 'ui.screenDimming.enable', type: 'toggle', title: t('settings.options.uiSettings.options.screenDimming.options.enableScreenDimming'), icon: 'EYE_OFF', key: 'enableScreenDimming' },
                 {
                   id: 'ui.screenDimming.timeout',
                   type: 'choice',
@@ -594,7 +533,6 @@ export function buildSettingsTree() {
                   icon: 'TIMER',
                   key: 'dimmingTimeout',
                   menuId: 'tt-dimming-timeout',
-                  keywords: ['dimming', 'timeout', 'delay'],
                   dependsOn: { key: 'enableScreenDimming', title: t('settings.options.uiSettings.options.screenDimming.options.enableScreenDimming') },
                   options: [10, 20, 30, 60, 120, 180, 240, 300].map(seconds => ({ id: `ui.screenDimming.timeout.${seconds}`, title: timeTitle(seconds), value: seconds })),
                 },
@@ -606,7 +544,6 @@ export function buildSettingsTree() {
                   icon: 'LENS_BLUE',
                   key: 'dimmingOpacity',
                   menuId: 'tt-dimming-opacity',
-                  keywords: ['dimming', 'opacity', 'strength'],
                   dependsOn: { key: 'enableScreenDimming', title: t('settings.options.uiSettings.options.screenDimming.options.enableScreenDimming') },
                   options: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0].map(opacity => ({ id: `ui.screenDimming.opacity.${opacity}`, title: `${Math.round(opacity * 100)}%`, value: opacity })),
                 },
@@ -618,9 +555,8 @@ export function buildSettingsTree() {
               title: t('settings.options.uiSettings.options.hideWatchedVideos.title'),
               icon: 'VISIBILITY_OFF',
               menuId: 'tt-hide-watched-videos-settings',
-              keywords: ['watched', 'hide watched', 'history'],
               children: [
-                { id: 'ui.hideWatched.enable', type: 'toggle', title: t('settings.options.uiSettings.options.hideWatchedVideos.options.enableHideWatchedVideos'), icon: 'VISIBILITY_OFF', key: 'enableHideWatchedVideos', keywords: ['watched', 'hide'] },
+                { id: 'ui.hideWatched.enable', type: 'toggle', title: t('settings.options.uiSettings.options.hideWatchedVideos.options.enableHideWatchedVideos'), icon: 'VISIBILITY_OFF', key: 'enableHideWatchedVideos' },
                 {
                   id: 'ui.hideWatched.threshold',
                   type: 'choice',
@@ -628,7 +564,6 @@ export function buildSettingsTree() {
                   description: t('settings.options.uiSettings.options.hideWatchedVideos.options.watchedVideosThreshold.subtitle'),
                   key: 'hideWatchedVideosThreshold',
                   menuId: 'tt-hide-watched-videos-threshold',
-                  keywords: ['watched', 'threshold', 'percent'],
                   dependsOn: { key: 'enableHideWatchedVideos', title: t('settings.options.uiSettings.options.hideWatchedVideos.options.enableHideWatchedVideos') },
                   options: [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(percent => ({ id: `ui.hideWatched.threshold.${percent}`, title: `${percent}%`, value: percent })),
                 },
@@ -638,7 +573,6 @@ export function buildSettingsTree() {
                   title: t('settings.options.uiSettings.options.hideWatchedVideos.options.setPagesToHideWatchedVideos'),
                   key: 'hideWatchedVideosPages',
                   menuId: 'tt-hide-watched-videos-pages',
-                  keywords: ['watched', 'pages'],
                   dependsOn: { key: 'enableHideWatchedVideos', title: t('settings.options.uiSettings.options.hideWatchedVideos.options.enableHideWatchedVideos') },
                   options: [
                     ['search', 'searchResults'], ['home', 'home'], ['music', 'music'], ['gaming', 'gaming'],
@@ -654,18 +588,17 @@ export function buildSettingsTree() {
               description: t('settings.options.uiSettings.options.clock.subtitle'),
               icon: 'TIMER',
               menuId: 'tt-clock-settings',
-              keywords: ['clock', 'time'],
               header: { title: t('settings.options.uiSettings.options.clock.title'), subtitle: t('settings.options.uiSettings.options.clock.subtitle') },
               children: [
-                { id: 'ui.clock.enable', type: 'toggle', title: t('settings.options.uiSettings.options.clock.options.enableClock'), icon: 'TIMER', key: 'enableClock', keywords: ['clock', 'time'] },
-                { id: 'ui.clock.twelveHour', type: 'toggle', title: t('settings.options.uiSettings.options.clock.options.isClock12HourFormat'), icon: 'TIMER', key: 'isClock12HourFormat', keywords: ['clock', '12 hour', 'am pm'], dependsOn: { key: 'enableClock', title: t('settings.options.uiSettings.options.clock.options.enableClock') } },
-                { id: 'ui.clock.seconds', type: 'toggle', title: t('settings.options.uiSettings.options.clock.options.clockShowSeconds'), icon: 'TIMER', key: 'clockShowSeconds', keywords: ['clock', 'seconds'], dependsOn: { key: 'enableClock', title: t('settings.options.uiSettings.options.clock.options.enableClock') } },
-                { id: 'ui.clock.hideInPlayer', type: 'toggle', title: t('settings.options.uiSettings.options.clock.options.clockHideWhenVideoPlaying'), icon: 'EYE_OFF', key: 'clockHideWhenVideoPlaying', keywords: ['clock', 'player'], dependsOn: { key: 'enableClock', title: t('settings.options.uiSettings.options.clock.options.enableClock') } },
+                { id: 'ui.clock.enable', type: 'toggle', title: t('settings.options.uiSettings.options.clock.options.enableClock'), icon: 'TIMER', key: 'enableClock' },
+                { id: 'ui.clock.twelveHour', type: 'toggle', title: t('settings.options.uiSettings.options.clock.options.isClock12HourFormat'), icon: 'TIMER', key: 'isClock12HourFormat', dependsOn: { key: 'enableClock', title: t('settings.options.uiSettings.options.clock.options.enableClock') } },
+                { id: 'ui.clock.seconds', type: 'toggle', title: t('settings.options.uiSettings.options.clock.options.clockShowSeconds'), icon: 'TIMER', key: 'clockShowSeconds', dependsOn: { key: 'enableClock', title: t('settings.options.uiSettings.options.clock.options.enableClock') } },
+                { id: 'ui.clock.hideInPlayer', type: 'toggle', title: t('settings.options.uiSettings.options.clock.options.clockHideWhenVideoPlaying'), icon: 'EYE_OFF', key: 'clockHideWhenVideoPlaying', dependsOn: { key: 'enableClock', title: t('settings.options.uiSettings.options.clock.options.enableClock') } },
               ],
             },
-            { id: 'ui.disableEnlargingThumbnails', type: 'toggle', title: t('settings.options.uiSettings.options.disableEnlargingThumbnails'), key: 'disableEnlargingThumbnails', keywords: ['thumbnails', 'enlarge', 'zoom'] },
-            { id: 'ui.enableShrinkingThumbnails', type: 'toggle', title: t('settings.options.uiSettings.options.enableShrinkingThumbnails'), key: 'enableShrinkingThumbnails', keywords: ['thumbnails', 'shrink'] },
-            { id: 'misc.hqThumbnails', type: 'toggle', title: t('settings.options.misc.options.hqThumbnails'), icon: 'VIDEO_QUALITY', key: 'enableHqThumbnails', keywords: ['thumbnails', 'high quality'] },
+            { id: 'ui.disableEnlargingThumbnails', type: 'toggle', title: t('settings.options.uiSettings.options.disableEnlargingThumbnails'), key: 'disableEnlargingThumbnails' },
+            { id: 'ui.enableShrinkingThumbnails', type: 'toggle', title: t('settings.options.uiSettings.options.enableShrinkingThumbnails'), key: 'enableShrinkingThumbnails' },
+            { id: 'misc.hqThumbnails', type: 'toggle', title: t('settings.options.misc.options.hqThumbnails'), icon: 'VIDEO_QUALITY', key: 'enableHqThumbnails' },
       ],
     },
     {
@@ -675,7 +608,6 @@ export function buildSettingsTree() {
       description: tx('ytark.categories.privacy.description', 'Ads, content filtering and prompts'),
       icon: 'PRIVACY_UNLISTED',
       menuId: 'ytark-privacy',
-      keywords: ['privacy', 'ads', 'adblock', 'sponsorblock', 'dearrow', 'filter', 'prompts'],
       header: { title: tx('ytark.categories.privacy.title', 'Privacy'), subtitle: tx('ytark.categories.privacy.description', 'Ads, content filtering and prompts') },
       resetKeys: ['enableSponsorBlock', 'sponsorBlockManualSkips', 'enableSponsorBlockSponsor', 'enableSponsorBlockIntro', 'enableSponsorBlockOutro', 'enableSponsorBlockInteraction', 'enableSponsorBlockSelfPromo', 'enableSponsorBlockPreview', 'enableSponsorBlockFiller', 'enableSponsorBlockMusicOfftopic', 'enableSponsorBlockHighlight', 'enableSponsorBlockToasts', 'enableDeArrow', 'enableDeArrowThumbnails', 'enableShorts', 'enablePreviews'],
       children: [
@@ -686,8 +618,7 @@ export function buildSettingsTree() {
             description: 'Enabled by default. Independent of SponsorBlock and the logo.',
             icon: 'DOLLAR_SIGN',
             key: 'enableAdBlock',
-            keywords: ['ads', 'adblock', 'advertising', 'ad blocker'],
-          },
+            },
       {
         id: 'sponsorblock',
         type: 'menu',
@@ -695,7 +626,6 @@ export function buildSettingsTree() {
         description: `Currently ${configRead('enableSponsorBlock') ? 'ON' : 'OFF'} · https://sponsor.ajay.app/`,
         icon: 'MONEY_HAND',
         menuId: 'tt-sponsorblock-settings',
-        keywords: ['sponsorblock', 'sponsor', 'segments', 'skip'],
         header: {
           title: t('settings.options.sponsorblock.title'),
           subtitle: `Currently ${configRead('enableSponsorBlock') ? 'ON' : 'OFF'} · https://sponsor.ajay.app/`,
@@ -712,10 +642,9 @@ export function buildSettingsTree() {
               && Date.now() < window.__ytarkLastSponsorBlockSkip.expiresAt
               ? 'Undo the most recent SponsorBlock skip' : 'No recent manual skip to undo',
             icon: 'UNDO',
-            keywords: ['undo', 'skip', 'sponsorblock'],
             command: [custom('SPONSORBLOCK_UNDO_SKIP')],
           },
-          { id: 'sponsorblock.enable', type: 'toggle', title: t('settings.options.sponsorblock.options.enableSB'), icon: 'MONEY_HAND', key: 'enableSponsorBlock', keywords: ['sponsorblock', 'sponsor', 'skip'] },
+          { id: 'sponsorblock.enable', type: 'toggle', title: t('settings.options.sponsorblock.options.enableSB'), icon: 'MONEY_HAND', key: 'enableSponsorBlock' },
           {
             id: 'sponsorblock.manualSkip',
             type: 'multi',
@@ -723,7 +652,6 @@ export function buildSettingsTree() {
             icon: 'DOLLAR_SIGN',
             key: 'sponsorBlockManualSkips',
             menuId: 'tt-sponsorblock-manual-segment-skip',
-            keywords: ['manual skip', 'skip button', 'sponsorblock'],
             dependsOn: sbDependency,
             options: sponsorCategories('sponsorblock.manualSkip', 'multi'),
           },
@@ -733,18 +661,16 @@ export function buildSettingsTree() {
             title: t('settings.options.sponsorblock.options.segments'),
             icon: 'SETTINGS',
             menuId: 'tt-sponsorblock-segments',
-            keywords: ['segments', 'categories', 'sponsorblock'],
             children: sponsorCategories('sponsorblock.segments', 'toggle').concat([{
               id: 'sponsorblock.segments.highlight',
               type: 'toggle',
               title: t('settings.options.sponsorblock.options.categories.highlights'),
               icon: 'LOCATION_POINT',
               key: 'enableSponsorBlockHighlight',
-              keywords: ['highlight', 'skip to highlight', 'sponsorblock'],
               dependsOn: sbDependency,
             }]),
           },
-          { id: 'sponsorblock.toasts', type: 'toggle', title: t('settings.options.sponsorblock.options.showSBToasts'), key: 'enableSponsorBlockToasts', keywords: ['toast', 'notification', 'sponsorblock'], dependsOn: sbDependency },
+          { id: 'sponsorblock.toasts', type: 'toggle', title: t('settings.options.sponsorblock.options.showSBToasts'), key: 'enableSponsorBlockToasts', dependsOn: sbDependency },
         ],
       },
       {
@@ -754,12 +680,11 @@ export function buildSettingsTree() {
         description: 'https://dearrow.ajay.app/',
         icon: 'VISIBILITY_OFF',
         menuId: 'ytark-dearrow',
-        keywords: ['dearrow', 'clickbait', 'titles', 'thumbnails'],
         header: { title: t('settings.options.dearrow.title'), subtitle: 'https://dearrow.ajay.app/' },
         resetKeys: ['enableDeArrow', 'enableDeArrowThumbnails'],
         children: [
-          { id: 'dearrow.enable', type: 'toggle', title: t('settings.options.dearrow.options.enableDA'), icon: 'VISIBILITY_OFF', key: 'enableDeArrow', keywords: ['dearrow', 'clickbait', 'titles'] },
-          { id: 'dearrow.thumbnails', type: 'toggle', title: t('settings.options.dearrow.options.enableDAThumbnails'), icon: 'TV', key: 'enableDeArrowThumbnails', keywords: ['dearrow', 'thumbnails'], dependsOn: { key: 'enableDeArrow', title: t('settings.options.dearrow.options.enableDA') } },
+          { id: 'dearrow.enable', type: 'toggle', title: t('settings.options.dearrow.options.enableDA'), icon: 'VISIBILITY_OFF', key: 'enableDeArrow' },
+          { id: 'dearrow.thumbnails', type: 'toggle', title: t('settings.options.dearrow.options.enableDAThumbnails'), icon: 'TV', key: 'enableDeArrowThumbnails', dependsOn: { key: 'enableDeArrow', title: t('settings.options.dearrow.options.enableDA') } },
         ],
       },
       // Feed content filtering, relocated from the retired "YTArk Quick
@@ -774,8 +699,7 @@ export function buildSettingsTree() {
         icon: 'YOUTUBE_SHORTS_FILL_24',
         key: 'enableShorts',
         invert: true,
-        keywords: ['shorts', 'reels', 'hide shorts', 'content filtering'],
-      },
+        },
       {
         id: 'privacy.hidePreviews',
         type: 'toggle',
@@ -784,11 +708,10 @@ export function buildSettingsTree() {
         icon: 'VISIBILITY_OFF',
         key: 'enablePreviews',
         invert: true,
-        keywords: ['previews', 'autoplay previews', 'hover', 'content filtering'],
-      },
-          { id: 'misc.paidPromotion', type: 'toggle', title: t('settings.options.misc.options.paidPromoOverlay'), icon: 'MONEY_HAND', key: 'enablePaidPromotionOverlay', keywords: ['paid promotion', 'sponsored overlay'] },
-          { id: 'misc.youThere', type: 'toggle', title: t('settings.options.misc.options.youThereRenderer'), icon: 'HELP', key: 'enableYouThereRenderer', keywords: ['still watching', 'are you there', 'pause prompt'] },
-          { id: 'misc.signInReminder', type: 'toggle', title: t('settings.options.misc.options.guestSignInReminder'), key: 'enableSigninReminder', keywords: ['guest', 'sign in reminder'] },
+        },
+          { id: 'misc.paidPromotion', type: 'toggle', title: t('settings.options.misc.options.paidPromoOverlay'), icon: 'MONEY_HAND', key: 'enablePaidPromotionOverlay' },
+          { id: 'misc.youThere', type: 'toggle', title: t('settings.options.misc.options.youThereRenderer'), icon: 'HELP', key: 'enableYouThereRenderer' },
+          { id: 'misc.signInReminder', type: 'toggle', title: t('settings.options.misc.options.guestSignInReminder'), key: 'enableSigninReminder' },
     ],
     },
     {
@@ -798,7 +721,6 @@ export function buildSettingsTree() {
       description: tx('ytark.categories.navigation.description', 'Guide, startup and the YouTube Settings page'),
       icon: 'MENU',
       menuId: 'ytark-navigation',
-      keywords: ['navigation', 'guide', 'sidebar', 'startup', 'layout', 'who is watching'],
       header: { title: tx('ytark.categories.navigation.title', 'Navigation'), subtitle: tx('ytark.categories.navigation.description', 'Guide, startup and the YouTube Settings page') },
       resetKeys: ['launchToOnStartup', 'sortSubscriptionsByAlphabet', 'disableChannelsOnSidebar', 'enableYtarkGuideEntry', 'enableWhoIsWatchingMenu', 'permanentlyEnableWhoIsWatchingMenu', 'enableWhosWatchingMenuOnAppExit', 'reloadHomeOnStartup'],
       children: [
@@ -808,7 +730,6 @@ export function buildSettingsTree() {
             title: t('settings.options.uiSettings.options.disableSidebarContents.title'),
             description: t('settings.options.uiSettings.options.disableSidebarContents.subtitle'),
             icon: 'MENU',
-            keywords: ['sidebar', 'guide', 'menu', 'hide tabs'],
             command: [custom('SHOW_GUIDE_SETTINGS', 'disabledSidebarContents')],
           },
           {
@@ -817,7 +738,6 @@ export function buildSettingsTree() {
             title: t('settings.options.uiSettings.options.sortSidebarContents.title'),
             description: t('settings.options.uiSettings.options.sortSidebarContents.subtitle'),
             icon: 'MENU',
-            keywords: ['sidebar', 'guide', 'order', 'sort', 'reorder'],
             command: [custom('SHOW_GUIDE_SETTINGS', 'sortSidebarContents')],
           },
           {
@@ -828,7 +748,6 @@ export function buildSettingsTree() {
             icon: 'TV',
             key: 'launchToOnStartup',
             menuId: 'tt-launch-to-on-startup',
-            keywords: ['startup', 'launch', 'start page', 'home page'],
             options: [
               startupDestination('search', 'settings.options.uiSettings.options.categories.search', 'SEARCH', { searchEndpoint: { query: '' } }),
               startupDestination('home', 'settings.options.uiSettings.options.categories.home', 'WHAT_TO_WATCH', { browseEndpoint: { browseId: 'FEtopics' } }),
@@ -844,8 +763,8 @@ export function buildSettingsTree() {
               startupDestination('more', 'settings.options.uiSettings.options.categories.more', 'TAB_MORE', { browseEndpoint: { browseId: 'FEtopics_more' } }),
             ],
           },
-          { id: 'ui.sortSubscriptions', type: 'toggle', title: t('settings.options.uiSettings.options.sortSubscriptionsByAlphabet'), icon: 'SUBSCRIPTIONS', key: 'sortSubscriptionsByAlphabet', keywords: ['subscriptions', 'alphabetical', 'sort'] },
-          { id: 'ui.disableChannelsOnSidebar', type: 'toggle', title: t('settings.options.uiSettings.options.disableChannelsOnSidebar'), key: 'disableChannelsOnSidebar', keywords: ['sidebar', 'channels'] },
+          { id: 'ui.sortSubscriptions', type: 'toggle', title: t('settings.options.uiSettings.options.sortSubscriptionsByAlphabet'), icon: 'SUBSCRIPTIONS', key: 'sortSubscriptionsByAlphabet' },
+          { id: 'ui.disableChannelsOnSidebar', type: 'toggle', title: t('settings.options.uiSettings.options.disableChannelsOnSidebar'), key: 'disableChannelsOnSidebar' },
           {
             id: 'nav.guideEntry',
             type: 'toggle',
@@ -853,22 +772,20 @@ export function buildSettingsTree() {
             description: tx('ytark.navigation.guideEntry.description', 'Adds a YTArk Settings entry at the bottom of the TV guide. Selecting it with OK opens the panel; scrolling past it only highlights it.'),
             icon: 'MENU',
             key: 'enableYtarkGuideEntry',
-            keywords: ['guide', 'sidebar', 'entry', 'shortcut', 'navigation', 'settings entry', 'bottom'],
-          },
+            },
           {
             id: 'misc.whosWatching',
             type: 'menu',
             title: t('settings.options.misc.options.whosWatching.title'),
             icon: 'ACCOUNT_CIRCLE',
             menuId: 'tt-whos-watching-menu-settings',
-            keywords: ['who is watching', 'profiles', 'account picker'],
             children: [
-              { id: 'misc.whosWatching.enable', type: 'toggle', title: t('settings.options.misc.options.whosWatching.options.enableWW'), key: 'enableWhoIsWatchingMenu', keywords: ['who is watching', 'profiles'] },
-              { id: 'misc.whosWatching.permanent', type: 'toggle', title: t('settings.options.misc.options.whosWatching.options.permaEnableWW'), key: 'permanentlyEnableWhoIsWatchingMenu', keywords: ['who is watching', 'always'], dependsOn: { key: 'enableWhoIsWatchingMenu', title: t('settings.options.misc.options.whosWatching.options.enableWW') } },
-              { id: 'misc.whosWatching.onExit', type: 'toggle', title: t('settings.options.misc.options.whosWatching.options.enableWWOnExit'), key: 'enableWhosWatchingMenuOnAppExit', keywords: ['who is watching', 'exit'] },
+              { id: 'misc.whosWatching.enable', type: 'toggle', title: t('settings.options.misc.options.whosWatching.options.enableWW'), key: 'enableWhoIsWatchingMenu' },
+              { id: 'misc.whosWatching.permanent', type: 'toggle', title: t('settings.options.misc.options.whosWatching.options.permaEnableWW'), key: 'permanentlyEnableWhoIsWatchingMenu', dependsOn: { key: 'enableWhoIsWatchingMenu', title: t('settings.options.misc.options.whosWatching.options.enableWW') } },
+              { id: 'misc.whosWatching.onExit', type: 'toggle', title: t('settings.options.misc.options.whosWatching.options.enableWWOnExit'), key: 'enableWhosWatchingMenuOnAppExit' },
             ],
           },
-          { id: 'misc.reloadHome', type: 'toggle', title: t('settings.options.misc.options.reloadHomeOnStartup'), key: 'reloadHomeOnStartup', keywords: ['startup', 'reload', 'home'] },
+          { id: 'misc.reloadHome', type: 'toggle', title: t('settings.options.misc.options.reloadHomeOnStartup'), key: 'reloadHomeOnStartup' },
           {
             id: 'nav.skipStartupAnimation',
             type: 'panel',
@@ -876,31 +793,9 @@ export function buildSettingsTree() {
             description: tx('ytark.navigation.skipStartupAnimation.unavailable',
               'Not available: this YTArk build has no optional startup animation to skip.'),
             icon: 'INFO',
-            keywords: ['startup animation', 'skip animation', 'boot delay', 'splash screen'],
             panel: startupAnimationPanel,
           },
     ],
-    },
-    {
-      id: 'storage',
-      type: 'menu',
-      title: tx('ytark.storage.title', 'Cache & Storage'),
-      description: tx('ytark.storage.description', 'Measure and clear only temporary Android cache files; updater downloads are separate'),
-      icon: 'STORAGE',
-      menuId: 'ytark-storage-menu',
-      keywords: ['cache', 'storage', 'temporary files', 'clear cache', 'update downloads'],
-      header: { title: tx('ytark.storage.title', 'Cache & Storage'), subtitle: tx('ytark.storage.description', 'Measure and clear only temporary Android cache files; updater downloads are separate') },
-      children: [
-        {
-          id: 'storage.open',
-          type: 'action',
-          title: tx('ytark.storage.open', 'Open Cache & Storage controls'),
-          description: tx('ytark.storage.openDescription', 'Calculates Android cache size, safely clears temporary cache, or removes obsolete update downloads'),
-          icon: 'DELETE',
-          keywords: ['calculate cache size', 'clear cache', 'remove old update downloads'],
-          command: [custom('YTARK_NATIVE_STORAGE_OPEN', {})],
-        },
-      ],
     },
     {
       id: 'updates',
@@ -909,7 +804,6 @@ export function buildSettingsTree() {
       description: ytarkUpdateSubtitle(),
       icon: 'SYSTEM_UPDATE',
       menuId: 'ytark-updates-menu',
-      keywords: ['update', 'updates', 'version', 'upgrade', 'release', 'apk', 'download', 'installed version'],
       header: { title: 'YTArk Updates', subtitle: ytarkUpdateSubtitle() },
       children: [
         {
@@ -918,7 +812,6 @@ export function buildSettingsTree() {
           title: 'Open updater and check now',
           description: 'Opens the native YTArk updater for real check, download, verification and installation status',
           icon: 'SYSTEM_UPDATE',
-          keywords: ['update', 'check', 'version', 'new version', 'apk', 'download', 'install'],
           command: [custom('YTARK_NATIVE_UPDATES_OPEN', {})],
         },
         {
@@ -927,7 +820,6 @@ export function buildSettingsTree() {
           title: tx('ytark.changelog.entryFromUpdates', 'What\'s new and changelog'),
           description: tx('ytark.changelog.entryDescription', 'Version history bundled with this build'),
           icon: 'BOOKMARK_BORDER',
-          keywords: ['changelog', 'whats new', 'release notes', 'history'],
           command: [custom('YTARK_CHANGELOG_SHOW', {})],
         },
       ],
@@ -941,7 +833,6 @@ export function buildSettingsTree() {
       title: 'About YTArk',
       description: `YTArk version ${ytarkDisplayVersion()}`,
       icon: 'INFO',
-      keywords: ['about', 'version', 'build', 'youtube version', 'licence', 'license', 'attribution'],
       panel: aboutPanel,
       // Navigable subsections of the About dialog. They are reachable from the
       // panel only (not indexed, not rendered as rows), so the notices and the
@@ -950,21 +841,17 @@ export function buildSettingsTree() {
         {
           id: 'about.buildInfo',
           type: 'panel',
-          search: false,
           title: tx('ytark.about.buildDetailsTitle', 'Build details'),
           description: tx('ytark.about.buildDetailsSubtitle', 'versionName · versionCode · userscript · Android base'),
           icon: 'INFO',
-          keywords: ['build', 'versionname', 'versioncode', 'userscript', 'android base'],
           panel: aboutBuildInfoPanel,
         },
         {
           id: 'about.notices',
           type: 'panel',
-          search: false,
           title: tx('ytark.about.noticesTitle', 'Third-party notices and licences'),
           description: tx('ytark.about.noticesSubtitle', 'Attribution and licence texts that ship with YTArk'),
           icon: 'LIST',
-          keywords: ['licence', 'license', 'attribution', 'notice', 'trademark'],
           panel: aboutNoticesPanel,
         },
       ],
@@ -975,10 +862,9 @@ export function buildSettingsTree() {
       title: 'Support YTArk',
       icon: 'PRIVACY_UNLISTED',
       menuId: 'ytark-support',
-      keywords: ['support', 'donate', 'github', 'ko-fi', 'kofi'],
       children: [
-        { id: 'support.github', type: 'panel', title: 'YTArk on GitHub', description: 'https://github.com/2archiver/YTArk', icon: 'OPEN_IN_NEW', keywords: ['github', 'source'], panel: supportPanel('YTArk on GitHub', 'https://github.com/2archiver/YTArk') },
-        { id: 'support.kofi', type: 'panel', title: 'Support YTArk on Ko-fi', description: 'https://ko-fi.com/2archiver', icon: 'OPEN_IN_NEW', keywords: ['ko-fi', 'donate'], panel: supportPanel('Support YTArk on Ko-fi', 'https://ko-fi.com/2archiver') },
+        { id: 'support.github', type: 'panel', title: 'YTArk on GitHub', description: 'https://github.com/2archiver/YTArk', icon: 'OPEN_IN_NEW', panel: supportPanel('YTArk on GitHub', 'https://github.com/2archiver/YTArk') },
+        { id: 'support.kofi', type: 'panel', title: 'Support YTArk on Ko-fi', description: 'https://ko-fi.com/2archiver', icon: 'OPEN_IN_NEW', panel: supportPanel('Support YTArk on Ko-fi', 'https://ko-fi.com/2archiver') },
       ],
     },
   ];

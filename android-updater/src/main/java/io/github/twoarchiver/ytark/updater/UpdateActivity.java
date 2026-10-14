@@ -99,7 +99,6 @@ public final class UpdateActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         live = new WeakReference<>(this);
-        persistRouteTheme(getIntent());
         buildScreen();
         if (state != null) {
             lastFocusId = state.getInt(STATE_FOCUS_ID, 0);
@@ -151,10 +150,6 @@ public final class UpdateActivity extends Activity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
-        if (persistRouteTheme(intent)) {
-            recreate();
-            return;
-        }
         if (!isAllowedEntryIntent(intent)) {
             showInvalidRoute();
             return;
@@ -167,13 +162,6 @@ public final class UpdateActivity extends Activity {
         } else if (YtarkUpdater.ACTION_CHECK.equals(action) || Intent.ACTION_VIEW.equals(action)) {
             checkForUpdates(false);
         }
-    }
-
-    private boolean persistRouteTheme(Intent intent) {
-        if (intent == null || !Intent.ACTION_VIEW.equals(intent.getAction())
-                || !NativeRoutePolicy.isAllowedScreenRoute(intent.getDataString(), "updates")) return false;
-        String theme = NativeRoutePolicy.themeForRoute(intent.getDataString());
-        return YtarkUpdater.persistNativeTheme(this, theme);
     }
 
     private boolean isAllowedEntryIntent(Intent intent) {
@@ -361,7 +349,7 @@ public final class UpdateActivity extends Activity {
 
     private void buildScreen() {
         Window window = getWindow();
-        int backgroundColor = NativeThemePolicy.background(YtarkUpdater.nativeTheme(this));
+        int backgroundColor = NativeThemePolicy.background();
         window.setStatusBarColor(backgroundColor);
         window.setNavigationBarColor(backgroundColor);
         window.getDecorView().setSystemUiVisibility(0);
@@ -379,7 +367,7 @@ public final class UpdateActivity extends Activity {
 
         TextView title = new TextView(this);
         title.setText(YtarkBranding.UPDATES_TITLE);
-        title.setTextColor(NativeThemePolicy.primaryText(YtarkUpdater.nativeTheme(this)));
+        title.setTextColor(NativeThemePolicy.primaryText());
         title.setTextSize(31);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         title.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
@@ -388,15 +376,15 @@ public final class UpdateActivity extends Activity {
 
         TextView intro = new TextView(this);
         intro.setText("Check the official stable releases, verify downloads, and let Android confirm each install.");
-        intro.setTextColor(NativeThemePolicy.secondaryText(YtarkUpdater.nativeTheme(this)));
+        intro.setTextColor(NativeThemePolicy.secondaryText());
         intro.setTextSize(17);
         LinearLayout.LayoutParams introParams = wrapParams();
         introParams.topMargin = dp(4);
         content.addView(intro, introParams);
 
         LinearLayout versionCard = card();
-        installedVersionText = bodyText(19, NativeThemePolicy.primaryText(YtarkUpdater.nativeTheme(this)));
-        scheduleText = bodyText(15, NativeThemePolicy.secondaryText(YtarkUpdater.nativeTheme(this)));
+        installedVersionText = bodyText(19, NativeThemePolicy.primaryText());
+        scheduleText = bodyText(15, NativeThemePolicy.secondaryText());
         versionCard.addView(installedVersionText, wrapParams());
         LinearLayout.LayoutParams scheduleParams = wrapParams();
         scheduleParams.topMargin = dp(8);
@@ -405,7 +393,7 @@ public final class UpdateActivity extends Activity {
         cardParams.topMargin = dp(20);
         content.addView(versionCard, cardParams);
 
-        statusText = bodyText(19, NativeThemePolicy.primaryText(YtarkUpdater.nativeTheme(this)));
+        statusText = bodyText(19, NativeThemePolicy.primaryText());
         statusText.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         statusText.setText("Checking the official YTArk stable release…");
         LinearLayout.LayoutParams statusParams = wrapParams();
@@ -426,14 +414,14 @@ public final class UpdateActivity extends Activity {
         content.addView(notesHeading, headingParams);
 
         LinearLayout notesCard = card();
-        releaseNotesText = bodyText(16, NativeThemePolicy.bodyText(YtarkUpdater.nativeTheme(this)));
+        releaseNotesText = bodyText(16, NativeThemePolicy.bodyText());
         releaseNotesText.setText("No release is selected. Choose Check for Updates to load the published stable release notes.");
         notesCard.addView(releaseNotesText, wrapParams());
         LinearLayout.LayoutParams notesCardParams = wrapParams();
         notesCardParams.topMargin = dp(7);
         content.addView(notesCard, notesCardParams);
 
-        TextView safety = bodyText(14, NativeThemePolicy.quietText(YtarkUpdater.nativeTheme(this)));
+        TextView safety = bodyText(14, NativeThemePolicy.quietText());
         safety.setText("Only published stable releases are considered. The updater matches this device's Android ABI, then verifies the SHA-256, package, version, minimum Android version and signing certificate before any install. Android's installer asks for your confirmation; YTArk does not install silently, uninstall, or clear app data. Installing an update needs the one-time \u201cInstall unknown apps\u201d permission for YTArk.");
         LinearLayout.LayoutParams safetyParams = wrapParams();
         safetyParams.topMargin = dp(14);
@@ -577,9 +565,9 @@ public final class UpdateActivity extends Activity {
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setPadding(dp(18), dp(16), dp(18), dp(16));
         GradientDrawable background = new GradientDrawable();
-        background.setColor(NativeThemePolicy.card(YtarkUpdater.nativeTheme(this)));
+        background.setColor(NativeThemePolicy.card());
         background.setCornerRadius(dp(10));
-        background.setStroke(dp(1), NativeThemePolicy.divider(YtarkUpdater.nativeTheme(this)));
+        background.setStroke(dp(1), NativeThemePolicy.divider());
         layout.setBackground(background);
         return layout;
     }
@@ -595,7 +583,7 @@ public final class UpdateActivity extends Activity {
     }
 
     private TextView sectionHeading(String label) {
-        TextView heading = bodyText(18, NativeThemePolicy.primaryText(YtarkUpdater.nativeTheme(this)));
+        TextView heading = bodyText(18, NativeThemePolicy.primaryText());
         heading.setText(label);
         heading.setTypeface(null, android.graphics.Typeface.BOLD);
         return heading;
