@@ -193,9 +193,9 @@ describe('About YTArk', () => {
     assert.ok(build.openPopupAction.popup.overlaySectionRenderer.overlay.overlayTwoPanelRenderer
       .actionPanel.overlayPanelRenderer.content.scrollPaneRenderer, 'D-pad scrollable');
     const details = modalItems(build).map(messageText).join('\n');
-    assert.match(details, /versionName: 2\.9\.0/);
-    assert.match(details, /versionCode: 2090000/);
-    assert.match(details, /YTArk userscript: s28/);
+    assert.match(details, /versionName: 3\.0\.0/);
+    assert.match(details, /versionCode: 3000000/);
+    assert.match(details, /YTArk userscript: s29/);
     assert.match(details, /Android base: v2\.0\.2/);
 
     resolveCommand({ customAction: { action: 'YTARK_PANEL_SHOW', parameters: { id: 'about' } } });
@@ -231,7 +231,7 @@ describe('About YTArk', () => {
     await tick(20);
     resolveCommand({ customAction: { action: 'YTARK_PANEL_SHOW', parameters: { id: 'about' } } });
     const panel = lastModal(recorded, 'ytark-panel-about');
-    assert.equal(header(panel).subtitle, 'YTArk 2.9 (build metadata)', "this build's own version, labelled by source");
+    assert.equal(header(panel).subtitle, 'YTArk 3.0 (build metadata)', "this build's own version, labelled by source");
     const lines = modalItems(panel).map(messageText).filter(Boolean);
     assert.ok(lines.some(line => /packaging metadata/.test(line)), 'the source is stated');
     const reread = findRow(panel, 'Read the installed version again');
