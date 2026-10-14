@@ -1,0 +1,9 @@
+{
+  "name": "ytark-kotlin-toolchain",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Pinned Kotlin compiler for the custom Android D8 pipeline",
+  "dependencies": {
+    "kotlin-compiler": "2.1.20"
+  }
+}

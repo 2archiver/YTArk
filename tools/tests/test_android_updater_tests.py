@@ -27,7 +27,7 @@ import validate_release  # noqa: E402
 RUNNER = ROOT / "tools" / "test_android_updater.sh"
 DEX_BUILD = ROOT / "tools" / "build_android_updater.sh"
 CI_WORKFLOW = ROOT / ".github" / "workflows" / "ci.yml"
-MAIN_DIR = ROOT / "android-updater" / "src" / "main" / "java" / "io" / "github" / "twoarchiver" / "ytark" / "updater"
+MAIN_DIR = ROOT / "android-updater" / "src" / "main" / "kotlin" / "io" / "github" / "twoarchiver" / "ytark" / "updater"
 TEST_DIR = ROOT / "android-updater" / "src" / "test" / "java" / "io" / "github" / "twoarchiver" / "ytark" / "updater"
 
 
@@ -59,19 +59,20 @@ class UpdaterTestListTests(unittest.TestCase):
                          "a test class exists that the shared runner never executes")
 
     def test_every_policy_referenced_by_a_test_is_compiled(self):
-        known = {path.stem for path in MAIN_DIR.glob("*.java")}
+        known = {name for path in MAIN_DIR.glob("*.kt") for name in re.findall(r"(?:class|object) (\w+)", path.read_text())}
         used: set[str] = set()
         for path in TEST_DIR.glob("*Test.java"):
             text = path.read_text(encoding="utf-8")
             used.update(name for name in known if re.search(rf"\b{re.escape(name)}\b", text))
-        missing = sorted(used - set(path[:-5] for path in self.policies))
+        compiled = "\n".join((MAIN_DIR / path).read_text() for path in self.policies)
+        missing = sorted(name for name in used if not re.search(rf"(?:class|object) {name}\b", compiled))
         self.assertEqual(missing, [],
                          "tests reference policies the shared runner does not compile")
 
     def test_theme_palette_is_covered(self):
-        self.assertIn("NativeThemePolicy.java", self.policies)
+        self.assertIn("Policies.kt", self.policies)
         self.assertIn("NativeThemePolicyTest", self.classes)
-        policy = (MAIN_DIR / "NativeThemePolicy.java").read_text(encoding="utf-8")
+        policy = (MAIN_DIR / "Policies.kt").read_text(encoding="utf-8")
         self.assertIn("0xff0f1218", policy, "the fixed dark background is unchanged")
         self.assertNotIn("THEME_", policy, "3.0 removed the OLED palette branch")
         self.assertNotIn("isOled", policy, "the palette takes no theme argument any more")
@@ -103,8 +104,9 @@ class RunnerWiringTests(unittest.TestCase):
 
     def test_dex_build_compiles_all_production_sources_and_checks_output(self):
         text = DEX_BUILD.read_text(encoding="utf-8")
-        self.assertIn("find \"$SOURCE\" -type f -name '*.java' -print", text)
-        self.assertIn('javac --release 8 -classpath "$PLATFORM"', text)
+        self.assertIn("find \"$SOURCE\" -type f -name '*.kt' -print", text)
+        self.assertIn('KOTLINC', text)
+        self.assertIn('\"$STDLIB\"', text)
         self.assertIn('"$D8" --release --min-api 24 --lib "$PLATFORM"', text)
         self.assertIn('[ -s "$WORK/dex/classes.dex" ]', text)
         self.assertIn('set -euo pipefail', text)
@@ -124,25 +126,23 @@ class RunnerWiringTests(unittest.TestCase):
 
 class UpdateScreenRemovalTests(unittest.TestCase):
     def test_no_production_java_reference_to_the_removed_storage_screen(self):
-        for path in MAIN_DIR.rglob("*.java"):
+        for path in MAIN_DIR.rglob("*.kt"):
             text = path.read_text(encoding="utf-8")
             for retired in ("StorageActivity", "openStorageScreen", "storageButton",
                             "YTARK_NATIVE_STORAGE_OPEN"):
                 self.assertNotIn(retired, text, str(path))
 
     def test_focus_lists_match_the_remaining_created_and_inserted_controls(self):
-        text = (MAIN_DIR / "UpdateActivity.java").read_text(encoding="utf-8")
-        created = re.findall(r"(\w+Button) = createButton\(", text)
-        inserted = re.findall(r"content.addView\((\w+Button), buttonLayout\(\)\)", text)
-        focusable = re.search(r"Button\[\] focusable = \{(.*?)\};", text, re.S).group(1)
-        restored = re.search(r"for \(Button button : new Button\[\] \{(.*?)\}\)", text, re.S).group(1)
-        focus_names = re.findall(r"\w+Button", focusable)
-        self.assertEqual(focus_names, inserted, "focus IDs retain visual order")
-        self.assertEqual(re.findall(r"\w+Button", restored), focus_names)
-        self.assertEqual(set(focus_names), set(created))
-        self.assertEqual(len(focus_names), len(set(focus_names)))
-        self.assertIn("if (preferred == null) preferred = checkButton;", text)
-        self.assertIn("if (installButton.isEnabled()) preferred = installButton;", text)
+        text = (MAIN_DIR / "UpdateActivity.kt").read_text()
+        created = re.findall(r'(\w+Button)=button\((\d+),', text)
+        self.assertEqual([name for name, _ in created],
+                         ['checkButton', 'intervalButton', 'primaryButton', 'cancelButton'])
+        self.assertEqual(len({id for _, id in created}), 4)
+        self.assertIn('findViewById<View>(focusId)', text)
+        self.assertIn('currentFocus?.id', text)
+        render = text.split('private fun render')[1]
+        self.assertNotIn('setContentView', render)
+        self.assertNotIn('requestFocus', render)
 
 
 class RepackDefaultsTests(unittest.TestCase):

@@ -53,6 +53,8 @@ export const RETIRED_KEYS = Object.freeze([
   'tvQuickQuality',
   'videoPreferredCodec',
   'uiTheme',
+  'skipStartupAnimation',
+  'enableSkipStartupAnimation',
 ]);
 /** Presence of YouTube TV's own storage means the app has run before. Only the
  * existence of the key is checked; its contents are never read. */
@@ -136,9 +138,8 @@ const defaultConfig = {
   // The guide entry keeps YTArk Settings reachable when the sidebar is minimal.
   enableYtarkGuideEntry: true,
   enableUpdater: true,
-  // 3.0 experimental: defer non-critical userscript work until after the
-  // first YouTube screen has rendered. Off by default; never delays ad
-  // blocking, theming, login/session restoration or networking readiness.
+  // Optional mod-readiness polling acceleration. Essential readiness, session
+  // restoration and the engine/system splash are unchanged. Off by default.
   fasterStartup: false,
   // Automatic retries are an explicit opt-in because PlayerService.loadVideo is not a general recovery API.
   enablePlaybackRecovery: false,

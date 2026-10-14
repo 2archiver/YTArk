@@ -1,10 +1,10 @@
 /*global navigate*/
 import '../spatial-navigation-polyfill.js';
+import { startReadiness } from '../features/startupReadiness.js';
 import css from './ui.css';
 import { configRead, configWrite, configWriteMany, configChangeEmitter } from '../config.js';
 import updateStyle from './theme.js';
 import { showToast } from './ytUI.js';
-import { initWhatsNew, changelogEntryFor } from '../features/whatsNew.js';
 import { tx } from '../translations/text.js';
 import modernUI from './settings.js';
 import resolveCommand, { patchResolveCommand } from '../resolveCommand.js';
@@ -14,12 +14,14 @@ import { t } from 'i18next';
 
 // Initialize the remote settings controls when the TV DOM exists; requiring a
 // video element here would make settings unavailable on a quiet home screen.
-let startupChecks = 0;
 let controlsInitialized = false;
 let resolverPatched = false;
-const MAX_STARTUP_CHECKS = 160;
-const startupInterval = setInterval(() => {
-  startupChecks += 1;
+let startupStorage;
+try { startupStorage = window.localStorage; } catch (_) { /* normal startup */ }
+startReadiness({
+  enabled: configRead('fasterStartup') === true,
+  storage: startupStorage,
+  tick: () => {
   if (!controlsInitialized && document.body) {
     try {
       execute_once_dom_loaded();
@@ -40,10 +42,9 @@ const startupInterval = setInterval(() => {
     }
   }
 
-  if ((controlsInitialized && resolverPatched) || startupChecks >= MAX_STARTUP_CHECKS) {
-    clearInterval(startupInterval);
-  }
-}, 250);
+  return controlsInitialized && resolverPatched;
+  },
+});
 
 let keyTimeout = null;
 
@@ -332,18 +333,5 @@ function execute_once_dom_loaded() {
     commandExecutor.executeFunction(new commandExecutor.commandFunction('reloadGuideAction'));
   }
 
-  // Post-update What's new: evaluated once, announced once, never over playback.
-  try {
-    initWhatsNew({
-      announce: (version) => {
-        const entry = changelogEntryFor(version);
-        showToast(
-          tx('ytark.whatsNew.toastTitle', 'YTArk updated to {{version}}', { version: entry ? entry.display : version }),
-          tx('ytark.whatsNew.toastBody', 'Version history and release notes are in YTArk Updates.'),
-        );
-      },
-    });
-  } catch (error) {
-    console.warn('[YTArk] What\'s new could not be evaluated:', error);
-  }
+  // Release notes live only inside the native Updates page.
 }

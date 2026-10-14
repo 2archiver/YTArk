@@ -24,16 +24,16 @@ import validate_release
 class Armv7OnlyReleaseContractTests(unittest.TestCase):
     def test_expected_clean_semver_version_and_asset_names(self):
         config = validate_release.load_config()
-        # The 3.0 identity: display "3.0" with the clean versionCode mapping,
+        # The 3.0 identity: display "3.1" with the clean versionCode mapping,
         # above the published 2.9.0 (2090000). The panel below is intentionally
         # literal: it is the release contract a user sees, not a value derived
         # from the same file it checks.
-        self.assertEqual(config["VERSION_NAME"], "3.0.0")
-        self.assertEqual(config["DISPLAY_VERSION"], "3.0")
-        self.assertEqual(config["VERSION_CODE"], "3000000")
-        self.assertEqual(config["VERSION_TAG"], "v3.0.0")
-        self.assertEqual(config["RELEASE_NAME"], "YTArk 3.0")
-        self.assertEqual(config["APK_ARMV7"], "YTArk-v3.0.0-armv7.apk")
+        self.assertEqual(config["VERSION_NAME"], "3.1.0")
+        self.assertEqual(config["DISPLAY_VERSION"], "3.1")
+        self.assertEqual(config["VERSION_CODE"], "3010000")
+        self.assertEqual(config["VERSION_TAG"], "v3.1.0")
+        self.assertEqual(config["RELEASE_NAME"], "YTArk 3.1")
+        self.assertEqual(config["APK_ARMV7"], "YTArk-v3.1.0-armv7.apk")
         self.assertEqual(validate_release.apk_filename(config["VERSION_NAME"], "armv7"), config["APK_ARMV7"])
         # Only one architecture is published from 2.1.2 onwards.
         self.assertNotIn("APK_ARM64", config)
@@ -121,10 +121,10 @@ class Armv7OnlyReleaseContractTests(unittest.TestCase):
             releases_path.write_text(json.dumps([releases[:5], releases[5:]]), encoding="utf-8")
             validate_release.check_version(str(latest_path), str(releases_path))
 
-            # A published release above the candidate (3.0.1 = 3000100) must block it.
+            # A published release above the candidate (3.1.1 = 3010100) must block it.
             too_high = dict(releases[1])
-            too_high["tag_name"] = "v3.0.1"
-            too_high["body"] = "Version 3.0.1 (versionCode 3000100)"
+            too_high["tag_name"] = "v3.1.1"
+            too_high["body"] = "Version 3.1.1 (versionCode 3010100)"
             releases_path.write_text(json.dumps(releases + [too_high]), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "must exceed every published release|must be newer"):
                 validate_release.check_version(str(latest_path), str(releases_path))
@@ -457,7 +457,7 @@ arm64-v8a (a 64-bit-only system) cannot install this release.
         # Technical history is not dumped into the user-facing release page.
         self.assertNotIn("### Defaults and migration", rendered)
         self.assertNotIn("settings schema 4", rendered)
-        self.assertIn("Known issues:", rendered)
+        self.assertIn("Known limitations:", rendered)
         self.assertLessEqual(len(rendered.split()), 110)
         self.assertNotIn("${WHAT_CHANGED}", rendered)
 

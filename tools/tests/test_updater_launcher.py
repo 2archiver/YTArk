@@ -195,37 +195,34 @@ def manifest(*activities: str, permission_block=compiled_permission_element(),
 
 
 class UpdaterLauncherTests(unittest.TestCase):
-    def test_a_labelled_exported_leanback_entry_is_accepted(self):
-        validate_release.validate_updater_launcher(manifest(updater_activity(), launcher_proxy()))
+    def test_private_screen_without_launcher_is_accepted(self):
+        validate_release.validate_updater_launcher(manifest(updater_activity(exported="(type 0x12)0x0", deep_link=False, permission=None)))
 
-    def test_a_missing_leanback_category_is_refused(self):
-        with self.assertRaisesRegex(ValueError, "LEANBACK_LAUNCHER"):
-            validate_release.validate_updater_launcher(manifest(
-                updater_activity(), launcher_proxy(launcher=False)))
+    def test_exported_screen_is_refused_even_with_signature_permission(self):
+        with self.assertRaisesRegex(ValueError, "non-exported"):
+            validate_release.validate_updater_launcher(manifest(updater_activity()))
 
-    def test_a_missing_exact_ytark_updates_route_is_refused(self):
-        with self.assertRaisesRegex(ValueError, "ytark://updates"):
-            validate_release.validate_updater_launcher(manifest(
-                updater_activity(deep_link=False), launcher_proxy()))
+    def test_obsolete_launcher_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "launcher proxy"):
+            validate_release.validate_updater_launcher(manifest(updater_activity(exported="(type 0x12)0x0", deep_link=False), launcher_proxy()))
 
-    def test_an_unexported_activity_is_refused(self):
-        with self.assertRaisesRegex(ValueError, "exported"):
-            validate_release.validate_updater_launcher(manifest(
-                updater_activity(exported="(type 0x12)0x0"), launcher_proxy()))
+    def test_external_route_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "no external routes"):
+            validate_release.validate_updater_launcher(manifest(updater_activity(exported="(type 0x12)0x0")))
 
-    def test_a_wrong_label_is_refused(self):
-        with self.assertRaisesRegex(ValueError, "labelled"):
-            validate_release.validate_updater_launcher(manifest(
-                updater_activity(), launcher_proxy(label="Updates")))
-
-    def test_a_manifest_without_the_updater_activity_is_refused(self):
-        with self.assertRaisesRegex(ValueError, "no YTArk Updates activity"):
+    def test_missing_screen_is_refused(self):
+        with self.assertRaisesRegex(ValueError, "exactly one"):
             validate_release.validate_updater_launcher(manifest())
 
-    def test_native_screen_routes_require_the_signature_permission(self):
-        with self.assertRaisesRegex(ValueError, "signature permission"):
-            validate_release.validate_updater_launcher(manifest(
-                updater_activity(permission="android.permission.INTERNET"), launcher_proxy()))
+    def test_duplicate_screen_is_refused(self):
+        screen = updater_activity(exported="(type 0x12)0x0", deep_link=False)
+        with self.assertRaisesRegex(ValueError, "exactly one"):
+            validate_release.validate_updater_launcher(manifest(screen, screen))
+
+    def test_missing_explicit_export_is_refused(self):
+        screen = updater_activity(exported="", deep_link=False)
+        with self.assertRaisesRegex(ValueError, "non-exported"):
+            validate_release.validate_updater_launcher(manifest(screen))
 
     def test_persistent_job_service_is_required_and_the_storage_activity_is_refused(self):
         validate_release.validate_updater_background_components(manifest_with_background_components())
@@ -261,7 +258,7 @@ class CompiledSignaturePermissionDeclarationTests(unittest.TestCase):
         # Regression evidence: the compiled dump contains no literal "signature".
         self.assertNotIn("signature", tree)
         self.assertIn("A: android:protectionLevel(0x01010009)=(type 0x11)0x2", tree)
-        validate_release.validate_updater_launcher(tree)
+        validate_release.require_declared_signature_permission(tree)
 
     def test_the_recorded_real_aapt_declaration_of_the_published_build_is_accepted(self):
         tree = manifest(updater_activity(), launcher_proxy(),
@@ -269,22 +266,22 @@ class CompiledSignaturePermissionDeclarationTests(unittest.TestCase):
         # The declaration recorded from the real signed 2.9.0 APK dump carries
         # no literal "signature" either, and must validate exactly as built.
         self.assertNotIn("signature", tree)
-        validate_release.validate_updater_launcher(tree)
+        validate_release.require_declared_signature_permission(tree)
 
     def test_numeric_signature_payload_variants_are_accepted(self):
         for protection in ("(type 0x11)0x2", "(type 0x10)0x2", "(type 0x11)0x0002",
                            "(type 0x11)0x2 "):
             with self.subTest(protection=protection):
-                validate_release.validate_updater_launcher(manifest(
+                validate_release.require_declared_signature_permission(manifest(
                     updater_activity(), launcher_proxy(),
                     permission_block=compiled_permission_element(protection=protection)))
 
     def test_the_decoded_symbolic_signature_value_is_accepted(self):
-        validate_release.validate_updater_launcher(manifest(
+        validate_release.require_declared_signature_permission(manifest(
             updater_activity(), launcher_proxy(),
             permission_block=textual_permission_element()))
         # The historical raw fixture without resource ids must keep validating.
-        validate_release.validate_updater_launcher(manifest(
+        validate_release.require_declared_signature_permission(manifest(
             updater_activity(), launcher_proxy(),
             permission_block=(
                 "    E: permission (line=4)\n"
@@ -299,11 +296,11 @@ class CompiledSignaturePermissionDeclarationTests(unittest.TestCase):
         # the permission, but nothing declares it.
         self.assertIn(SCREEN_PERMISSION, tree)
         with self.assertRaisesRegex(ValueError, "declares no manifest-level"):
-            validate_release.validate_updater_launcher(tree)
+            validate_release.require_declared_signature_permission(tree)
 
     def test_a_declaration_without_protection_level_is_refused(self):
         with self.assertRaisesRegex(ValueError, "carries no android:protectionLevel"):
-            validate_release.validate_updater_launcher(manifest(
+            validate_release.require_declared_signature_permission(manifest(
                 updater_activity(), launcher_proxy(),
                 permission_block=compiled_permission_element(protection=None)))
 
@@ -312,7 +309,7 @@ class CompiledSignaturePermissionDeclarationTests(unittest.TestCase):
                            "", "signature"):
             with self.subTest(protection=protection):
                 with self.assertRaisesRegex(ValueError, "unexpected android:protectionLevel"):
-                    validate_release.validate_updater_launcher(manifest(
+                    validate_release.require_declared_signature_permission(manifest(
                         updater_activity(), launcher_proxy(),
                         permission_block=compiled_permission_element(protection=protection)))
 
@@ -327,7 +324,7 @@ class CompiledSignaturePermissionDeclarationTests(unittest.TestCase):
         for protection, parsed in refused.items():
             with self.subTest(protection=protection):
                 with self.assertRaisesRegex(ValueError, "unexpected android:protectionLevel") as caught:
-                    validate_release.validate_updater_launcher(manifest(
+                    validate_release.require_declared_signature_permission(manifest(
                         updater_activity(), launcher_proxy(),
                         permission_block=compiled_permission_element(protection=protection)))
                 # The failure names the permission and the parsed value.
@@ -338,7 +335,7 @@ class CompiledSignaturePermissionDeclarationTests(unittest.TestCase):
         for symbol in ("normal", "dangerous", "signatureOrSystem", "signature|privileged"):
             with self.subTest(symbol=symbol):
                 with self.assertRaisesRegex(ValueError, "unexpected android:protectionLevel"):
-                    validate_release.validate_updater_launcher(manifest(
+                    validate_release.require_declared_signature_permission(manifest(
                         updater_activity(), launcher_proxy(),
                         permission_block=textual_permission_element(
                             protection=f'"{symbol}" (Raw: "{symbol}")')))
@@ -349,13 +346,13 @@ class CompiledSignaturePermissionDeclarationTests(unittest.TestCase):
                      SCREEN_PERMISSION.replace("OPEN_NATIVE_SCREEN", "OPEN_NATIVE_SCREEM")):
             with self.subTest(name=name):
                 with self.assertRaisesRegex(ValueError, "declares no manifest-level"):
-                    validate_release.validate_updater_launcher(manifest(
+                    validate_release.require_declared_signature_permission(manifest(
                         updater_activity(), launcher_proxy(),
                         permission_block=compiled_permission_element(name=name)))
 
     def test_an_unrelated_signature_permission_never_satisfies_the_check(self):
         with self.assertRaisesRegex(ValueError, "declares no manifest-level"):
-            validate_release.validate_updater_launcher(manifest(
+            validate_release.require_declared_signature_permission(manifest(
                 updater_activity(), launcher_proxy(),
                 permission_block=compiled_permission_element(
                     name="io.github.twoarchiver.ytark.permission.SOMETHING_ELSE")))
@@ -365,24 +362,24 @@ class CompiledSignaturePermissionDeclarationTests(unittest.TestCase):
                  + compiled_permission_element(
                      name="io.github.twoarchiver.ytark.permission.SOMETHING_ELSE"))
         with self.assertRaisesRegex(ValueError, "unexpected android:protectionLevel"):
-            validate_release.validate_updater_launcher(manifest(
+            validate_release.require_declared_signature_permission(manifest(
                 updater_activity(), launcher_proxy(), permission_block=block))
 
     def test_duplicate_and_conflicting_declarations_are_refused(self):
         duplicated = compiled_permission_element() + compiled_permission_element()
         with self.assertRaisesRegex(ValueError, "declared 2 times"):
-            validate_release.validate_updater_launcher(manifest(
+            validate_release.require_declared_signature_permission(manifest(
                 updater_activity(), launcher_proxy(), permission_block=duplicated))
         conflicting = (compiled_permission_element()
                        + compiled_permission_element(protection="(type 0x11)0x0"))
         with self.assertRaisesRegex(ValueError, "declared 2 times"):
-            validate_release.validate_updater_launcher(manifest(
+            validate_release.require_declared_signature_permission(manifest(
                 updater_activity(), launcher_proxy(), permission_block=conflicting))
 
     def test_a_permission_nested_inside_application_is_not_a_manifest_declaration(self):
         nested = compiled_permission_element(indent="      ")
         with self.assertRaisesRegex(ValueError, "declares no manifest-level"):
-            validate_release.validate_updater_launcher(manifest(
+            validate_release.require_declared_signature_permission(manifest(
                 updater_activity(), launcher_proxy(), nested, permission_block=None))
 
     def test_a_manifest_without_a_manifest_element_is_refused(self):
@@ -398,7 +395,7 @@ class ExactRoutePermissionTests(unittest.TestCase):
         for wrong in ("android.permission.INTERNET", SCREEN_PERMISSION + "X",
                       SCREEN_PERMISSION[:-1], None):
             with self.subTest(permission=wrong):
-                with self.assertRaisesRegex(ValueError, "signature permission"):
+                with self.assertRaisesRegex(ValueError, "non-exported"):
                     validate_release.validate_updater_launcher(manifest(
                         updater_activity(permission=wrong), launcher_proxy()))
 

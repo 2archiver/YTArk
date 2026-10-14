@@ -599,50 +599,26 @@ def validate_updater_background_components(tree: str) -> None:
 
 
 def validate_updater_launcher(tree: str) -> None:
-    """Require a protected native screen route and a separate public TV launcher proxy."""
-    application_blocks = _element_blocks(tree, "application")
-    if not application_blocks:
+    """3.1 uses a private JNI-opened screen, never a second launcher or public route."""
+    apps = _element_blocks(tree, "application")
+    if not apps:
         raise ValueError("Compiled Android manifest has no application element")
-    app = application_blocks[0]
-    screen_activity = None
-    launcher_activity = None
-    for activity in _element_blocks(app, "activity"):
-        name_line = _attribute_line(activity, "name") or ""
-        if UPDATER_ACTIVITY_NAME in name_line:
-            screen_activity = activity
-        elif UPDATER_LAUNCHER_ACTIVITY_NAME in name_line:
-            launcher_activity = activity
-
-    if screen_activity is None:
-        raise ValueError("Compiled manifest has no YTArk Updates activity")
-    if not _boolean_attribute_is_true(_attribute_line(screen_activity, "exported")):
-        raise ValueError("The YTArk Updates route activity must be explicitly android:exported=true")
-    if _quoted_attribute_value(_own_attribute_line(screen_activity, "permission")) != UPDATER_SCREEN_PERMISSION:
-        raise ValueError("The YTArk Updates route must require the app's signature permission")
-    require_declared_signature_permission(tree)
-    screen_filters = _element_blocks(screen_activity, "intent-filter")
-    has_screen_route = any("android.intent.action.VIEW" in intent_filter
-                           and "android.intent.category.DEFAULT" in intent_filter
-                           and "android.intent.category.BROWSABLE" in intent_filter
-                           and "android:scheme" in intent_filter and "ytark" in intent_filter
-                           and "android:host" in intent_filter and "updates" in intent_filter
-                           for intent_filter in screen_filters)
-    if not has_screen_route:
-        raise ValueError("The YTArk Updates activity has no bounded ytark://updates route")
-    if launcher_activity is None:
-        raise ValueError("The YTArk Updates launcher proxy is missing")
-    label_line = _attribute_line(launcher_activity, "label")
-    if not label_line or "YTArk Updates" not in label_line:
-        raise ValueError("The YTArk Updates launcher proxy must be labelled 'YTArk Updates'")
-    if not _boolean_attribute_is_true(_attribute_line(launcher_activity, "exported")):
-        raise ValueError("The YTArk Updates launcher proxy must be explicitly android:exported=true")
-    launcher_filters = _element_blocks(launcher_activity, "intent-filter")
-    has_launcher = any("android.intent.action.MAIN" in intent_filter
-                       and "android.intent.category.LEANBACK_LAUNCHER" in intent_filter
-                       for intent_filter in launcher_filters)
-    if not has_launcher:
-        raise ValueError("The YTArk Updates launcher proxy has no MAIN + LEANBACK_LAUNCHER entry")
-    print("Verified YTArk Updates route (signature-protected ACTION_VIEW) and separate public Leanback launcher proxy.")
+    activities = _element_blocks(apps[0], "activity")
+    screens = [a for a in activities if UPDATER_ACTIVITY_NAME in (_attribute_line(a, "name") or "")]
+    if len(screens) != 1:
+        raise ValueError("Expected exactly one YTArk Updates activity")
+    screen = screens[0]
+    exported = _own_attribute_line(screen, "exported") or ""
+    if not re.search(r'(?:\(type 0x12\)0x0|="false")', exported):
+        raise ValueError("YTArk Updates must be explicitly non-exported")
+    if _element_blocks(screen, "intent-filter"):
+        raise ValueError("Private Updates screen must have no external routes")
+    if UPDATER_LAUNCHER_ACTIVITY_NAME in tree:
+        raise ValueError("Obsolete updater launcher proxy is forbidden")
+    for block in activities + _element_blocks(apps[0], "activity-alias"):
+        if "ytark.updater" in (_attribute_line(block, "name") or "") and "LAUNCHER" in block:
+            raise ValueError("Updater-specific launcher entries are forbidden")
+    print("Verified private YTArk Updates screen; no updater launcher or exported route.")
 
 
 def validate_apk(path: str, architecture: str, expected_cert_file: str,
@@ -720,14 +696,9 @@ def validate_apk(path: str, architecture: str, expected_cert_file: str,
         dex_files = [name for name in names if re.fullmatch(r"classes\d*\.dex", name)]
         if not dex_files:
             raise ValueError("APK has no DEX files")
-        missing_updater_classes = [
-            descriptor.decode("ascii")
-            for descriptor in APK_DESCRIPTORS
-            if not any(descriptor in archive.read(name) for name in dex_files)
-        ]
-        if missing_updater_classes:
-            raise ValueError("Native updater classes are missing from APK DEX files: "
-                             + ", ".join(missing_updater_classes))
+        from dex_contract import verify_apk_dex
+        verify_apk_dex(apk)
+
 
     validate_compiled_manifest(apk, aapt)
     manifest = run([aapt, "dump", "xmltree", str(apk), "AndroidManifest.xml"])
@@ -737,11 +708,9 @@ def validate_apk(path: str, architecture: str, expected_cert_file: str,
         "io.github.twoarchiver.ytark.updater.UpdateActivity",
         "io.github.twoarchiver.ytark.updater.UpdateBootstrapProvider",
         "io.github.twoarchiver.ytark.updater.PendingUpdateProvider",
-        "io.github.twoarchiver.ytark.updater.UpdateActionReceiver",
         "io.github.twoarchiver.ytark.updater.UpdateCheckJobService",
         "android.permission.RECEIVE_BOOT_COMPLETED",
         "android.permission.REQUEST_INSTALL_PACKAGES",
-        "android.permission.POST_NOTIFICATIONS",
         "ytarkupdater.files",
         "android:grantUriPermissions",
         "/update.apk",
