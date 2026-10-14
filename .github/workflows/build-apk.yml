@@ -227,7 +227,7 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p work
-          python3 tools/repack_apk.py \
+          python3 -u tools/repack_apk.py \
             --base base/cobalt-arm.apk --architecture armv7 \
             --out "work/${APK_ARMV7%.apk}-unsigned.apk" \
             --updater-dex "$RUNNER_TEMP/ytark-updater/classes.dex" \

@@ -1,5 +1,6 @@
 """Minimal JNI-preserving host patch. All other upstream smali must round-trip unchanged."""
 from pathlib import Path
+import difflib
 import re
 
 METHOD = re.compile(r'^\.method protected installAppFromURL\(Ljava/lang/String;\)Z\n.*?^\.end method', re.M | re.S)
@@ -43,7 +44,8 @@ def verify_roundtrip(before, after):
             if len(METHOD.findall(b)) != 1 or 'NativeUpdatesBridge;->open' not in METHOD.findall(b)[0]:
                 raise ValueError('Final DEX lacks the JNI Updates screen bridge')
         if ''.join(a.split()) != ''.join(b.split()):
-            raise ValueError(f'Unexpected host DEX change after assembly: {relative}')
+            diff = '\n'.join(list(difflib.unified_diff(a.splitlines(), b.splitlines(), n=1))[:16])
+            raise ValueError(f'Unexpected host DEX change after assembly: {relative}\n{diff}')
         count += 1
     if count == 0:
         raise ValueError('No original host classes to verify')
