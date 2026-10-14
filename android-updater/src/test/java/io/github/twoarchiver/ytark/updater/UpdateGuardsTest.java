@@ -15,6 +15,10 @@ public final class UpdateGuardsTest {
                 "selected partial survives even with a different pending installer");
         assertFalse(UpdateGuards.isStaleUpdateFile("YTArk-v2.7.0-armv7.apk", "YTArk-v2.7.0-armv7.apk", CURRENT),
                 "pending installer also survives");
+        assertFalse(UpdateGuards.isStaleUpdateFile("YTArk-v2.6.0-armv7.apk.part",
+                "YTArk-v2.6.0-armv7.apk", "YTArk-v2.7.0-armv7.apk", "YTArk-v2.8.0-armv7.apk"),
+                "selected, pending, and active APK siblings all survive cleanup");
+        updateDirectoryAndFileSymlinksAreRejected();
         unrelatedFilesAreNeverTouched();
         cacheCleanupIsConfinedToExplicitRootsAndRetainsRecentOrUnknownFiles();
         minSdkGateUsesTheReleaseMinimum();
@@ -70,6 +74,39 @@ public final class UpdateGuardsTest {
             assertFalse(UpdateGuards.isStaleUpdateFile(name, CURRENT), "never delete " + name);
         }
         assertFalse(UpdateGuards.isStaleUpdateFile(null, CURRENT), "a null name is not stale");
+    }
+
+    private static void updateDirectoryAndFileSymlinksAreRejected() throws IOException {
+        java.nio.file.Path base = java.nio.file.Files.createTempDirectory("ytark-update-guards");
+        java.nio.file.Path files = java.nio.file.Files.createDirectories(base.resolve("files"));
+        java.nio.file.Path updates = java.nio.file.Files.createDirectories(files.resolve("ytark_updates"));
+        java.nio.file.Path outside = java.nio.file.Files.createDirectories(base.resolve("outside"));
+        java.nio.file.Path externalApk = java.nio.file.Files.createFile(outside.resolve(CURRENT));
+        java.nio.file.Path plainApk = java.nio.file.Files.createFile(updates.resolve(CURRENT));
+        assertTrue(UpdateGuards.isSafeUpdateDirectory(files.toFile(), updates.toFile()),
+                "the real updater directory is directly below files/");
+        assertTrue(UpdateGuards.isSafeUpdateFile(updates.toFile(), plainApk.toFile()),
+                "a regular update file is a safe direct child");
+        assertFalse(UpdateGuards.isSafeUpdateFile(updates.toFile(), externalApk.toFile()),
+                "an APK outside the updater directory is refused");
+        try {
+            java.nio.file.Path fileLink = updates.resolve("YTArk-v2.7.0-armv7.apk");
+            java.nio.file.Files.createSymbolicLink(fileLink, externalApk);
+            assertFalse(UpdateGuards.isSafeUpdateFile(updates.toFile(), fileLink.toFile()),
+                    "a file symlink to an external APK is refused");
+            java.nio.file.Path dirLink = files.resolve("ytark_updates_link");
+            java.nio.file.Files.createSymbolicLink(dirLink, outside);
+            assertFalse(UpdateGuards.isSafeUpdateDirectory(files.toFile(), dirLink.toFile()),
+                    "a directory symlink outside files/ is refused");
+        } catch (IOException | UnsupportedOperationException | SecurityException unsupported) {
+            // File and cache-root confinement tests still run when symlinks are disabled.
+        }
+        plainApk.toFile().delete();
+        externalApk.toFile().delete();
+        updates.toFile().delete();
+        outside.toFile().delete();
+        files.toFile().delete();
+        base.toFile().delete();
     }
 
     private static void cacheCleanupIsConfinedToExplicitRootsAndRetainsRecentOrUnknownFiles()

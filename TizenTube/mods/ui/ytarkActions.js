@@ -18,17 +18,34 @@ import {
   showRestoreLayoutConfirm, restoreYtSettingsLayout,
 } from './ytSettingsEditor.js';
 import { tx } from '../translations/text.js';
+import { currentTheme } from './theme.js';
 
-function openNativeRoute(host) {
-  const route = `ytark://${host}`;
+const NATIVE_SCREEN_ROUTES = new Set(['updates', 'storage']);
+
+function openNativeRoute(screen) {
+  const theme = currentTheme();
+  const route = NATIVE_SCREEN_ROUTES.has(screen) ? `ytark://${screen}?theme=${theme}` : '';
+  if (!route) {
+    showToast('YTArk', 'That native screen is not available through YTArk navigation.');
+    return false;
+  }
   try {
     if (typeof window === 'undefined' || !window.location) throw new Error('The Android route is unavailable.');
-    // These are explicit ACTION_VIEW routes declared by repack_apk.py; no
-    // invented JavaScript-to-Java bridge is assumed.
+    // Only the two YTArk-owned screen routes are emitted. The exported native
+    // Activities validate the exact scheme/host again; no package, component,
+    // file path, or command can be supplied by this userscript action.
+    const documentAtRequest = typeof document !== 'undefined' ? document : null;
+    if (documentAtRequest) {
+      setTimeout(() => {
+        if (documentAtRequest.visibilityState === 'visible') {
+          showToast('YTArk', `Android did not open ${screen}. Open YTArk Updates from the TV apps row, or retry from YTArk Settings.`);
+        }
+      }, 2200);
+    }
     window.location.href = route;
     return true;
   } catch (error) {
-    showToast('YTArk', `Could not open native YTArk controls. Open ${route} from the TV launcher or use YTArk Updates.`);
+    showToast('YTArk', `Could not open ${screen}. Open YTArk Updates from the TV apps row, or retry from YTArk Settings.`);
     console.warn('[YTArk] Could not open a native YTArk screen:', error);
     return false;
   }

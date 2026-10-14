@@ -2,7 +2,6 @@ package io.github.twoarchiver.ytark.updater;
 
 import android.app.Activity;
 import android.app.AlertDialog;
-import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.view.Gravity;
@@ -39,8 +38,26 @@ public final class StorageActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
+        android.content.Intent intent = getIntent();
+        if (intent != null && android.content.Intent.ACTION_VIEW.equals(intent.getAction())
+                && NativeRoutePolicy.isAllowedScreenRoute(intent.getDataString(), "storage")) {
+            YtarkUpdater.persistNativeTheme(this,
+                    NativeRoutePolicy.themeForRoute(intent.getDataString()));
+        }
         buildScreen();
         if (state != null) lastFocusId = state.getInt("ytark_storage_focus", 0);
+        boolean validRoute = intent != null
+                && android.content.Intent.ACTION_VIEW.equals(intent.getAction())
+                && NativeRoutePolicy.isAllowedScreenRoute(intent.getDataString(), "storage");
+        if (!validRoute) {
+            summary.setText("Cache measurement was not started.");
+            status.setText("This YTArk Storage link is not recognized. Open Cache & Storage from YTArk Settings.");
+            calculateButton.setEnabled(false);
+            clearCacheButton.setEnabled(false);
+            clearUpdatesButton.setEnabled(false);
+            backButton.requestFocus();
+            return;
+        }
         calculateCache();
     }
 
@@ -52,24 +69,26 @@ public final class StorageActivity extends Activity {
 
     private void buildScreen() {
         Window window = getWindow();
-        window.setStatusBarColor(Color.rgb(15, 18, 24));
-        window.setNavigationBarColor(Color.rgb(15, 18, 24));
+        String theme = YtarkUpdater.nativeTheme(this);
+        int backgroundColor = NativeThemePolicy.background(theme);
+        window.setStatusBarColor(backgroundColor);
+        window.setNavigationBarColor(backgroundColor);
         window.getDecorView().setSystemUiVisibility(0);
 
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
-        scroll.setBackgroundColor(Color.rgb(15, 18, 24));
+        scroll.setBackgroundColor(backgroundColor);
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         int pad = dp(48);
         content.setPadding(pad, dp(32), pad, dp(36));
 
-        TextView title = text(31, Color.WHITE);
+        TextView title = text(31, NativeThemePolicy.primaryText(theme));
         title.setText("YTArk Cache & Storage");
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         content.addView(title, new LinearLayout.LayoutParams(-1, dp(56)));
 
-        TextView explanation = text(16, Color.rgb(184, 194, 208));
+        TextView explanation = text(16, NativeThemePolicy.secondaryText(theme));
         explanation.setText("Measure and clear only Android's temporary app-cache directories. Login, cookies, profile data, settings, databases, downloads and installer files are outside this cleanup. Pause playback before clearing; files modified in the last 15 minutes are kept.");
         LinearLayout.LayoutParams explanationParams = wrap();
         explanationParams.topMargin = dp(8);
@@ -79,18 +98,18 @@ public final class StorageActivity extends Activity {
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(18), dp(16), dp(18), dp(16));
         GradientDrawable background = new GradientDrawable();
-        background.setColor(Color.rgb(29, 35, 45));
+        background.setColor(NativeThemePolicy.card(theme));
         background.setCornerRadius(dp(10));
-        background.setStroke(dp(1), Color.rgb(53, 62, 76));
+        background.setStroke(dp(1), NativeThemePolicy.divider(theme));
         card.setBackground(background);
-        summary = text(17, Color.WHITE);
+        summary = text(17, NativeThemePolicy.primaryText(theme));
         summary.setText("Cache size: measuring…");
         card.addView(summary, wrap());
         LinearLayout.LayoutParams cardParams = wrap();
         cardParams.topMargin = dp(20);
         content.addView(card, cardParams);
 
-        status = text(16, Color.rgb(218, 225, 235));
+        status = text(16, NativeThemePolicy.bodyText(theme));
         status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         status.setText("Calculating cache size off the UI thread…");
         LinearLayout.LayoutParams statusParams = wrap();

@@ -10,7 +10,7 @@ until a named device has recorded it. Nothing here is inferred from a previous
 release: evidence belongs to the exact APK whose sha256 is written below.
 
 Device: `__________` (model, Google TV / Android TV version, `ro.product.cpu.abilist`)
-Installed before: `__________` · Candidate/release: `YTArk-v2.8.0-armv7.apk` (planned; no candidate APK built in this worktree)
+Installed before: `__________` · Candidate/release: `YTArk-v2.9.1-armv7.apk` (planned; no candidate APK built in this worktree)
 APK sha256: `__________` · Signer SHA-256 matches `signing/YTArk-cert-sha256.txt`: [ ]
 
 | # | Check | Result |
@@ -24,8 +24,8 @@ APK sha256: `__________` · Signer SHA-256 matches `signing/YTArk-cert-sha256.tx
 | 7 | Remote keys: D-pad focus moves through Settings in order; Back returns | NOT RUN |
 | 8 | Settings → YTArk Updates: installed version, latest stable and status are shown; QR and official URL are legible and scan to the release page | NOT RUN |
 | 9 | Light and dark themes show the correct Premium wordmark (cosmetic only) | NOT RUN |
-| 10 | Select YTArk Settings → Updates → Open updater and check now; `ytark://updates` opens `UpdateActivity` without relying on a new JavaScript bridge | NOT RUN |
-| 11 | Update from published 2.7.0: effective retained preferences, account/session and YouTube data remain; the 2.8 What's new entry appears once and stays dismissed after dismissal | NOT RUN |
+| 10 | Select YTArk Settings → Updates → Open updater; the exact `ytark://updates` route reaches `UpdateActivity` in pinned Cobalt, with actionable failure if it does not | NOT RUN |
+| 11 | Update from published 2.8.0: effective retained preferences, account/session and YouTube data remain; the 2.9.1 What's new notice appears once and stays dismissed after dismissal | NOT RUN |
 | 12 | Fresh install: OLED Black, Hide channel watermark and Remove player dimming are on | NOT RUN |
 | 13 | Appearance → Theme: switching OLED Black ⇄ YouTube default works live, survives a restart and brings back saved custom colours | NOT RUN |
 | 14 | Appearance → Player: video brightness is the same with controls open and closed when Remove player dimming is on; captions, seek previews and dialogs stay readable | NOT RUN |
@@ -37,7 +37,7 @@ APK sha256: `__________` · Signer SHA-256 matches `signing/YTArk-cert-sha256.tx
 | 20 | The entry is **last** in the sidebar (below every YouTube entry) on a fresh guide load, after a route change, after a guide reload and after toggling Navigation → YTArk entry off/on | NOT RUN |
 | 21 | YTArk Settings and YouTube's own Settings are visibly distinguished (labels, grouping, headings); no heading or separator is an empty selectable row | NOT RUN |
 | 22 | **User Agent Profile**, **Fix UI**, **Presets** and **Undo Last Preset** are gone from the tree and from settings search; no search result links into a deleted route | NOT RUN |
-| 23 | Direct in-place upgrade from a real 2.7.0 install: every retained preference keeps its effective value, Google sign-in/session survives, and no uninstall/reinstall or app-data reset occurs | NOT RUN |
+| 23 | Direct in-place upgrade from a real 2.8.0 install: every retained preference keeps its effective value, Google sign-in/session survives, and no uninstall/reinstall or app-data reset occurs | NOT RUN |
 | 24 | OLED Black visibly blacks the supported backgrounds (Home/browse, sidebar, Search, Settings, dialogs) with text and icons readable, focused rows distinct, and no tint on video, thumbnails, artwork or captions | NOT RUN |
 | 25 | OLED Black survives route changes, reopening Settings and an app restart; turning it off restores the previous theme including any saved custom colours | NOT RUN |
 | 26 | About YTArk shows the **installed** version offline (no network), with YTArk version, YouTube version and Build details on separate lines, and never "Version unknown" on a release build | NOT RUN |
@@ -50,12 +50,16 @@ APK sha256: `__________` · Signer SHA-256 matches `signing/YTArk-cert-sha256.tx
 | 33 | Install Update with the permission **on** opens Android's installer for the verified APK; cancelling keeps the verified update ready without re-downloading | NOT RUN |
 | 34 | After a completed installation, the next launch or check reads the installed versionCode and reports the new version; the installer result code alone is never reported as success | NOT RUN |
 | 35 | Storage: the download is app-private (no storage permission prompt appears); a too-small free-space case is refused before transfer | NOT RUN |
-| 36 | Direct 2.7.0 → 2.8.0 update: install the signed candidate APK over the existing app; verify Android accepts the package/signer/version and preserves sign-in, app data and preferences | NOT RUN |
+| 36 | Direct 2.8.0 → 2.9.1 update: install the signed candidate APK over the existing app; verify Android accepts the package/signer/version and preserves sign-in, app data and preferences | NOT RUN |
 | 37 | Search settings: selecting Search focuses the real text field and the device's own keyboard appears where the device provides one; typing filters results; Clear empties the field; Back closes the keyboard first, then the panel, and focus returns to the row Search was opened from | NOT RUN |
 | 38 | Search settings without a system keyboard: the on-screen key grid types, the panel says the on-screen keys are in use, and nothing pretends a platform keyboard was requested | NOT RUN |
 | 39 | About YTArk at 720p, 1080p and 4K with TV display scaling: the header shows "About YTArk" and "YTArk <version>", no row overlaps or clips, Build details / Third-party notices and licences / Version history each open and scroll with the D-pad, and Back returns to About | NOT RUN |
 | 40 | YTArk Updates is the only route to the version history: no "What's new" row exists in the top-level YTArk Settings menu or on the YouTube Settings page's YTArk section; the post-update notice points to YTArk Updates | NOT RUN |
-| 41 | Changelog: every version row leads with one short line; 2.8 reads "2.8 — Safer storage, opt-in playback recovery and hourly updates" and 2.7 history remains visible; D-pad scrolling and Back work | NOT RUN |
+| 41 | Changelog: every version row leads with one short line; published 2.8 reads "2.8 — Safer storage, opt-in playback recovery and hourly updates" and the 2.9.1 candidate is separate; D-pad scrolling and Back work | NOT RUN |
+| 42 | Updates route round-trip: the settings action reaches the native Updates activity through the pinned Cobalt runtime; theme and back/focus are correct; failure remains actionable if Cobalt rejects the scheme | NOT RUN |
+| 43 | Storage route round-trip: the settings action reaches the native Storage activity only while playback is paused; active playback remains in YouTube; failure remains actionable | NOT RUN |
+| 44 | Theme handoff: OLED and YouTube choices both reach native Updates and Storage; switching themes changes the native palette on the next valid route; preference survives activity/process recreation | NOT RUN |
+| 45 | OLED at 720p, 1080p and 4K with display scaling: supported browse/settings surfaces are black and readable; focus contrast survives; video, artwork, thumbnails and captions keep their original colors; player scrim remains independently controlled | NOT RUN |
 
 Record the result of each row with the date, the device, the APK sha256 and a link
 to the evidence. Do not mark a row passed without that evidence, and do not reuse
@@ -66,11 +70,12 @@ Results can be passed to the recovery workflow as the optional
 static checks, and they never block publication.
 
 
-## YTArk 2.8 candidate features (physical-TV acceptance; all NOT RUN)
+## YTArk 2.9.1 candidate features (physical-TV acceptance; all NOT RUN)
 
-The candidate is not built or device-verified in this worktree. Use a signed
-`v2.8.0` ARMv7 APK built by the official pipeline; record its exact asset name,
-SHA-256, installed-before version and device before attempting these flows.
+The 2.9.1 candidate is not built or device-verified in this worktree. Use a signed
+`v2.9.1` ARMv7 APK built by the official pipeline; record its exact asset name,
+SHA-256, installed-before version and device before attempting these flows. The
+2.8.0 behavior below is inherited; test the 2.9.1 APK, not an older release.
 
 | # | Check | Expected | Result |
 |---|---|---|---|
@@ -91,3 +96,9 @@ SHA-256, installed-before version and device before attempting these flows.
 | 82 | Permission and installer | Settings opens only after explicit Install action; live unknown-app permission is checked; Android installer asks for confirmation; hand-off is not shown as installed | NOT RUN |
 | 83 | Install reconciliation | After confirming or cancelling Android's installer, the next resume/check reads the real installed version; cancellation remains recoverable without a false success | NOT RUN |
 | 84 | Startup animation row | Informational only; does not claim to remove Android splash or YouTube UI, and no initialization/injection/session restore/migration is skipped | NOT RUN |
+| 85 | Native route allowlist | Only the two exact screen actions and `theme=oled|youtube` are accepted; signature permission blocks callers not signed with YTArk; unknown path, extra parameter, malformed query, arbitrary component/package/path is rejected before work with an actionable result | NOT RUN |
+| 86 | Installer activity/process recreation | Return, cancellation and process recreation preserve the verified candidate and target version; PackageManager confirmation wins over installer result codes; retry remains explicit | NOT RUN |
+| 87 | Updater phase recovery | Force check, network, checksum, package/version/ABI/signer validation, permission denial and installer cancellation each retain the correct actionable phase after resume/recreation | NOT RUN |
+| 88 | Foreground/background cadence | Foreground resume runs only when due and coalesces with the scheduled check; disabled checks/downloads stay disabled; network loss/restart never starts duplicate transfers | NOT RUN |
+| 89 | Settings/search/focus matrix | Audit settings navigation, search, IME and DPAD focus at supported 720p/1080p/4K scaling; text entry, OK/Done, Back hierarchy and return focus remain usable | NOT RUN |
+| 90 | Updater cleanup path boundary | Pending and resumable APKs survive cleanup; symlink/path traversal and files outside the private updater root cannot be removed | NOT RUN |

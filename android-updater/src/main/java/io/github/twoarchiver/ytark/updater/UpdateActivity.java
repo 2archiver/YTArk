@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.content.ActivityNotFoundException;
 import android.content.Intent;
 import android.content.pm.PackageManager;
-import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.net.Uri;
 import android.os.Build;
@@ -89,6 +88,7 @@ public final class UpdateActivity extends Activity {
     protected void onCreate(Bundle state) {
         super.onCreate(state);
         live = new WeakReference<>(this);
+        persistRouteTheme(getIntent());
         buildScreen();
         if (state != null) {
             lastFocusId = state.getInt(STATE_FOCUS_ID, 0);
@@ -98,6 +98,10 @@ public final class UpdateActivity extends Activity {
         refreshScheduleSummary();
         updateAutomationButtons();
         updateNotificationButton();
+        if (!isAllowedEntryIntent(getIntent())) {
+            showInvalidRoute();
+            return;
+        }
         ReleaseInfo selected = YtarkUpdater.selectedRelease(this);
         if (selected != null && !YtarkUpdater.hasVerifiedPending(this)) {
             release = selected;
@@ -115,7 +119,8 @@ public final class UpdateActivity extends Activity {
             downloadRunning = true;
             setBusy(true, "A YTArk download is already running. Showing the persisted transfer progress.");
             progressHandler.post(progressRefresh);
-        } else if (state == null || YtarkUpdater.ACTION_UPDATE.equals(action)
+        } else if (state == null || Intent.ACTION_VIEW.equals(action)
+                || YtarkUpdater.ACTION_UPDATE.equals(action)
                 || YtarkUpdater.ACTION_CHECK.equals(action)) {
             checkForUpdates(YtarkUpdater.ACTION_UPDATE.equals(action));
         } else if (release != null) {
@@ -135,12 +140,55 @@ public final class UpdateActivity extends Activity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        if (persistRouteTheme(intent)) {
+            recreate();
+            return;
+        }
+        if (!isAllowedEntryIntent(intent)) {
+            showInvalidRoute();
+            return;
+        }
         String action = intent == null ? null : intent.getAction();
         if (YtarkUpdater.ACTION_INSTALL.equals(action)) {
             loadAndVerifyPendingUpdate();
-        } else {
-            checkForUpdates(YtarkUpdater.ACTION_UPDATE.equals(action));
+        } else if (YtarkUpdater.ACTION_UPDATE.equals(action)) {
+            checkForUpdates(true);
+        } else if (YtarkUpdater.ACTION_CHECK.equals(action) || Intent.ACTION_VIEW.equals(action)) {
+            checkForUpdates(false);
         }
+    }
+
+    private boolean persistRouteTheme(Intent intent) {
+        if (intent == null || !Intent.ACTION_VIEW.equals(intent.getAction())
+                || !NativeRoutePolicy.isAllowedScreenRoute(intent.getDataString(), "updates")) return false;
+        String theme = NativeRoutePolicy.themeForRoute(intent.getDataString());
+        return YtarkUpdater.persistNativeTheme(this, theme);
+    }
+
+    private boolean isAllowedEntryIntent(Intent intent) {
+        if (intent == null) return true;
+        String action = intent.getAction();
+        if (Intent.ACTION_VIEW.equals(action)) {
+            return NativeRoutePolicy.isAllowedScreenRoute(
+                    intent.getDataString(), "updates");
+        }
+        if (intent.getData() != null) return false;
+        return action == null || Intent.ACTION_MAIN.equals(action)
+                || YtarkUpdater.ACTION_CHECK.equals(action)
+                || YtarkUpdater.ACTION_UPDATE.equals(action)
+                || YtarkUpdater.ACTION_INSTALL.equals(action);
+    }
+
+    private void showInvalidRoute() {
+        setStatus("This YTArk Updates link is not recognized. Close it and open Updates from YTArk Settings or the TV apps row.");
+        Button[] controls = { checkButton, updateButton, installButton, cancelButton,
+                skipButton, laterButton, viewReleaseButton };
+        for (Button control : controls) {
+            if (control != null) control.setEnabled(false);
+        }
+        if (notificationButton != null) notificationButton.setEnabled(false);
+        if (automaticChecksButton != null) automaticChecksButton.setEnabled(false);
+        if (automaticDownloadsButton != null) automaticDownloadsButton.setEnabled(false);
     }
 
     @Override
@@ -184,35 +232,105 @@ public final class UpdateActivity extends Activity {
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (requestCode != REQUEST_PACKAGE_INSTALL) return;
-        // The installer's result code is never proof of an install: the installed
-        // version is read again below, and only that reading finishes the update.
+        // PackageInstaller's result is not proof of installation. onResume may
+        // already have reconciled and cleared the pending APK, so keep a durable
+        // target version code and always compare it with PackageManager too.
         installerOpen = false;
+        long targetVersionCode = InstallerResultPolicy.resolvedTargetVersionCode(
+                YtarkUpdater.installerTargetVersionCode(this),
+                YtarkUpdater.completedUpdateVersionCode(this));
         YtarkUpdater.recordInstallerResult(this, resultCode);
+        if (YtarkUpdater.clearPendingIfInstalled(this)
+                || YtarkUpdater.isInstalledVersionAtLeast(this, targetVersionCode)) {
+            finishConfirmedInstall(targetVersionCode);
+            return;
+        }
         YtarkUpdater.setUpdaterState(this, YtarkUpdater.STATE_INSTALLING,
                 "Android returned from the installer; the installed version is being checked.");
+        refreshScheduleSummary();
         setBusy(true, "Android returned from the installer. Checking the installed YTArk version…");
-        new Handler(Looper.getMainLooper()).postDelayed(() -> {
-            boolean installed = YtarkUpdater.clearPendingIfInstalled(this);
-            updateInstalledVersion();
-            refreshScheduleSummary();
-            if (installed) {
-                release = null;
-                verifiedApk = null;
-                setBusy(false, "Android confirms the YTArk update is installed. Your data and sign-in were kept by the in-place package update.");
-                renderButtons();
-                restoreFocus();
-            } else {
-                YtarkUpdater.setUpdaterState(this, YtarkUpdater.hasVerifiedPending(this)
-                        ? (YtarkUpdater.canRequestPackageInstalls(this) ? YtarkUpdater.STATE_READY_TO_INSTALL
-                        : YtarkUpdater.STATE_PERMISSION_NEEDED) : YtarkUpdater.STATE_FAILED,
-                        resultCode == RESULT_OK ? UpdateFailure.INSTALL_UNCONFIRMED.message()
-                                : "Installer closed without an install; current app and data are unchanged.");
-                setBusy(false, resultCode == RESULT_OK
-                        ? UpdateFailure.INSTALL_UNCONFIRMED.label() + ": " + UpdateFailure.INSTALL_UNCONFIRMED.message()
-                        : "The installer closed without an install. Your current YTArk app and data are unchanged.");
-                applyInstallGate(false);
+        reconcileInstallerResult(resultCode, targetVersionCode, 0);
+    }
+
+    private void reconcileInstallerResult(int resultCode, long targetVersionCode, int attempt) {
+        progressHandler.removeCallbacks(progressRefresh);
+        boolean packageConfirmed = YtarkUpdater.clearPendingIfInstalled(this)
+                || YtarkUpdater.isInstalledVersionAtLeast(this, targetVersionCode);
+        boolean verifiedPending = YtarkUpdater.hasVerifiedPending(this);
+        InstallerResultPolicy.Outcome outcome = InstallerResultPolicy.outcome(
+                packageConfirmed, verifiedPending, resultCode == RESULT_CANCELED);
+        if (outcome == InstallerResultPolicy.Outcome.CONFIRMED) {
+            finishConfirmedInstall(targetVersionCode);
+            return;
+        }
+        // A successful installer result can arrive just before PackageManager
+        // publishes the new package. Re-read it a few times; do not infer success
+        // from the result code or show a premature failure.
+        if (resultCode == RESULT_OK && attempt < 4) {
+            progressHandler.postDelayed(
+                    () -> reconcileInstallerResult(resultCode, targetVersionCode, attempt + 1),
+                    750L);
+            return;
+        }
+
+        YtarkUpdater.setHandoffInFlight(this, false);
+        YtarkUpdater.setInstallRequested(this, false);
+        YtarkUpdater.clearInstallerTargetVersionCode(this);
+        updateInstalledVersion();
+        if (outcome == InstallerResultPolicy.Outcome.CANCELLED_WITH_VERIFIED_APK
+                || outcome == InstallerResultPolicy.Outcome.UNCONFIRMED_WITH_VERIFIED_APK) {
+            ReleaseInfo pending = YtarkUpdater.pendingRelease(this);
+            if (pending != null) {
+                release = pending;
+                releaseNotesText.setText(pending.notes);
+                verifiedApk = YtarkUpdater.pendingApk(this);
             }
-        }, 700L);
+            if (outcome == InstallerResultPolicy.Outcome.CANCELLED_WITH_VERIFIED_APK) {
+                YtarkUpdater.setUpdaterState(this, YtarkUpdater.STATE_INSTALL_CANCELLED,
+                        "Android's installer was cancelled. The verified APK remains ready; nothing was installed.");
+                setBusy(false, "Installer cancelled. The verified update is still ready; press Install Update to retry.");
+            } else {
+                String message = UpdateFailure.INSTALL_UNCONFIRMED.message();
+                YtarkUpdater.setUpdaterFailure(this, message, UpdaterFailurePhasePolicy.INSTALL);
+                setBusy(false, UpdateFailure.INSTALL_UNCONFIRMED.label() + ": " + message
+                        + " The verified APK remains available for retry.");
+            }
+        } else {
+            String message = "The installer returned, but Android did not confirm the target version. "
+                    + "Check for Updates; the installed app has not been presumed replaced.";
+            YtarkUpdater.setUpdaterFailure(this, message, UpdaterFailurePhasePolicy.INSTALL);
+            setBusy(false, resultCode == RESULT_CANCELED
+                    ? "Installer cancelled; no verified pending APK is available. Check for Updates to retry."
+                    : message);
+        }
+        refreshScheduleSummary();
+        renderButtons();
+        installButton.requestFocus();
+    }
+
+    private void finishConfirmedInstall(long targetVersionCode) {
+        ReleaseInfo pending = YtarkUpdater.pendingRelease(this);
+        if (pending != null && InstallerResultPolicy.shouldClearPendingRelease(
+                pending.versionCode, targetVersionCode)) {
+            YtarkUpdater.clearPendingUpdate(this);
+        }
+        YtarkUpdater.clearInstallerTargetVersionCode(this);
+        YtarkUpdater.setHandoffInFlight(this, false);
+        YtarkUpdater.setInstallRequested(this, false);
+        YtarkUpdater.setUpdaterState(this, YtarkUpdater.STATE_UP_TO_DATE, "");
+        release = null;
+        verifiedApk = null;
+        permissionNeeded = false;
+        installerOpen = false;
+        updateInstalledVersion();
+        refreshScheduleSummary();
+        String installed = YtarkUpdater.installedVersionName(this);
+        setBusy(false, targetVersionCode > 0L
+                ? "Android confirms YTArk " + installed + " (versionCode at least "
+                        + targetVersionCode + ") is installed. YTArk did not clear app data or sign-in."
+                : "Android confirms the YTArk update is installed. YTArk did not clear app data or sign-in.");
+        renderButtons();
+        restoreFocus();
     }
 
     @Override
@@ -232,13 +350,14 @@ public final class UpdateActivity extends Activity {
 
     private void buildScreen() {
         Window window = getWindow();
-        window.setStatusBarColor(Color.rgb(15, 18, 24));
-        window.setNavigationBarColor(Color.rgb(15, 18, 24));
+        int backgroundColor = NativeThemePolicy.background(YtarkUpdater.nativeTheme(this));
+        window.setStatusBarColor(backgroundColor);
+        window.setNavigationBarColor(backgroundColor);
         window.getDecorView().setSystemUiVisibility(0);
 
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
-        scroll.setBackgroundColor(Color.rgb(15, 18, 24));
+        scroll.setBackgroundColor(backgroundColor);
         scroll.setFocusable(false);
         scroll.setFocusableInTouchMode(false);
 
@@ -249,7 +368,7 @@ public final class UpdateActivity extends Activity {
 
         TextView title = new TextView(this);
         title.setText(YtarkBranding.UPDATES_TITLE);
-        title.setTextColor(Color.WHITE);
+        title.setTextColor(NativeThemePolicy.primaryText(YtarkUpdater.nativeTheme(this)));
         title.setTextSize(31);
         title.setTypeface(null, android.graphics.Typeface.BOLD);
         title.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
@@ -258,15 +377,15 @@ public final class UpdateActivity extends Activity {
 
         TextView intro = new TextView(this);
         intro.setText("Check the official stable releases, verify downloads, and let Android confirm each install.");
-        intro.setTextColor(Color.rgb(184, 194, 208));
+        intro.setTextColor(NativeThemePolicy.secondaryText(YtarkUpdater.nativeTheme(this)));
         intro.setTextSize(17);
         LinearLayout.LayoutParams introParams = wrapParams();
         introParams.topMargin = dp(4);
         content.addView(intro, introParams);
 
         LinearLayout versionCard = card();
-        installedVersionText = bodyText(19, Color.WHITE);
-        scheduleText = bodyText(15, Color.rgb(183, 195, 211));
+        installedVersionText = bodyText(19, NativeThemePolicy.primaryText(YtarkUpdater.nativeTheme(this)));
+        scheduleText = bodyText(15, NativeThemePolicy.secondaryText(YtarkUpdater.nativeTheme(this)));
         versionCard.addView(installedVersionText, wrapParams());
         LinearLayout.LayoutParams scheduleParams = wrapParams();
         scheduleParams.topMargin = dp(8);
@@ -275,7 +394,7 @@ public final class UpdateActivity extends Activity {
         cardParams.topMargin = dp(20);
         content.addView(versionCard, cardParams);
 
-        statusText = bodyText(19, Color.WHITE);
+        statusText = bodyText(19, NativeThemePolicy.primaryText(YtarkUpdater.nativeTheme(this)));
         statusText.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         statusText.setText("Checking the official YTArk stable release…");
         LinearLayout.LayoutParams statusParams = wrapParams();
@@ -296,14 +415,14 @@ public final class UpdateActivity extends Activity {
         content.addView(notesHeading, headingParams);
 
         LinearLayout notesCard = card();
-        releaseNotesText = bodyText(16, Color.rgb(218, 225, 235));
+        releaseNotesText = bodyText(16, NativeThemePolicy.bodyText(YtarkUpdater.nativeTheme(this)));
         releaseNotesText.setText("No release is selected. Choose Check for Updates to load the published stable release notes.");
         notesCard.addView(releaseNotesText, wrapParams());
         LinearLayout.LayoutParams notesCardParams = wrapParams();
         notesCardParams.topMargin = dp(7);
         content.addView(notesCard, notesCardParams);
 
-        TextView safety = bodyText(14, Color.rgb(148, 160, 177));
+        TextView safety = bodyText(14, NativeThemePolicy.quietText(YtarkUpdater.nativeTheme(this)));
         safety.setText("Only published stable releases are considered. The updater matches this device's Android ABI, then verifies the SHA-256, package, version, minimum Android version and signing certificate before any install. Android's installer asks for your confirmation; YTArk does not install silently, uninstall, or clear app data. Installing an update needs the one-time \u201cInstall unknown apps\u201d permission for YTArk.");
         LinearLayout.LayoutParams safetyParams = wrapParams();
         safetyParams.topMargin = dp(14);
@@ -432,9 +551,9 @@ public final class UpdateActivity extends Activity {
         layout.setOrientation(LinearLayout.VERTICAL);
         layout.setPadding(dp(18), dp(16), dp(18), dp(16));
         GradientDrawable background = new GradientDrawable();
-        background.setColor(Color.rgb(29, 35, 45));
+        background.setColor(NativeThemePolicy.card(YtarkUpdater.nativeTheme(this)));
         background.setCornerRadius(dp(10));
-        background.setStroke(dp(1), Color.rgb(53, 62, 76));
+        background.setStroke(dp(1), NativeThemePolicy.divider(YtarkUpdater.nativeTheme(this)));
         layout.setBackground(background);
         return layout;
     }
@@ -450,7 +569,7 @@ public final class UpdateActivity extends Activity {
     }
 
     private TextView sectionHeading(String label) {
-        TextView heading = bodyText(18, Color.WHITE);
+        TextView heading = bodyText(18, NativeThemePolicy.primaryText(YtarkUpdater.nativeTheme(this)));
         heading.setText(label);
         heading.setTypeface(null, android.graphics.Typeface.BOLD);
         return heading;
@@ -920,6 +1039,7 @@ public final class UpdateActivity extends Activity {
         }
         // Persist the hand-off before the async work: a restart must not repeat it.
         YtarkUpdater.setInstallRequested(this, false);
+        YtarkUpdater.setInstallerTargetVersionCode(this, release.versionCode);
         YtarkUpdater.setHandoffInFlight(this, true);
         YtarkUpdater.setUpdaterState(this, YtarkUpdater.STATE_INSTALLING, "Android's package installer is being prepared; installation still requires Android confirmation.");
         permissionNeeded = false;
@@ -942,6 +1062,7 @@ public final class UpdateActivity extends Activity {
         handingOff = false;
         if (!YtarkUpdater.canRequestPackageInstalls(this)) {
             YtarkUpdater.setHandoffInFlight(this, false);
+            YtarkUpdater.clearInstallerTargetVersionCode(this);
             showPermissionNeeded();
             return;
         }
@@ -963,13 +1084,17 @@ public final class UpdateActivity extends Activity {
     private void installerUnavailable(UpdateFailure reason, String message) {
         handingOff = false;
         YtarkUpdater.setHandoffInFlight(this, false);
-        YtarkUpdater.setUpdaterState(this, YtarkUpdater.STATE_FAILED, message);
+        YtarkUpdater.setUpdaterFailure(this,
+                message == null || message.length() == 0 ? reason.message() : message,
+                UpdaterFailurePhasePolicy.installerFailurePhase(reason));
+        YtarkUpdater.clearInstallerTargetVersionCode(this);
         if (reason == UpdateFailure.VALIDATION_FAILED) {
             // The saved APK no longer passes the checks; discard it instead of retrying forever.
             YtarkUpdater.clearPendingUpdate(this);
             verifiedApk = null;
             release = null;
         }
+        refreshScheduleSummary();
         setBusy(false, reason.label() + ": " + (message == null || message.length() == 0
                 ? reason.message() : message));
         renderButtons();
@@ -1026,9 +1151,13 @@ public final class UpdateActivity extends Activity {
         String state = "Updater state: " + stateLabel(YtarkUpdater.updaterState(this));
         String outcome = YtarkUpdater.lastCheckStatus(this);
         String error = YtarkUpdater.updaterError(this);
+        String phase = YtarkUpdater.updaterErrorPhase(this);
+        String phaseText = YtarkUpdater.STATE_FAILED.equals(YtarkUpdater.updaterState(this))
+                && phase != null ? "Failure phase: " + UpdaterFailurePhasePolicy.label(phase) : "";
         scheduleText.setText(checkMode + "\n" + downloadMode + "\n" + lastText + "\n" + nextText
                 + "\n" + state
                 + (outcome.length() == 0 ? "" : "\n" + outcome)
+                + (phaseText.length() == 0 ? "" : "\n" + phaseText)
                 + (error.length() == 0 ? "" : "\n" + error));
     }
 
@@ -1041,6 +1170,7 @@ public final class UpdateActivity extends Activity {
         if (YtarkUpdater.STATE_PERMISSION_NEEDED.equals(state)) return "Permission needed";
         if (YtarkUpdater.STATE_READY_TO_INSTALL.equals(state)) return "Ready to install";
         if (YtarkUpdater.STATE_INSTALLING.equals(state)) return "Waiting for Android confirmation (not installed yet)";
+        if (YtarkUpdater.STATE_INSTALL_CANCELLED.equals(state)) return "Installer cancelled; update remains ready";
         if (YtarkUpdater.STATE_CANCELLED.equals(state)) return "Cancelled";
         if (YtarkUpdater.STATE_FAILED.equals(state)) return "Failed";
         return "Idle";

@@ -478,6 +478,8 @@ def patch_launcher_icon(decoded_dir: str) -> None:
 
 UPDATER_PACKAGE = "io.github.twoarchiver.ytark.updater"
 UPDATER_ACTIVITY = UPDATER_PACKAGE + ".UpdateActivity"
+UPDATER_LAUNCHER_ACTIVITY = UPDATER_PACKAGE + ".UpdateLauncherActivity"
+UPDATER_SCREEN_PERMISSION_SUFFIX = ".permission.OPEN_NATIVE_SCREEN"
 UPDATER_STORAGE_ACTIVITY = UPDATER_PACKAGE + ".StorageActivity"
 UPDATER_PROVIDER = UPDATER_PACKAGE + ".UpdateBootstrapProvider"
 UPDATE_FILE_PROVIDER = UPDATER_PACKAGE + ".PendingUpdateProvider"
@@ -493,10 +495,12 @@ def patch_updater_manifest(decoded_dir: str, app_id: str) -> None:
 
     if not re.search(r"xmlns:android\s*=", xml):
         raise SystemExit("ERROR: decoded manifest has no android namespace.")
-    if (UPDATER_PROVIDER in xml or UPDATER_ACTIVITY in xml or UPDATER_STORAGE_ACTIVITY in xml
-            or UPDATER_RECEIVER in xml or UPDATER_JOB_SERVICE in xml or UPDATE_FILE_PROVIDER in xml):
+    if (UPDATER_PROVIDER in xml or UPDATER_ACTIVITY in xml or UPDATER_LAUNCHER_ACTIVITY in xml
+            or UPDATER_STORAGE_ACTIVITY in xml or UPDATER_RECEIVER in xml
+            or UPDATER_JOB_SERVICE in xml or UPDATE_FILE_PROVIDER in xml):
         raise SystemExit("ERROR: native YTArk updater components already exist in the manifest.")
 
+    screen_permission = app_id + UPDATER_SCREEN_PERMISSION_SUFFIX
     permissions = (
         "android.permission.INTERNET",
         "android.permission.POST_NOTIFICATIONS",
@@ -504,6 +508,15 @@ def patch_updater_manifest(decoded_dir: str, app_id: str) -> None:
         "android.permission.RECEIVE_BOOT_COMPLETED",
     )
     permission_xml = ""
+    declared_permission = re.compile(
+        r'<permission\b[^>]*android:name=["\']' + re.escape(screen_permission) + r'["\']')
+    requested_permission = re.compile(
+        r'<uses-permission\b[^>]*android:name=["\']' + re.escape(screen_permission) + r'["\']')
+    if not declared_permission.search(xml):
+        permission_xml += (f'    <permission android:name="{screen_permission}" '
+                           'android:protectionLevel="signature" />\n')
+    if not requested_permission.search(xml):
+        permission_xml += f'    <uses-permission android:name="{screen_permission}" />\n'
     for permission in permissions:
         if permission not in xml:
             permission_xml += f'    <uses-permission android:name="{permission}" />\n'
@@ -517,15 +530,12 @@ def patch_updater_manifest(decoded_dir: str, app_id: str) -> None:
     <activity
         android:name="{UPDATER_ACTIVITY}"
         android:label="YTArk Updates"
+        android:permission="{screen_permission}"
         android:theme="@android:style/Theme.Material.NoActionBar"
         android:screenOrientation="landscape"
         android:excludeFromRecents="true"
         android:launchMode="singleTop"
         android:exported="true">
-      <intent-filter>
-        <action android:name="android.intent.action.MAIN" />
-        <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
-      </intent-filter>
       <intent-filter>
         <action android:name="android.intent.action.VIEW" />
         <category android:name="android.intent.category.DEFAULT" />
@@ -534,8 +544,23 @@ def patch_updater_manifest(decoded_dir: str, app_id: str) -> None:
       </intent-filter>
     </activity>
     <activity
+        android:name="{UPDATER_LAUNCHER_ACTIVITY}"
+        android:label="YTArk Updates"
+        android:icon="@mipmap/ytark_launcher"
+        android:banner="@drawable/ytark_banner"
+        android:theme="@android:style/Theme.NoDisplay"
+        android:screenOrientation="landscape"
+        android:excludeFromRecents="true"
+        android:exported="true">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+      </intent-filter>
+    </activity>
+    <activity
         android:name="{UPDATER_STORAGE_ACTIVITY}"
         android:label="YTArk Cache &amp; Storage"
+        android:permission="{screen_permission}"
         android:theme="@android:style/Theme.Material.NoActionBar"
         android:screenOrientation="landscape"
         android:excludeFromRecents="true"
@@ -885,6 +910,11 @@ def self_test() -> None:
         ('android:banner="@drawable/ytark_banner"' in patched_updater_manifest,
          "Android TV launcher banner changed to YTArk"),
         (UPDATER_ACTIVITY in patched_updater_manifest, "native update activity declared"),
+        (UPDATER_LAUNCHER_ACTIVITY in patched_updater_manifest,
+         "public TV-launcher proxy declared separately"),
+        (UPDATER_SCREEN_PERMISSION_SUFFIX in patched_updater_manifest
+         and 'android:protectionLevel="signature"' in patched_updater_manifest,
+         "native screen routes require the app-signature permission"),
         (UPDATER_PROVIDER in patched_updater_manifest, "startup provider declared"),
         (UPDATE_FILE_PROVIDER in patched_updater_manifest, "read-only update-file provider declared"),
         ("io.github.twoarchiver.ytark.ytarkupdater.files" in patched_updater_manifest,
@@ -1000,8 +1030,8 @@ def main():
     ap.add_argument("--app-id", default="io.github.twoarchiver.ytark")
     ap.add_argument("--script-url", required=False,
                     help="replacement userscript URL, must end with '?v='")
-    ap.add_argument("--version-code", type=int, default=2080000)
-    ap.add_argument("--version-name", default="2.8.0")
+    ap.add_argument("--version-code", type=int, default=2090100)
+    ap.add_argument("--version-name", default="2.9.1")
     ap.add_argument("--apktool", default="apktool",
                     help="apktool command, e.g. 'java -jar apktool.jar'")
     ap.add_argument("--zipalign", default="zipalign")

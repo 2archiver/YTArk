@@ -1,4 +1,6 @@
-# YTArk 2.9 settings patch — review and validation
+# YTArk 2.9 settings patch — historical review
+
+> Historical record for the unpublished 2.9.0 / s28 draft. Superseded by [`SETTINGS-2.9.1-REVIEW.md`](SETTINGS-2.9.1-REVIEW.md); the test counts, branch name and blocker notes below are not evidence for the 2.9.1 candidate.
 
 ## Scope and release status
 
