@@ -58,6 +58,27 @@ def official_asset_url(tag: str, name: str, url: str) -> str:
     return expected
 
 
+def release_app_id(body: str) -> str:
+    """Read both historical table metadata and the current renderer's comment.
+
+    The published 2.9 notes use the compact Package comment. Requiring the
+    older table prevented 3.0's static prior-package checks from even starting.
+    This is only release metadata: the downloaded APK's actual package and
+    permanent signing certificate are still checked independently below.
+    """
+    declared = re.findall(
+        r"(?:App ID|Android package)\s*(?:\||:)\s*`([^`]+)`", body, re.I
+    )
+    declared += re.findall(
+        r"<!--\s*Package\s+([A-Za-z0-9_.]+)\s*;[^<>]*-->", body
+    )
+    if not declared:
+        raise ValueError("The previous release is missing its app ID metadata")
+    if len(set(declared)) != 1:
+        raise ValueError("The previous release has conflicting app ID metadata")
+    return declared[0]
+
+
 def native_abi_from_apk(apk: Path, architecture: str) -> None:
     expected_abi = ARCHITECTURES[architecture]["abi"]
     expected_library = f"lib/{expected_abi}/libchrobalt.so"
@@ -95,10 +116,7 @@ def main() -> None:
 
         config = validate_release.load_config()
         body = latest.get("body", "") or ""
-        app_match = re.search(r"(?:App ID|Android package)\s*(?:\||:)\s*`([^`]+)`", body, re.I)
-        if not app_match:
-            raise ValueError("The previous release is missing its app ID metadata")
-        if app_match.group(1) != validate_release.APP_ID:
+        if release_app_id(body) != validate_release.APP_ID:
             write_ineligible(args.output, architecture, "The previous stable release uses another package ID; update validation is not applicable.")
             return
 
