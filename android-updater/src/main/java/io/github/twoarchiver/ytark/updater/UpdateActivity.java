@@ -62,17 +62,6 @@ public final class UpdateActivity extends Activity {
     private Button notificationButton;
     private Button automaticChecksButton;
     private Button automaticDownloadsButton;
-    /**
-     * Opens Cache & Storage from this screen.
-     *
-     * The in-page rows in the userscript can only assign a {@code ytark://} URL,
-     * and the pinned Cobalt base cancels such a navigation silently: its content
-     * browser client does not override HandleExternalProtocol, so no Android
-     * intent is ever built (see docs/SETTINGS-2.9-RECOVERY-REVIEW.md). The
-     * launcher entry reaches this screen, so this button is the route users can
-     * actually rely on for Cache & Storage.
-     */
-    private Button storageButton;
     private final Handler progressHandler = new Handler(Looper.getMainLooper());
     private final Runnable progressRefresh = new Runnable() {
         @Override public void run() { refreshBackgroundDownload(); }
@@ -437,7 +426,6 @@ public final class UpdateActivity extends Activity {
         automaticChecksButton = createButton("Automatic Checks: On");
         automaticDownloadsButton = createButton("Automatic Downloads: On");
         notificationButton = createButton("Enable Update Notifications");
-        storageButton = createButton("Cache & Storage");
         updateButton.setVisibility(View.GONE);
         installButton.setEnabled(false);
         cancelButton.setVisibility(View.GONE);
@@ -453,7 +441,6 @@ public final class UpdateActivity extends Activity {
         content.addView(viewReleaseButton, buttonLayout());
         content.addView(laterButton, buttonLayout());
         content.addView(notificationButton, buttonLayout());
-        content.addView(storageButton, buttonLayout());
 
         checkButton.setOnClickListener(view -> checkForUpdates(false));
         automaticChecksButton.setOnClickListener(view -> {
@@ -490,14 +477,13 @@ public final class UpdateActivity extends Activity {
             finish();
         });
         notificationButton.setOnClickListener(view -> requestNotificationPermission());
-        storageButton.setOnClickListener(view -> openStorageScreen());
 
         View.OnFocusChangeListener remember = (view, hasFocus) -> {
             if (hasFocus) lastFocusId = view.getId();
         };
         Button[] focusable = { checkButton, automaticChecksButton, automaticDownloadsButton,
                 updateButton, installButton, cancelButton, skipButton, viewReleaseButton,
-                laterButton, notificationButton, storageButton };
+                laterButton, notificationButton };
         for (int i = 0; i < focusable.length; i++) {
             focusable[i].setId(0x00a20000 + i);
             focusable[i].setOnFocusChangeListener(remember);
@@ -508,23 +494,12 @@ public final class UpdateActivity extends Activity {
         checkButton.requestFocus();
     }
 
-    /** Opens the Cache & Storage screen from the launcher-reachable Updates screen. */
-    private void openStorageScreen() {
-        try {
-            Intent openStorage = new Intent(this, StorageActivity.class);
-            openStorage.setAction(Intent.ACTION_MAIN);
-            startActivity(openStorage);
-        } catch (RuntimeException unavailable) {
-            setStatus("Cache & Storage could not be opened on this device.");
-        }
-    }
-
     /** Puts D-pad focus back on the control the user was using, or on the primary action. */
     private void restoreFocus() {
         Button preferred = null;
         for (Button button : new Button[] { checkButton, automaticChecksButton, automaticDownloadsButton,
                 updateButton, installButton, cancelButton, skipButton, viewReleaseButton, laterButton,
-                notificationButton, storageButton }) {
+                notificationButton }) {
             if (button.getId() == lastFocusId && button.getVisibility() == View.VISIBLE && button.isEnabled()) {
                 preferred = button;
                 break;

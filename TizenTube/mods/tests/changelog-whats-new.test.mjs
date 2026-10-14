@@ -82,7 +82,7 @@ describe('in-app reader', () => {
     assert.equal(versionRows[3], reader.headlineFor(find('2.7.0')));
     assert.equal(versionRows[4], reader.headlineFor(find('2.6.0')));
     assert.equal(versionRows.at(-1), reader.headlineFor(find('2.0.2-personal.14')));
-    assert.equal(versionRows[0], '3.0 — One real in-app YTArk Updates page, and three features that could not work are removed');
+    assert.equal(versionRows[0], '3.0 — Removed settings search, Cache & Storage and OLED Black; repaired the 3.0 Android build');
     assert.equal(versionRows[1], '2.9 — Repaired ARMv7 release build, safer update installation, and settings and OLED fixes');
     assert.equal(versionRows[2], '2.8 — Safer storage, opt-in playback recovery and hourly updates');
     assert.equal(versionRows[3], '2.7 — TV keyboard search, a readable About dialog and a simpler changelog');
@@ -126,9 +126,9 @@ describe('in-app reader', () => {
       .map(messageText).join('\n');
     // The reader paginates long sections ("Added (continued)"), so assert the
     // content is present rather than which page a bullet happens to land on.
-    assert.match(current, /Added\b/);
-    assert.match(current, /In-app YTArk Updates page/);
-    assert.match(current, /Faster startup \(Experimental\)/);
+    assert.match(current, /Removed\b/);
+    assert.match(current, /Updates-screen button/);
+    assert.match(current, /remain unfinished/);
     assert.match(current, /Known limitations/);
   });
 

@@ -78,9 +78,18 @@ class UpdaterTestListTests(unittest.TestCase):
 
 
 class RunnerWiringTests(unittest.TestCase):
-    def test_ci_workflow_uses_the_shared_runner(self):
+    def test_ci_workflow_uses_the_full_release_build(self):
         text = CI_WORKFLOW.read_text(encoding="utf-8")
-        self.assertIn("tools/test_android_updater.sh", text)
+        self.assertIn('bash tools/build_android_updater.sh "$RUNNER_TEMP/ytark-updater/classes.dex"', text)
+        self.assertIn('test -s "$RUNNER_TEMP/ytark-updater/classes.dex"', text)
+        self.assertIn('java-version: "17"', text)
+        self.assertIn('API_LEVEL: "34"', text)
+        self.assertIn('BUILD_TOOLS: "34.0.0"', text)
+        self.assertIn('sdkmanager "platforms;android-${API_LEVEL}" "build-tools;${BUILD_TOOLS}"', text)
+        self.assertNotIn('bash tools/test_android_updater.sh', text,
+                         "CI must reach policy tests through the full build, not duplicate them")
+        self.assertNotIn('continue-on-error', text)
+        self.assertNotIn('|| true', text)
         self.assertNotRegex(
             text, r"javac\s+--release\s+8",
             "ci.yml must not carry its own javac command with a second class list",
@@ -91,6 +100,14 @@ class RunnerWiringTests(unittest.TestCase):
         self.assertIn("tools/test_android_updater.sh", text)
         self.assertNotIn("for test_class in", text,
                          "the DEX build must not repeat the updater test class list")
+
+    def test_dex_build_compiles_all_production_sources_and_checks_output(self):
+        text = DEX_BUILD.read_text(encoding="utf-8")
+        self.assertIn("find \"$SOURCE\" -type f -name '*.java' -print", text)
+        self.assertIn('javac --release 8 -classpath "$PLATFORM"', text)
+        self.assertIn('"$D8" --release --min-api 24 --lib "$PLATFORM"', text)
+        self.assertIn('[ -s "$WORK/dex/classes.dex" ]', text)
+        self.assertIn('set -euo pipefail', text)
 
     @unittest.skipUnless(shutil.which("javac") and shutil.which("java"),
                          "no host JDK: ci.yml compiles and runs these policy tests")
@@ -103,6 +120,29 @@ class RunnerWiringTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertIn("NativeThemePolicy tests passed", result.stdout)
             self.assertIn("InstallerResultPolicy tests passed", result.stdout)
+
+
+class UpdateScreenRemovalTests(unittest.TestCase):
+    def test_no_production_java_reference_to_the_removed_storage_screen(self):
+        for path in MAIN_DIR.rglob("*.java"):
+            text = path.read_text(encoding="utf-8")
+            for retired in ("StorageActivity", "openStorageScreen", "storageButton",
+                            "YTARK_NATIVE_STORAGE_OPEN"):
+                self.assertNotIn(retired, text, str(path))
+
+    def test_focus_lists_match_the_remaining_created_and_inserted_controls(self):
+        text = (MAIN_DIR / "UpdateActivity.java").read_text(encoding="utf-8")
+        created = re.findall(r"(\w+Button) = createButton\(", text)
+        inserted = re.findall(r"content.addView\((\w+Button), buttonLayout\(\)\)", text)
+        focusable = re.search(r"Button\[\] focusable = \{(.*?)\};", text, re.S).group(1)
+        restored = re.search(r"for \(Button button : new Button\[\] \{(.*?)\}\)", text, re.S).group(1)
+        focus_names = re.findall(r"\w+Button", focusable)
+        self.assertEqual(focus_names, inserted, "focus IDs retain visual order")
+        self.assertEqual(re.findall(r"\w+Button", restored), focus_names)
+        self.assertEqual(set(focus_names), set(created))
+        self.assertEqual(len(focus_names), len(set(focus_names)))
+        self.assertIn("if (preferred == null) preferred = checkButton;", text)
+        self.assertIn("if (installButton.isEnabled()) preferred = installButton;", text)
 
 
 class RepackDefaultsTests(unittest.TestCase):

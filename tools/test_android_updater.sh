@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Compile and run the Android-free updater policy tests on the host JRE.
 #
-# This is the only copy of the updater test list: ci.yml and
-# tools/build_android_updater.sh both call this script instead of repeating a
+# This is the only copy of the updater test list: CI and release both reach
+# this script through tools/build_android_updater.sh instead of repeating a
 # javac/java command with its own list of classes. A duplicated list is exactly
 # what stopped the 2.9 release (a stale copy of the bundle contract), so the
 # updater keeps one. tools/tests/test_android_updater_tests.py fails when a test

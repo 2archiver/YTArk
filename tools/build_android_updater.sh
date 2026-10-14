@@ -20,12 +20,11 @@ CERT_SHA256="$(grep -v '^[[:space:]]*#' "$CERT_FILE" | tr -d '[:space:]:' | tr '
 [[ "$CERT_SHA256" =~ ^[0-9a-f]{64}$ ]] || { echo "Invalid signing certificate SHA-256 fingerprint" >&2; exit 1; }
 
 SOURCE="$ROOT/android-updater/src/main/java"
-TEST_SOURCE_DIR="$ROOT/android-updater/src/test/java/io/github/twoarchiver/ytark/updater"
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/ytark-updater.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
 # Run the shared host-JRE policy tests before compiling the DEX. The same script
-# is what ci.yml runs, so the policy/test list exists once.
+# is also reached by ci.yml through this full build, so the policy/test list exists once.
 bash "$ROOT/tools/test_android_updater.sh" "$WORK/test-classes"
 
 mkdir -p "$WORK/generated/io/github/twoarchiver/ytark/updater" \
@@ -41,6 +40,8 @@ javac --release 8 -classpath "$PLATFORM" \
 jar --create --file "$WORK/ytark-updater.jar" -C "$WORK/classes" .
 "$D8" --release --min-api 24 --lib "$PLATFORM" \
   --output "$WORK/dex" "$WORK/ytark-updater.jar"
+
+[ -s "$WORK/dex/classes.dex" ] || { echo "D8 produced no nonempty classes.dex" >&2; exit 1; }
 
 mkdir -p "$(dirname "$OUT")"
 cp "$WORK/dex/classes.dex" "$OUT"
