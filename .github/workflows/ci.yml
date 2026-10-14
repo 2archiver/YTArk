@@ -71,51 +71,12 @@ jobs:
           node --test tests/*.test.mjs
           npm run build
           node --check ../dist/userScript.js
-          grep -q "YouTube Premium" ../dist/userScript.js
-          # 2.3-2.9 features and the bundled changelog must be in the artefact.
-          for needle in ytark-theme-oled ytark-no-player-scrim featuredChannel YTARK_SEARCH_OPEN \
-              YTARK_YTS_RESTORE_CONFIRM YTARK_CHANGELOG_SHOW v2.0.2-personal.14 configSchemaVersion \
-              enableYtarkGuideEntry recheck-arch "Could not confirm this device" \
-              YTARK_GUIDE_SETTINGS_OPEN YTARK_VERSION_REREAD apkAsset \
-              ytark-user-agent-retired ytLrOverlayPanelRendererContent "Newer than the latest stable release" \
-              virtualKeyboard data-ytark-keyboard about.buildInfo about.notices \
-              "Third-party notices and licences" "Added Full Auto Updating" \
-              enablePlaybackRecovery YTARK_NATIVE_STORAGE_OPEN YTARK_NATIVE_UPDATES_OPEN \
-              "Automatic playback recovery" "Cache & Storage" "Android's system splash"; do
-            grep -q "$needle" ../dist/userScript.js || { echo "Bundle is missing $needle" >&2; exit 1; }
-          done
-          # The 2.5 removals must not survive as live code. Two files name the
-          # retired things on purpose and are excluded from the source grep:
-          # the bundled changelog narrates the removal, and config.js lists the
-          # retired keys so the one-shot migration can delete them. In the
-          # artefact only identifiers the history never mentions are checked.
-          for retired in quickControls RESET_USER_AGENT_PROFILE DEVICE_PROFILES; do
-            if grep -q "$retired" ../dist/userScript.js; then
-              echo "The generated userscript still carries the removed $retired" >&2
-              exit 1
-            fi
-          done
-          test ! -e features/userAgentSpoofing.js
-          test ! -e features/tvControls.js
-          for retired in "YTArk Quick Controls" TV_APPLY_PRESET TV_UNDO_PRESET TV_SET_QUALITY \
-              enableFixedUI app-quality-root tvLastPresetSnapshot tvQuickQuality; do
-            if grep -rqF --include='*.js' --exclude-dir=tests --exclude-dir=assets \
-                --exclude=config.js --exclude=userAgentRetirement.js "$retired" .; then
-              echo "Removed in 2.5 but still in the shipped sources: $retired" >&2
-              exit 1
-            fi
-          done
-          # The bundled wordmark is real vector geometry: no <text> node, no
-          # <image>, no external href to an image host, and no runtime fetch.
-          if grep -Eqi '<text|<image|href="http|url\(https?:' ../dist/userScript.js; then
-            echo "The generated userscript must not carry text/raster/external logo content" >&2
-            exit 1
-          fi
-          grep -q "ytark-premium-ink" ../dist/userScript.js
-          if grep -Eqi 'Personal[[:space:]]+Tube[[:space:]]+TV' ../dist/userScript.js; then
-            echo "Deprecated product branding found in generated userscript" >&2
-            exit 1
-          fi
+          # The contract is the single source of truth for the required bundle
+          # symbols, the 2.5/2.9 retirements, the retired files, the vector-only
+          # wordmark rule and the product branding. build-apk.yml and the
+          # userscript tests read the same file, so a feature cannot be retired
+          # in one place and still be required in another.
+          python3 ../tools/check_bundle_contract.py
 
       - name: Validate Python, shell, icon/manifest patcher self-tests and release metadata
         run: |
@@ -128,12 +89,12 @@ jobs:
           python3 tools/check_no_secrets.py --history
           python3 tools/check_workflow_policy.py
           python3 tools/validate_release.py emit-env --file "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'VERSION_NAME=2.9.1' "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'DISPLAY_VERSION=2.9.1' "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'VERSION_CODE=2090100' "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'VERSION_TAG=v2.9.1' "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'SCRIPT_TAG=s29' "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'APK_ARMV7=YTArk-v2.9.1-armv7.apk' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'VERSION_NAME=2.9.0' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'DISPLAY_VERSION=2.9' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'VERSION_CODE=2090000' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'VERSION_TAG=v2.9.0' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'SCRIPT_TAG=s28' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'APK_ARMV7=YTArk-v2.9.0-armv7.apk' "$RUNNER_TEMP/ytark-release.env"
           # ARMv7 is the only published architecture; an ARM64 asset name must
           # not exist anywhere in the release environment or the active pipeline.
           if grep -q 'ARM64' "$RUNNER_TEMP/ytark-release.env"; then
@@ -174,30 +135,10 @@ jobs:
           # published release as a no-op.
           python3 tools/publish_release.py self-check
 
-      - name: Test native updater ABI, routes, install recovery, failure phases and storage contracts
+      - name: Test native updater ABI, routes, themes, install recovery, failure phases and storage contracts
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/ytark-version-tests"
-          UPDATER=android-updater/src/main/java/io/github/twoarchiver/ytark/updater
-          TESTS=android-updater/src/test/java/io/github/twoarchiver/ytark/updater
-          javac --release 8 -d "$RUNNER_TEMP/ytark-version-tests" \
-            "$UPDATER/NativeAbiContract.java" \
-            "$UPDATER/UpdateResumeContract.java" \
-            "$UPDATER/UpdateVersion.java" \
-            "$UPDATER/UpdateReleaseContract.java" \
-            "$UPDATER/UpdateSchedulePolicy.java" \
-            "$UPDATER/YtarkBranding.java" \
-            "$UPDATER/InstallGate.java" \
-            "$UPDATER/UpdateGuards.java" \
-            "$UPDATER/UpdateFailure.java" \
-            "$UPDATER/UpdateFailureException.java" \
-            "$UPDATER/NativeRoutePolicy.java" \
-            "$UPDATER/UpdateRedirectPolicy.java" \
-            "$UPDATER/UpdaterFailurePhasePolicy.java" \
-            "$UPDATER/InstallerResultPolicy.java" \
-            "$TESTS"/*Test.java
-          for test_class in UpdateVersionTest UpdateReleaseContractTest UpdateSchedulePolicyTest \
-              YtarkBrandingTest InstallGateTest UpdateGuardsTest NativeRoutePolicyTest \
-              UpdateRedirectPolicyTest UpdaterFailurePhasePolicyTest InstallerResultPolicyTest; do
-            java -cp "$RUNNER_TEMP/ytark-version-tests" "io.github.twoarchiver.ytark.updater.$test_class"
-          done
+          # One list of policy sources and test classes lives in the script, and
+          # tools/build_android_updater.sh runs the same host tests before it
+          # compiles the DEX, so the two cannot drift apart.
+          bash tools/test_android_updater.sh "$RUNNER_TEMP/ytark-version-tests"

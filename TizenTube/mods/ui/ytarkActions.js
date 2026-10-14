@@ -22,6 +22,26 @@ import { currentTheme } from './theme.js';
 
 const NATIVE_SCREEN_ROUTES = new Set(['updates', 'storage']);
 
+/**
+ * How the user reaches each native screen without an in-page route.
+ *
+ * Verified against the pinned TizenTubeCobalt v2.0.2 source: the base does not
+ * override ContentBrowserClient::HandleExternalProtocol, so a navigation to
+ * `ytark://...` is cancelled silently by content's default implementation and
+ * no Android intent is ever built — the page simply stays visible. The launcher
+ * entry (UpdateLauncherActivity) opens Updates, and that screen offers Cache &
+ * Storage. See docs/SETTINGS-2.9-RECOVERY-REVIEW.md.
+ */
+const NATIVE_SCREEN_FALLBACK = {
+  updates: 'Open YTArk Updates in the TV apps row.',
+  storage: 'Open YTArk Updates in the TV apps row, then choose Cache & Storage.',
+};
+
+function nativeFallback(screen) {
+  return NATIVE_SCREEN_FALLBACK[screen]
+    || `Open YTArk Updates in the TV apps row.`;
+}
+
 function openNativeRoute(screen) {
   const theme = currentTheme();
   const route = NATIVE_SCREEN_ROUTES.has(screen) ? `ytark://${screen}?theme=${theme}` : '';
@@ -34,18 +54,26 @@ function openNativeRoute(screen) {
     // Only the two YTArk-owned screen routes are emitted. The exported native
     // Activities validate the exact scheme/host again; no package, component,
     // file path, or command can be supplied by this userscript action.
+    //
+    // The assignment is kept because it is harmless and becomes the working
+    // route again if the base ever handles the scheme; the platform cannot tell
+    // us that it ignored the navigation, so the guidance below is shown when the
+    // page is still visible afterwards.
     const documentAtRequest = typeof document !== 'undefined' ? document : null;
     if (documentAtRequest) {
       setTimeout(() => {
-        if (documentAtRequest.visibilityState === 'visible') {
-          showToast('YTArk', `Android did not open ${screen}. Open YTArk Updates from the TV apps row, or retry from YTArk Settings.`);
+        // Only a hidden page proves the platform navigated away and took over.
+        // An engine that does not report visibility at all is treated as "still
+        // here", which is the observed behaviour of the pinned base.
+        if (documentAtRequest.visibilityState !== 'hidden') {
+          showToast('YTArk', `${screen === 'storage' ? 'Cache & Storage' : 'Updates'} did not open here. ${nativeFallback(screen)}`);
         }
       }, 2200);
     }
     window.location.href = route;
     return true;
   } catch (error) {
-    showToast('YTArk', `Could not open ${screen}. Open YTArk Updates from the TV apps row, or retry from YTArk Settings.`);
+    showToast('YTArk', `${nativeFallback(screen)}`);
     console.warn('[YTArk] Could not open a native YTArk screen:', error);
     return false;
   }

@@ -6,27 +6,27 @@ upstream YouTube TV frontend, its account/sign-in and **Continue as guest**
 flows, and the Cobalt player. YTArk adds TV-remote-friendly controls and a
 native updater that always hands installation to Android for user confirmation.
 
-## Release identity and 2.9.1 candidate
+## Release identity and 2.9 candidate
 
 | Item | Value |
 |---|---|
-| Release state | **2.9.1 candidate; unpublished, not built or device-verified** |
+| Release state | **2.9 candidate; unpublished, not built or device-verified** |
 | Android package | `io.github.twoarchiver.ytark` (unchanged; community signing identity retained) |
 | Launcher label | `YTArk` |
-| Version | `2.9.1` (Android versionName `2.9.1`, planned release title `YTArk 2.9.1`) |
-| versionCode | `2090100` (published 2.8.0 is `2080000`) |
-| Planned APK (the only architecture) | `YTArk-v2.9.1-armv7.apk` — `armeabi-v7a`; not built/published from this worktree |
-| Userscript revision | `s29` (unused on the remote at review time; published `s27` for 2.8.0 remains immutable) |
+| Version | `2.9.0` (Android versionName `2.9.0`, planned release title `YTArk 2.9`) |
+| versionCode | `2090000` (published 2.8.0 is `2080000`) |
+| Planned APK (the only architecture) | `YTArk-v2.9.0-armv7.apk` — `armeabi-v7a`; not built/published from this worktree |
+| Userscript revision | `s28` (unused on the remote at review time; published `s27` for 2.8.0 remains immutable) |
 | Android base | TizenTubeCobalt `v2.0.2` ARMv7 APK; no Cobalt rebuild |
 
-**YTArk 2.9.1 is configured as a direct, signed in-place update from the
+**YTArk 2.9 is configured as a direct, signed in-place update from the
 published 2.8.0 APK.** It keeps the package ID, signing identity and app data
 directory; no uninstall/reinstall or data-reset workaround is planned. Source
 metadata is not proof that Android accepts a signed candidate APK or preserves a
 real user's session, so upgrade continuity remains unverified.
 
 The published 2.8.0 release introduced the storage, opt-in playback-recovery and
-hourly update features described below; 2.9.1 retains them and adds updater
+hourly update features described below; 2.9.0 retains them and adds updater
 recovery hardening, screen-route/theme contracts and settings fixes. It does not
 upgrade the TizenTubeCobalt `v2.0.2` base, Cobalt engine or YouTube frontend.
 
@@ -52,17 +52,20 @@ upgrade the TizenTubeCobalt `v2.0.2` base, Cobalt engine or YouTube frontend.
   signer, version and APK metadata before Android's installer is offered.
   Permission screens open only after explicit action, Android confirmation is
   never bypassed, and installer hand-off is not reported as completed install.
-- **2.9.1 updater/settings work.** Redirect hops and partial-resume metadata are
+- **2.9 updater/settings work.** Redirect hops and partial-resume metadata are
   validated; cleanup protects pending and resumable APKs; installer return is
   reconciled against the installed package version. The userscript now emits
   screen-only `ytark://updates` and `ytark://storage` routes with an optional
   theme value; exported routes require a signature-level permission and native
   screens validate their exact screen URI. This is only a source/manifest
-  contract: pinned Cobalt custom-scheme dispatch has not been proven, and the
-  Settings Updates card remains read-only (no JS updater bridge is registered).
+  contract. The pinned Cobalt v2.0.2 base has no external-protocol handler, so
+  an in-page `ytark://` navigation is cancelled silently: the reachable route is
+  the TV apps row (YTArk Updates, whose Cache & Storage button opens the storage
+  screen). The Settings Updates card remains read-only (no JS updater bridge is
+  registered).
 
 The userscript schema 4 migration for the playback-recovery opt-in was part of
-2.8.0. 2.9.1 does not reset or rewrite existing preferences; absent configuration
+2.8.0. 2.9.0 does not reset or rewrite existing preferences; absent configuration
 remains a default-only case. See [`CHANGELOG.md`](CHANGELOG.md) for published
 history and current candidate notes.
 
@@ -147,11 +150,11 @@ imply the earlier ones are complete.
 | Persistent hourly update checks and separate automatic downloads | Yes (`UpdateCheckJobService.java`, `UpdateBootstrapProvider.java`, `YtarkUpdater.java`, `UpdateActivity.java`) | Python tests passed; Java compiler/DEX build and JobScheduler runtime are unavailable here | NOT RUN |
 | Startup-animation availability | Informational row only; no optional YTArk animation/delay hook exists | Settings regression test passed; no toggle or system-splash claim | n/a |
 | Bundled native updater (Java: ABI check, verified download, PackageInstaller hand-off) | Yes (`android-updater/`) | Host-JRE contracts are wired into CI/build scripts but were not run here; no Android compile or DEX packaging | **NOT RUN** — no APK or device install/in-place update recorded |
-| `ytark://updates` / `ytark://storage` → native Updates / Cache & Storage screens | Exact screen routes are declared and URI-validated; exported routes require the app-signature permission; no new JS bridge is registered | Python URL/manifest tests only; pinned Cobalt dispatch is unproven, Android APK validation and on-device navigation not run | **NOT RUN — native navigation pending** |
+| `ytark://updates` / `ytark://storage` → native Updates / Cache & Storage screens | Exact screen routes are declared and URI-validated; exported routes require the app-signature permission; no new JS bridge is registered | Python URL/manifest tests only; the pinned base cannot dispatch the scheme in-page (no external-protocol handler), so the TV-apps-row launcher route is the reachable path; Android APK validation and on-device navigation not run | **NOT RUN — native navigation pending** |
 | ARMv7-only APK, signer, versionCode, checksums | Yes (`tools/`) | Candidate build and `check-apk` in `build-apk.yml` | NOT RUN |
 | Premium header wordmark (cosmetic) | Yes (bundled vector) | Provenance, vector-only and build checks in `ci.yml` | NOT RUN |
 | Ad blocking, sign-in, playback, remote keys | Upstream v2.0.2, kept stock | Not re-tested by CI | NOT RUN |
-| Direct 2.8.0 → 2.9.1 in-place update; session/preferences preserved | Same package, signer, versionCode progression and app-data directory are configured | Static release-contract checks only; signed APK upgrade not run here | **NOT RUN** — see `docs/DEVICE-ACCEPTANCE.md` |
+| Direct 2.8.0 → 2.9.0 in-place update; session/preferences preserved | Same package, signer, versionCode progression and app-data directory are configured | Static release-contract checks only; signed APK upgrade not run here | **NOT RUN** — see `docs/DEVICE-ACCEPTANCE.md` |
 
 The full version history is in [`CHANGELOG.md`](CHANGELOG.md) (also readable in
 the app: YTArk Settings → Changelog). The release checklist and the feature
@@ -216,7 +219,7 @@ simply not an update target any more.
 
 ## Remote-friendly installation
 
-1. From the official [release page](https://github.com/2archiver/YTArk/releases), download the versioned ARMv7 APK for the release you intend to install and `SHA256SUMS.txt`. The planned 2.9.1 asset is `YTArk-v2.9.1-armv7.apk`; it is not available until a stable release is published. A 2.8.0 installation is the supported direct in-place upgrade base for this candidate.
+1. From the official [release page](https://github.com/2archiver/YTArk/releases), download the versioned ARMv7 APK for the release you intend to install and `SHA256SUMS.txt`. The planned 2.9.0 asset is `YTArk-v2.9.0-armv7.apk`; it is not available until a stable release is published. A 2.8.0 installation is the supported direct in-place upgrade base for this candidate.
 2. Verify the selected file on the computer, for example:
 
    ```sh
@@ -261,7 +264,7 @@ an update unless you understand that uninstalling can erase app data.
 | Changelog and What's new | Bundled history (offline) inside YTArk Updates; the 2.8 entry is an unpublished candidate. Device NOT RUN |
 | Settings → YTArk Updates | Installed version, stable-release state, official-page fallback, changelog, and native update route. Device NOT RUN |
 | Native updater | Persistent best-effort hourly JobScheduler checks; separate automatic check/download controls; validated resumable download and explicit Android installer hand-off. Candidate host/device tests not run in this worktree. **Device NOT RUN** |
-| ARMv7 (`armeabi-v7a`) APK | **The only published architecture** from 2.1.2; 2.9.1 is an unpublished candidate, and device acceptance stays NOT RUN until recorded |
+| ARMv7 (`armeabi-v7a`) APK | **The only published architecture** from 2.1.2; 2.9.0 is an unpublished candidate, and device acceptance stays NOT RUN until recorded |
 | 64-bit-only Android userspace (`arm64-v8a` only) | **Not supported** by this release line; documented exclusion, no ARM64 asset |
 | Background playback, PiP, casting, downloads, system-wide ad blocking | **Not claimed** |
 
@@ -513,7 +516,7 @@ section of the release notes:
 ```sh
 python3 tools/build_changelog.py --write       # regenerate TizenTube/mods/assets/changelog.generated.js
 python3 tools/build_changelog.py --check       # what CI runs
-python3 tools/build_changelog.py release-notes --version 2.9.1
+python3 tools/build_changelog.py release-notes --version 2.9.0
 ```
 
 Build metadata: About YTArk and the Updates card report the installed package

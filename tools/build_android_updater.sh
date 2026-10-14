@@ -24,31 +24,9 @@ TEST_SOURCE_DIR="$ROOT/android-updater/src/test/java/io/github/twoarchiver/ytark
 WORK="$(mktemp -d "${TMPDIR:-/tmp}/ytark-updater.XXXXXX")"
 trap 'rm -rf "$WORK"' EXIT
 
-# Run the pure policy tests on the host JRE; this includes suffix/build serials such
-# as 2.0.3-ytark.15, guards against lexical version comparisons, and covers the
-# install gate, storage budget and failure-reason rules.
-mkdir -p "$WORK/test-classes"
-javac --release 8 -d "$WORK/test-classes" \
-  "$SOURCE/io/github/twoarchiver/ytark/updater/UpdateVersion.java" \
-  "$SOURCE/io/github/twoarchiver/ytark/updater/NativeAbiContract.java" \
-  "$SOURCE/io/github/twoarchiver/ytark/updater/UpdateResumeContract.java" \
-  "$SOURCE/io/github/twoarchiver/ytark/updater/UpdateReleaseContract.java" \
-  "$SOURCE/io/github/twoarchiver/ytark/updater/UpdateSchedulePolicy.java" \
-  "$SOURCE/io/github/twoarchiver/ytark/updater/YtarkBranding.java" \
-  "$SOURCE/io/github/twoarchiver/ytark/updater/InstallGate.java" \
-  "$SOURCE/io/github/twoarchiver/ytark/updater/UpdateGuards.java" \
-  "$SOURCE/io/github/twoarchiver/ytark/updater/UpdateFailure.java" \
-  "$SOURCE/io/github/twoarchiver/ytark/updater/UpdateFailureException.java" \
-  "$SOURCE/io/github/twoarchiver/ytark/updater/NativeRoutePolicy.java" \
-  "$SOURCE/io/github/twoarchiver/ytark/updater/UpdateRedirectPolicy.java" \
-  "$SOURCE/io/github/twoarchiver/ytark/updater/UpdaterFailurePhasePolicy.java" \
-  "$SOURCE/io/github/twoarchiver/ytark/updater/InstallerResultPolicy.java" \
-  "$TEST_SOURCE_DIR"/*Test.java
-for test_class in UpdateVersionTest UpdateReleaseContractTest UpdateSchedulePolicyTest \
-    YtarkBrandingTest InstallGateTest UpdateGuardsTest NativeRoutePolicyTest \
-    UpdateRedirectPolicyTest UpdaterFailurePhasePolicyTest InstallerResultPolicyTest; do
-  java -cp "$WORK/test-classes" "io.github.twoarchiver.ytark.updater.$test_class"
-done
+# Run the shared host-JRE policy tests before compiling the DEX. The same script
+# is what ci.yml runs, so the policy/test list exists once.
+bash "$ROOT/tools/test_android_updater.sh" "$WORK/test-classes"
 
 mkdir -p "$WORK/generated/io/github/twoarchiver/ytark/updater" \
   "$WORK/classes" "$WORK/dex"

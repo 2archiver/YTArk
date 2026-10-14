@@ -1,0 +1,114 @@
+{
+  "schema": 1,
+  "_comment": [
+    "Single source of truth for what the built userscript bundle must and must not",
+    "contain. Both .github/workflows/build-apk.yml and .github/workflows/ci.yml call",
+    "tools/check_bundle_contract.py, and TizenTube/mods/tests/read the retiredActions",
+    "list, so a feature can never be asserted in one place and retired in another.",
+    "",
+    "Why this file exists: the 2.9 release build failed because the workflow carried",
+    "its own copy of this list and still required YTARK_YTS_EDITOR after the 2.9",
+    "settings work deliberately retired that command. The stale assertion stopped",
+    "every run in the userscript step, before the repack, sign and upload steps,",
+    "so no 2.9 APK was ever produced. Update this file, not the workflows.",
+    "",
+    "Every entry is checked against the artefact that is actually shipped:",
+    "  bundle.required    - literal text that must appear in dist/userScript.js",
+    "  bundle.forbidden   - literal text that must not appear in dist/userScript.js",
+    "  retiredActions     - command names that must be absent from the bundle and the",
+    "                       shipped sources, and that the userscript tests must reject",
+    "  files.forbidden    - source files that must no longer exist",
+    "  sources.forbidden  - literal text that must not appear in the shipped sources",
+    "  markup.forbidden   - regular expression that must not match the bundle",
+    "  branding.required  - literal text that must appear in the bundle",
+    "  branding.forbidden - regular expression that must not match the bundle",
+    "Retired command names must appear nowhere in the shipped artefact, and the bundled changelog is part of that artefact, so the changelog narrative describes a retirement without repeating the retired identifier (the same rule the 2.5 removals follow for quickControls, RESET_USER_AGENT_PROFILE and DEVICE_PROFILES)."
+  ],
+  "bundle": {
+    "required": [
+      "YouTube Premium",
+      "ytark-premium-ink",
+      "ytark-theme-oled",
+      "ytark-no-player-scrim",
+      "featuredChannel",
+      "YTARK_SEARCH_OPEN",
+      "YTARK_YTS_RESTORE_CONFIRM",
+      "YTARK_CHANGELOG_SHOW",
+      "v2.0.2-personal.14",
+      "configSchemaVersion",
+      "enableYtarkGuideEntry",
+      "recheck-arch",
+      "Could not confirm this device",
+      "YTARK_GUIDE_SETTINGS_OPEN",
+      "YTARK_VERSION_REREAD",
+      "apkAsset",
+      "ytark-user-agent-retired",
+      "ytLrOverlayPanelRendererContent",
+      "Newer than the latest stable release",
+      "virtualKeyboard",
+      "data-ytark-keyboard",
+      "about.buildInfo",
+      "about.notices",
+      "Third-party notices and licences",
+      "Added Full Auto Updating",
+      "enablePlaybackRecovery",
+      "YTARK_NATIVE_STORAGE_OPEN",
+      "YTARK_NATIVE_UPDATES_OPEN",
+      "Automatic playback recovery",
+      "Cache & Storage",
+      "Android's system splash"
+    ],
+    "forbidden": [
+      "quickControls",
+      "RESET_USER_AGENT_PROFILE",
+      "DEVICE_PROFILES"
+    ]
+  },
+  "retiredActions": [
+    "YTARK_YTS_EDITOR",
+    "YTARK_YTS_SECTION",
+    "YTARK_YTS_MOVE",
+    "YTARK_YTS_ROWS",
+    "YTARK_YTS_ROW_PIN"
+  ],
+  "files": {
+    "forbidden": [
+      "TizenTube/mods/features/userAgentSpoofing.js",
+      "TizenTube/mods/features/tvControls.js"
+    ]
+  },
+  "sources": {
+    "dir": "TizenTube/mods",
+    "forbidden": [
+      "YTArk Quick Controls",
+      "TV_APPLY_PRESET",
+      "TV_UNDO_PRESET",
+      "TV_SET_QUALITY",
+      "enableFixedUI",
+      "app-quality-root",
+      "tvLastPresetSnapshot",
+      "tvQuickQuality"
+    ],
+    "excludeDirs": [
+      "tests",
+      "assets"
+    ],
+    "excludeFiles": [
+      "config.js",
+      "userAgentRetirement.js"
+    ]
+  },
+  "markup": {
+    "forbiddenPattern": "<text|<image|href=\"http|url\\(https?:",
+    "caseInsensitive": true
+  },
+  "branding": {
+    "required": [
+      "YouTube Premium",
+      "ytark-premium-ink"
+    ],
+    "_patternNote": "Python regular expressions (this contract is enforced by tools/check_bundle_contract.py), equivalent to the retired shell grep -Eqi 'Personal[[:space:]]+Tube[[:space:]]+TV'.",
+    "forbiddenPattern": "Personal\\s+Tube\\s+TV",
+    "caseInsensitive": true
+  }
+}

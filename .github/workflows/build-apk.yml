@@ -129,40 +129,11 @@ jobs:
           node --test tests/*.test.mjs
           npm run build
           node --check ../dist/userScript.js
-          grep -q "YouTube Premium" ../dist/userScript.js
-          for needle in ytark-theme-oled ytark-no-player-scrim featuredChannel YTARK_SEARCH_OPEN \
-              YTARK_YTS_EDITOR YTARK_CHANGELOG_SHOW v2.0.2-personal.14 configSchemaVersion \
-              YTARK_GUIDE_SETTINGS_OPEN YTARK_VERSION_REREAD apkAsset "Newer than the latest stable release"; do
-            grep -q "$needle" ../dist/userScript.js || { echo "Bundle is missing $needle" >&2; exit 1; }
-          done
-          # Removed in 2.5: presets, the user-agent override and "Fix UI" must
-          # not be packaged again. The bundled changelog narrates the removal
-          # and config.js lists the retired keys for the one-shot migration, so
-          # those two are excluded from the source grep.
-          for retired in quickControls RESET_USER_AGENT_PROFILE DEVICE_PROFILES; do
-            if grep -q "$retired" ../dist/userScript.js; then
-              echo "The generated userscript still carries the removed $retired" >&2
-              exit 1
-            fi
-          done
-          test ! -e features/userAgentSpoofing.js
-          test ! -e features/tvControls.js
-          for retired in "YTArk Quick Controls" TV_APPLY_PRESET enableFixedUI app-quality-root; do
-            if grep -rqF --include='*.js' --exclude-dir=tests --exclude-dir=assets \
-                --exclude=config.js --exclude=userAgentRetirement.js "$retired" .; then
-              echo "Removed in 2.5 but still in the packaged sources: $retired" >&2
-              exit 1
-            fi
-          done
-          if grep -Eqi '<text|<image|href="http|url\(https?:' ../dist/userScript.js; then
-            echo "The generated userscript must not carry text/raster/external logo content" >&2
-            exit 1
-          fi
-          grep -q "ytark-premium-ink" ../dist/userScript.js
-          if grep -Eqi 'Personal[[:space:]]+Tube[[:space:]]+TV' ../dist/userScript.js; then
-            echo "Deprecated branding found in generated userscript" >&2
-            exit 1
-          fi
+          # Every required/retired symbol, retired file, markup rule and branding
+          # rule lives in release/bundle-contract.json — one contract shared with
+          # ci.yml. Do not reintroduce a second copy of the list here: a stale
+          # duplicate is exactly what stopped the 2.9 release before repacking.
+          python3 ../tools/check_bundle_contract.py
           echo "Built YTArk userscript: $(wc -c < ../dist/userScript.js) bytes, sha256 $(sha256sum ../dist/userScript.js | cut -d' ' -f1)"
 
       - name: Load release version

@@ -21,38 +21,50 @@ Conventions:
 - Capabilities inherited from TizenTube and TizenTubeCobalt are listed under
   "Upstream base and inherited capabilities", not as YTArk additions.
 
-## [2.9.1] — Unreleased
+## [2.9.0] — Unreleased
 
-> Not yet published. Planned tag `v2.9.1` · versionCode 2090100 · userscript `s29` · one ARMv7 APK (armeabi-v7a) on TizenTubeCobalt v2.0.2. This is intended as a direct, signed in-place update to published 2.8.0; package ID, signing identity and app data directory stay unchanged.
+> Not yet published. Planned tag `v2.9.0` · versionCode 2090000 · userscript `s28` · one ARMv7 APK (armeabi-v7a) on TizenTubeCobalt v2.0.2. This is intended as a direct, signed in-place update to published 2.8.0; package ID, signing identity and app data directory stay unchanged.
 
-Safer updater recovery and theme-aware screen routes.
+Repaired ARMv7 release build, safer update installation, and settings and OLED fixes.
 
 ### Added
-- **Screen-only Updates and Storage URI contracts.** The userscript emits only `ytark://updates` or `ytark://storage`, with optional `theme=oled` or `theme=youtube`. A separate public Leanback launcher proxy opens Updates; exported screen routes require YTArk's app-signature permission and accept only the matching URI. Static tests cover URL assignment and manifest declarations; dispatch from pinned Cobalt to Android remains unverified.
+- **Cache & Storage for the TV remote.** Measures Android's app-cache directories off the UI thread and can clear only old files there; recently modified or unstatable files are retained. Downloaded update packages are a separate control with its own measured figure. Profile and local-storage directories outside those cache roots are not scanned, and cookies, account data, preferences, databases, watch position, downloads and installer-held APKs are never touched. Pause playback first.
+- **Opt-in playback recovery.** Uses the existing player state and `PlayerService.loadVideo` contract with bounded retries for sustained buffering and recoverable media errors. Supported VOD/DVR positions and live-edge intent are preserved; user pauses, seeking, completion, navigation, hidden or picture-in-picture playback and offline state stop retries, as does player text identifying sign-in, age or region restrictions. Android and the YouTube UI are not reloaded.
+- **Persistent stable-release update automation.** Android JobScheduler requests an hourly network-connected check and can download, resume and validate a compatible stable APK in the background. Checks and downloads can each be disabled, and Android may defer scheduled work.
+- **Screen-only Updates and Storage URI contracts.** The userscript emits only `ytark://updates` or `ytark://storage`, with an optional `theme=oled` or `theme=youtube`. Exported screen routes require YTArk's app-signature permission and accept only the matching URI; arbitrary actions, packages, components and parameters are rejected. The native Updates screen also has a **Cache & Storage** button, so the storage screen stays reachable from the TV apps row even where the base cannot dispatch the scheme in-page.
 
 ### Changed
-- **Native screens follow a validated theme value.** Updates and Storage persist only `oled` or `youtube` when a valid matching route arrives; YouTube's theme, playback and app data are not changed.
-- **Update-file cleanup preserves pending and resumable candidates.** Deletion stays in YTArk's private update directory, rejects symlink/path escapes, and requires explicit confirmation in Storage.
-- **Release redirects and partial-download resumes are revalidated.** Every redirect hop stays on the exact HTTPS allowlist; resume requires matching URL, digest, size and ABI metadata.
-- **Foreground updater checks share persisted cadence and single-flight work.** Android may defer background jobs; explicit automatic-check and download opt-outs remain respected.
-- Search text entry keeps the field open on OK; Done submits through the TV key grid.
-- About keeps the installed package version separate from the YouTube frontend version and recognizes the runtime client-version field when present.
-- OLED surface gradients no longer cover true-black backgrounds. Styling remains scoped; media, artwork, captions, focus and the independent player scrim are not targeted. Full YouTube surface coverage still needs device testing.
+- **Cache cleanup is scoped to Android cache roots.** Results report measured and deleted bytes rather than a guessed reclaimed amount, and partial or unavailable measurements are labelled instead of being presented as complete.
+- **Native screens follow a validated theme value.** Updates and Storage persist only `oled` or `youtube` when a matching route supplies it; YouTube's own theme, playback and app data are unchanged.
+- **Release redirects and partial-download resumes are revalidated.** Every redirect hop must stay on the exact HTTPS allowlist, and a resume requires matching URL, digest, size and ABI metadata.
+- **Foreground updater checks share persisted cadence and single-flight work.** Explicit automatic-check and automatic-download opt-outs remain respected, and a user-cancelled transfer is not restarted by another scheduler path.
+- **Navigation includes startup-animation availability.** This build has no optional YTArk startup animation or removable delay, so the row is informational only: it is not a toggle and it does not promise to remove Android's system splash.
 
 ### Defaults and migration
-- 2.9.1 introduces no settings-schema migration and changes no automatic-check or automatic-download preference. Existing explicit choices remain unchanged.
+- Userscript settings schema 4 adds `enablePlaybackRecovery`, default **off**; only a missing key receives the default and no existing preference is migrated or reset.
+- Native automatic checks and downloads default **on** for the new updater preference; explicit off choices are retained.
+- The update stays compatible with the published 2.8.0 package and signing identity; no uninstall, data-directory change or Cobalt engine rebuild is part of it.
 
 ### Fixed
-- **Installer results are confirmed against installed package metadata.** A successful result is polled but never trusted alone; cancellation keeps the verified APK ready for an explicit retry.
-- **Updater failures retain an actionable phase.** Check, download, APK validation and install failures remain distinct; final APK revalidation failures remain classified as validation failures.
+- **The 2.9 release build failure is fixed.** The userscript step still required a settings-editor command that the 2.9 work had retired, so the 2.9 and 2.9.1 runs both stopped before repacking, signing or uploading anything. (The retired command's identifier is intentionally not repeated here: the bundled changelog ships inside the userscript, and the bundle contract forbids the retired names anywhere in the artefact.) The required and retired symbols now live in one checked-in contract (`release/bundle-contract.json`) that both workflows read, and a regression test fails when a required symbol disappears, a retired one returns, or a workflow grows a second copy of the list.
+- **Installer success is confirmed against installed package metadata.** A success result is polled but never trusted by itself; cancellation keeps the verified APK available for an explicit retry instead of reporting an install that did not happen.
+- **Updater failures report the phase that actually failed.** Check, download, APK validation and install failures stay distinct; rejecting the final APK is a validation failure, not a missing installer.
+- OLED surface gradients no longer paint over the black background. Coverage is still limited to the enumerated surfaces; full YouTube coverage needs device testing.
+- Update-file cleanup requires an explicit confirmation and protects both the pending installer APK and a resumable download, including when they are different files.
+- Automatic download selection respects skipped and cancelled releases and keeps a matching partial file for an explicit resume; work interrupted by an app restart is reconciled without counting an installer hand-off as a completed install.
+- Playback recovery cancels scheduled attempts on navigation and suspends them during picture-in-picture, and an error arriving after a media load event is not mistaken for healthy playback.
+- Search input stays open when OK is pressed; Done on the remote key grid submits the query.
+- About reports unavailable frontend versions as unavailable and recognizes the runtime client-version field.
+- Removed the redundant YouTube Settings layout editor; saved layouts and their scoped restore entry remain reachable.
 
 ### Known limitations
-- **No Android build or device verification.** This environment lacks Java/Javac, D8 and Android SDK tooling. No signed 2.9.1 APK, PackageInstaller exercise, in-place upgrade, TV navigation, OLED viewport matrix or cache behavior run exists.
-- **Custom-scheme dispatch is not accepted as working.** JavaScript tests prove only that the two exact `ytark://` URLs are assigned; manifest tests prove only intent-filter declarations. The pinned Cobalt runtime has not been shown to hand either route to Android. The Settings Updates card remains read-only; no `window.ytarkUpdater` bridge is registered.
-- The release remains ARMv7-only on TizenTubeCobalt v2.0.2. The complete YouTube OLED surface matrix and Google TV system IME remain device-unverified; the DPAD key grid remains the input fallback.
+- **Not device-verified.** No signed 2.9 APK, PackageInstaller exercise, in-place upgrade, TV navigation run, OLED viewport matrix or cache operation has been executed on a physical device or TV emulator.
+- **The repaired pipeline has not run in CI.** The failing userscript step, the release-identity contract and the release metadata were reproduced and verified locally against this source, but proving a green GitHub Actions run needs the change on the trusted branch, which this candidate does not do by itself.
+- **In-page custom-scheme dispatch is not available on the pinned runtime.** The pinned Cobalt v2.0.2 source has no external-protocol handler, content's default returns "handled" without starting anything, and the base's only web-to-native bridge cannot open a screen, so a `ytark://` page navigation is cancelled silently. The launcher proxy (TV apps row → YTArk Updates → Cache & Storage) is the reachable route; device confirmation of that route is still outstanding.
+- The release remains ARMv7-only on TizenTubeCobalt v2.0.2. The Google TV system keyboard remains device-unverified; the DPAD key grid stays as the documented fallback.
 
 ### Validation
-- Candidate test, build and device evidence is recorded in `docs/SETTINGS-2.9.1-REVIEW.md`. This entry is unpublished; no release or tag has been created.
+- Candidate test, build and device evidence is recorded in `docs/SETTINGS-2.9-RECOVERY-REVIEW.md`. This entry is unpublished; no release or tag has been created.
 
 ## [2.8.0] — 2026-10-13
 
@@ -140,7 +152,7 @@ The repository's first published build, before the YTArk name.
 
 ## Unpublished drafts and other tags
 
-- `2.9.0` / `v2.9.0` / versionCode `2090000` / userscript `s28` was an unpublished draft in the source tree, never a published Android release. It was superseded before publication by this `2.9.1` candidate; no published tag or APK was moved or relabeled.
+- `2.9.0` / `v2.9.0` / versionCode `2090000` / userscript `s28` was an unpublished draft in the source tree, never a published Android release. Its two publication attempts (the 2.9 settings work and the separate 2.9.1 updater work, whose draft metadata used versionCode `2090100` and userscript `s29`) both failed in the userscript build step before repacking, so neither produced an APK, an Actions artefact, a tag or a release. Both lines were folded back into the single `2.9` release recorded above, which reuses the still-unused `2090000` code and the still-unused `s28` revision; no published tag, asset or APK was moved, relabeled or overwritten.
 - `v2.2.0-probeJ` and `v2.2.0-probeK` are draft releases without assets, created on 2026-10-11 while diagnosing the 2.2 publication pipeline. They were never published and are not versions.
 - `s5` to `s13` are userscript tags pushed on 2026-10-09 while the first build pipeline was set up; no published APK used them. Each later `sNN` tag belongs to the release that lists it above.
 - The 2.0.3-ytark.15 release notes described automatic update prompts; later releases narrowed that claim until the native updater's device path is verified.

@@ -194,14 +194,61 @@ describe('native Android screen routing through the real custom-action path', ()
     assert.equal(handleYtarkAction('YTARK_NATIVE_ADMIN_OPEN', {}), false,
       'no arbitrary native component is routed');
   });
+
+  it('explains the launcher route when the base ignores the navigation', async () => {
+    // The pinned Cobalt base cancels a ytark:// navigation silently and cannot
+    // report that, so the only observable outcome is that the page stays
+    // visible. The row must then tell the user the route that does work
+    // instead of leaving them on a dead entry.
+    const { handleYtarkAction } = await import('../ui/ytarkActions.js');
+    const { toasts } = await import('./helpers/ytlr-harness.mjs');
+    window.location.href = 'https://www.youtube.com/tv';
+    video.paused = true;
+    video.ended = false;
+    video.networkState = 1;
+    const before = toasts(recorded).length;
+    assert.equal(handleYtarkAction('YTARK_NATIVE_STORAGE_OPEN', {}), true);
+    await new Promise(resolve => setTimeout(resolve, 2400));
+    const shown = toasts(recorded).slice(before).map(toast => `${toast.title} ${toast.subtitle}`);
+    assert.ok(shown.some(text => /Cache & Storage did not open here/.test(text)),
+      `the storage fallback must be explained, got ${JSON.stringify(shown)}`);
+    assert.ok(shown.some(text => /TV apps row, then choose Cache & Storage/.test(text)),
+      'the fallback names the route that works');
+
+    const latest = toasts(recorded).length;
+    assert.equal(handleYtarkAction('YTARK_NATIVE_UPDATES_OPEN', {}), true);
+    await new Promise(resolve => setTimeout(resolve, 2400));
+    const updates = toasts(recorded).slice(latest).map(toast => `${toast.title} ${toast.subtitle}`);
+    assert.ok(updates.some(text => /Open YTArk Updates in the TV apps row\./.test(text)),
+      'the updates fallback names the TV apps row');
+
+    // When the platform really takes the navigation over the page is hidden and
+    // no "did not open" guidance may appear.
+    const count = toasts(recorded).length;
+    const previousState = document.visibilityState;
+    document.visibilityState = 'hidden';
+    assert.equal(handleYtarkAction('YTARK_NATIVE_UPDATES_OPEN', {}), true);
+    await new Promise(resolve => setTimeout(resolve, 2400));
+    assert.equal(toasts(recorded).length, count, 'a taken-over navigation shows no fallback');
+    document.visibilityState = previousState;
+  });
 });
 
 describe('legacy layout restore through the real command path', () => {
-  it('does not dispatch retired editor actions', async () => {
+  it('does not dispatch the retired editor actions named in the bundle contract', async () => {
+    // release/bundle-contract.json is the single list of retired commands: the
+    // release workflows assert those names are absent from the shipped bundle
+    // and sources, and this test asserts the real command handler rejects them.
+    // Both layers therefore fail if the editor is ever half-reinstated.
+    const contract = (await import('../../../release/bundle-contract.json', { with: { type: 'json' } })).default;
+    const { retiredActions } = contract;
+    assert.ok(retiredActions.length > 0, 'the bundle contract must name the retired commands');
     const { handleYtarkAction } = await import('../ui/ytarkActions.js');
-    for (const action of ['YTARK_YTS_EDITOR', 'YTARK_YTS_SECTION', 'YTARK_YTS_MOVE', 'YTARK_YTS_ROWS', 'YTARK_YTS_ROW_PIN']) {
-      assert.equal(handleYtarkAction(action, {}), false);
+    for (const action of retiredActions) {
+      assert.equal(handleYtarkAction(action, {}), false, `${action} must not be dispatchable`);
     }
+    assert.equal(retiredActions.includes('YTARK_YTS_RESTORE_CONFIRM'), false,
+      'the retained layout restore command must not be retired');
   });
   it('restores only the layout after a confirmation that names its scope', async () => {
     PatchSettings(settingsResponse());

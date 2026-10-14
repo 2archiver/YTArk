@@ -656,6 +656,21 @@ def store_uncompressed(apk_path: str) -> None:
 # YTArk 2.1.2 and later publish exactly one architecture. The mapping is kept
 # intentionally single-entry: an ARM64 (or any other) base is rejected by
 # validate_base_architecture and by the CLI choices instead of being repacked.
+def release_config() -> dict:
+    """The release contract (release/version.properties) as the single source.
+
+    Imported lazily so ``--self-test`` stays runnable in a bare checkout and a
+    missing or invalid contract fails with one clear message instead of a
+    traceback.
+    """
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    try:
+        import validate_release
+    except ImportError as error:  # pragma: no cover - packaging error
+        raise SystemExit(f"the release contract module is unavailable: {error}")
+    return validate_release.load_config()
+
+
 ARCHITECTURES = {
     "armv7": "armeabi-v7a",
 }
@@ -1018,7 +1033,8 @@ def self_test() -> None:
     sys.exit(0 if ok else 1)
 
 
-def main():
+def build_parser() -> argparse.ArgumentParser:
+    """The CLI parser, exposed so tests can assert the default release identity."""
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--self-test", action="store_true")
     ap.add_argument("--base", help="path to the official base APK")
@@ -1030,11 +1046,23 @@ def main():
     ap.add_argument("--app-id", default="io.github.twoarchiver.ytark")
     ap.add_argument("--script-url", required=False,
                     help="replacement userscript URL, must end with '?v='")
-    ap.add_argument("--version-code", type=int, default=2090100)
-    ap.add_argument("--version-name", default="2.9.1")
+    # Defaults come from release/version.properties, never from a hand-typed
+    # literal: a manual repack used to be able to package the previous draft's
+    # version (2.9.1 / 2090100) while the release contract said otherwise. The
+    # workflow passes both values explicitly; these defaults only serve local
+    # runs, and they must agree with the same contract the updater compares
+    # against.
+    release = release_config()
+    ap.add_argument("--version-code", type=int, default=int(release["VERSION_CODE"]))
+    ap.add_argument("--version-name", default=release["VERSION_NAME"])
     ap.add_argument("--apktool", default="apktool",
                     help="apktool command, e.g. 'java -jar apktool.jar'")
     ap.add_argument("--zipalign", default="zipalign")
+    return ap
+
+
+def main():
+    ap = build_parser()
     args = ap.parse_args()
 
     if args.self_test:
