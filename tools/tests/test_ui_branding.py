@@ -99,6 +99,11 @@ class YTArkUiBrandingTests(unittest.TestCase):
         if not bundle.exists():
             self.skipTest("userscript bundle not built yet; ci.yml builds it before this job")
         built = bundle.read_text(encoding="utf-8", errors="replace")
+        # The release bundle contract is the single source of truth for which
+        # symbols the artefact must (and must not) carry; this test only adds
+        # the branding needles the contract does not cover. A second copy of
+        # the list here is exactly what stopped the 2.9 release.
+        contract = json.loads((ROOT / "release" / "bundle-contract.json").read_text(encoding="utf-8"))
         for needle in (
             "ytlr-logo-entity",             # the real Leanback logo host
             "ytark-premium-wordmark",       # the injected local wordmark
@@ -106,38 +111,10 @@ class YTArkUiBrandingTests(unittest.TestCase):
             "enablePremiumLogo",
             # default-on for fresh/missing config; minified in the bundle
             "enablePremiumLogo:!0",
-            "YTARK_UPDATE_COMMAND",         # settings card -> update engine actions
             "api.github.com/repos/2archiver/YTArk/releases/latest",
-            # 2.3 features must ship in the artefact, not only in the source.
-            "ytark-theme-oled",             # OLED Black root class
-            "ytark-no-player-scrim",        # Remove player dimming root class
-            "featuredChannel",              # channel watermark renderer identity
             "Hide channel watermark",
             "Remove player dimming",
-            "YTARK_SEARCH_OPEN",            # Search settings
-            "YTARK_YTS_RESTORE_CONFIRM",             # Customize YouTube Settings
-            "YTARK_CHANGELOG_SHOW",         # in-app changelog reader
-            "v2.0.2-personal.14",           # oldest published release in the bundled history
-            "configSchemaVersion",          # explicit settings migration marker
-            # 2.4 features must ship in the artefact, not only in the source.
-            "enableYtarkGuideEntry",        # YTArk entry in the guide toggle
-            "recheck-arch",                 # re-detect device architecture action
-            "Could not confirm this device",  # unknown-ABI status, never "unsupported"
-            # 2.5 features must ship in the artefact, not only in the source.
-            "YTARK_GUIDE_SETTINGS_OPEN",    # explicit activation for the entry
-            "apkAsset",                     # packaging metadata embedded at build time
-                                            # (the generated module's export name is
-                                            # renamed by the bundler, its fields are not)
-            "YTARK_VERSION_REREAD",         # About can ask the platform again
-            "ytark-user-agent-retired",     # one-shot user-agent retirement marker
-            # 2.7 features must ship in the artefact, not only in the source.
-            "virtualKeyboard",              # standard IME channel, feature-detected
-            "data-ytark-keyboard",          # the panel reports which keyboard it uses
-            "about.buildInfo",              # About's navigable Build details subsection
-            "about.notices",                # About's licences subsection
-            "Third-party notices and licences",
-            "Added Full Auto Updating",     # the simplified one-line changelog summary
-        ):
+        ) + tuple(contract["bundle"]["required"]):
             self.assertIn(needle, built)
         # The embedded metadata is this release's, not a stale one: the bundler
         # renames the generated export, so the values are the stable proof.
@@ -145,16 +122,11 @@ class YTArkUiBrandingTests(unittest.TestCase):
         for value in (config["VERSION_NAME"], config["SCRIPT_TAG"], config["APK_ARMV7"]):
             self.assertIn(value, built, f"the bundle lost the embedded build metadata value {value}")
         self.assertNotIn("Personal Tube TV", built, "deprecated branding in the bundle")
-        # Only identifiers the bundled history never mentions can be checked in
-        # the artefact: the changelog narrates the 2.5 removals by name, so the
-        # retired preference keys and action constants legitimately appear in
-        # the bundled release notes. The code that used them must not.
-        for retired in (
-            "quickControls",                # dissolved menu id
-            "RESET_USER_AGENT_PROFILE",     # removed user-agent reset action
-            "DEVICE_PROFILES",              # removed user-agent profile table
-        ):
-            self.assertNotIn(retired, built, f"removed in 2.5 but still packaged: {retired}")
+        # Retired identifiers must not survive anywhere in the shipped
+        # artefact, including the bundled changelog (the narrative describes a
+        # retirement without repeating the retired name).
+        for retired in tuple(contract["bundle"]["forbidden"]) + tuple(contract["retiredActions"]):
+            self.assertNotIn(retired, built, f"retired but still packaged: {retired}")
 
     def test_the_removed_controls_are_gone_from_the_shipped_sources(self):
         """Presets, the user-agent override and "Fix UI" are not live code.

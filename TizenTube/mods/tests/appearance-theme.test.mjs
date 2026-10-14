@@ -1,5 +1,6 @@
-// OLED Black theme, "Remove player dimming" and their composition with the
-// Premium wordmark, custom colours and inactivity dimming (ui/theme.js,
+// The 3.0 appearance sheet: the saved custom colours, "Remove player dimming"
+// and "Hide channel watermark", their composition with the Premium wordmark,
+// and proof that the retired OLED theme left no trace (ui/theme.js,
 // ui/appearanceStyles.js).
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
@@ -7,19 +8,20 @@ import { FakeElement, FakeMutationObserver, waitFor } from './helpers/fake-dom.m
 import { setupEnvironment } from './helpers/ytlr-harness.mjs';
 
 const { doc } = setupEnvironment();
-const { configRead, configWrite, configChangeEmitter } = await import('../config.js');
+const { configRead, configWrite, configChangeEmitter, configKeys } = await import('../config.js');
 const theme = await import('../ui/theme.js');
 const styles = await import('../ui/appearanceStyles.js');
-const { OLED_TOKENS } = await import('../ui/themeTokens.js');
 const registry = await import('../ui/settingsRegistry.js');
 
 const root = doc.documentElement;
+const rootClasses = () => String(root.getAttribute('class') || '').split(/\s+/).filter(Boolean);
 const has = name => root.classList.contains(name);
 const managedStyles = () => doc.querySelectorAll('style[data-ytark-managed-theme="true"]');
 
 function rulesFor(css, rootClass) {
   // Split "selector { declarations }" blocks and keep those scoped to rootClass.
   const blocks = [];
+  css = css.replace(/\/\*[\s\S]*?\*\//g, '');
   const pattern = /([^{}]+)\{([^{}]*)\}/g;
   let match;
   while ((match = pattern.exec(css))) {
@@ -31,50 +33,68 @@ function rulesFor(css, rootClass) {
   return blocks;
 }
 
-describe('OLED Black theme', () => {
-  it('applies to a fresh install through one managed stylesheet and a root class', () => {
-    assert.equal(configRead('uiTheme'), 'oled');
-    assert.ok(has(styles.ROOT_CLASSES.oled));
+describe('appearance stylesheet', () => {
+  it('publishes the saved custom colours and the feature rules in one managed stylesheet', () => {
     assert.equal(managedStyles().length, 1);
     const css = managedStyles()[0].textContent;
-    assert.match(css, /html\.ytark-theme-oled \.ytLrGuideResponseContainer/);
-    assert.match(css, /background-color: #000000 !important/);
+    assert.match(css, /ytlr-guide-response yt-focus-container \{ background-color: #0f0f0f; \}/);
+    assert.match(css, /#container \{ background-color: #0f0f0f !important; \}/);
+    assert.doesNotMatch(css, /filter\s*:|backdrop-filter|mix-blend|opacity\s*:/i,
+      'no filters, tints or opacity changes');
   });
 
-  it('switches live, restores the saved custom colours and keeps them untouched', () => {
+  it('rebuilds the stylesheet when a saved colour changes, and flips classes when a feature changes', () => {
     configWrite('focusContainerColor', '#0a1628');
     configWrite('routeColor', '#0d1f3c');
-    configWrite('uiTheme', 'youtube');
-    assert.equal(has(styles.ROOT_CLASSES.oled), false);
-    const css = managedStyles()[0].textContent;
+    let css = managedStyles()[0].textContent;
+    assert.match(css, /ytlr-guide-response yt-focus-container \{ background-color: #0a1628; \}/);
     assert.match(css, /#container \{ background-color: #0d1f3c !important; \}/);
-    assert.match(css, /yt-focus-container \{ background-color: #0a1628; \}/);
 
-    configWrite('uiTheme', 'oled');
-    assert.ok(has(styles.ROOT_CLASSES.oled));
-    // OLED overrides with higher specificity; the saved colours are not rewritten.
-    assert.equal(configRead('focusContainerColor'), '#0a1628');
-    assert.equal(configRead('routeColor'), '#0d1f3c');
-    assert.match(managedStyles()[0].textContent, /#container \{ background-color: #0d1f3c !important; \}/);
+    // Feature rules are static in the sheet: switching a feature off only
+    // drops the root class, the rule stays in place, inert.
+    configWrite('hidePlayerWatermark', false);
+    css = managedStyles()[0].textContent;
+    assert.equal(has(styles.ROOT_CLASSES.hideWatermark), false);
+    assert.match(css, /html\.ytark-hide-watermark/, 'the rule stays in the sheet, inert');
+    assert.match(css, /ytlr-guide-response yt-focus-container \{ background-color: #0a1628; \}/,
+      'the custom colours are kept across feature switches');
+
+    configWrite('hidePlayerWatermark', true);
+    assert.ok(has(styles.ROOT_CLASSES.hideWatermark));
   });
 
-  it('never recolours images, thumbnails, video, SVG or subtitles, and uses no filters', () => {
+  it('never recolours or re-shadows media content: no backgrounds, no filters, no tints', () => {
     const css = styles.buildAppearanceCss();
-    for (const block of rulesFor(css, styles.ROOT_CLASSES.oled)) {
-      for (const selector of block.selectors) {
-        assert.doesNotMatch(selector, /\b(img|video|svg|canvas)\b|thumbnail|caption|subtitle|ytlr-player\b/i, selector);
+    for (const rootClass of Object.values(styles.ROOT_CLASSES)) {
+      for (const block of rulesFor(css, rootClass)) {
+        const paints = /background-color|background-image/.test(block.declarations);
+        for (const selector of block.selectors) {
+          if (paints) {
+            assert.doesNotMatch(selector, /\b(img|video|svg|canvas)\b|thumbnail|caption|subtitle|ytlr-player\b/i,
+              `a rule that paints may not target media or text content: ${selector}`);
+          }
+          // The caption and focus selectors may only appear in text-shadow
+          // resets (crisp captions and focus pills), never in anything else.
+          if (/caption|subtitle|zylon-focus|ytLrButtonFocused/i.test(selector)) {
+            assert.match(block.declarations, /text-shadow: none/,
+              `caption/focus selectors only ever reset the shadow: ${selector}`);
+            assert.doesNotMatch(block.declarations, /background|color\s*:/i,
+              `caption/focus selectors never paint: ${selector}`);
+          }
+        }
       }
     }
-    assert.doesNotMatch(css, /filter\s*:|opacity\s*:|brightness|invert|mix-blend/i);
+    assert.doesNotMatch(css, /filter\s*:|backdrop-filter|mix-blend|opacity\s*:/i);
   });
 
-  it('restores its own classes when the frontend rewrites <html class>', async () => {
+  it('restores its own classes when the frontend rewrites <html class>', () => {
+    configWrite('removePlayerScrim', true);
     root.setAttribute('class', 'frontend-owned');
     const observer = FakeMutationObserver.instances.find(item => item.active && item.root === root
       && item.options && item.options.attributeFilter && item.options.attributeFilter.length === 1);
     assert.ok(observer, 'one scoped observer watches <html class>');
     observer.callback([{ type: 'attributes', attributeName: 'class', target: root }]);
-    assert.ok(has(styles.ROOT_CLASSES.oled));
+    assert.ok(has(styles.ROOT_CLASSES.noScrim));
     assert.ok(has('frontend-owned'), 'frontend classes are kept');
   });
 
@@ -82,12 +102,10 @@ describe('OLED Black theme', () => {
     const listeners = configChangeEmitter.listenerCount('configChange');
     const observers = FakeMutationObserver.activeCount;
     for (let index = 0; index < 40; index += 1) {
-      configWrite('uiTheme', index % 2 ? 'oled' : 'youtube');
       configWrite('removePlayerScrim', index % 2 === 0);
+      configWrite('hidePlayerWatermark', index % 2 === 1);
       theme.updateStyle();
     }
-    configWrite('uiTheme', 'oled');
-    configWrite('removePlayerScrim', true);
     assert.equal(managedStyles().length, 1);
     assert.equal(FakeMutationObserver.activeCount, observers);
     assert.equal(configChangeEmitter.listenerCount('configChange'), listeners);
@@ -141,6 +159,50 @@ describe('Remove player dimming', () => {
   });
 });
 
+describe('Hide channel watermark', () => {
+  it('targets only the watermark element YTArk marks, scoped to the root class', () => {
+    const css = styles.buildAppearanceCss();
+    const blocks = rulesFor(css, styles.ROOT_CLASSES.hideWatermark);
+    const hide = blocks.find(block => block.declarations.includes('display: none'));
+    assert.ok(hide, 'one rule hides the marked watermark element');
+    assert.equal(hide.selectors.length, 1);
+    assert.equal(hide.selectors[0], `html.${styles.ROOT_CLASSES.hideWatermark} [${styles.WATERMARK_ATTRIBUTE}="hidden"]`);
+    assert.match(hide.declarations, /display: none !important/);
+  });
+
+  it('toggles the root class live, and the rule stays in the sheet, inert when off', () => {
+    configWrite('hidePlayerWatermark', false);
+    assert.equal(has(styles.ROOT_CLASSES.hideWatermark), false);
+    configWrite('hidePlayerWatermark', true);
+    assert.ok(has(styles.ROOT_CLASSES.hideWatermark));
+    assert.match(managedStyles()[0].textContent, /html\.ytark-hide-watermark/);
+  });
+});
+
+describe('the retired OLED theme', () => {
+  it('leaves no root class, no stylesheet rule and no setting behind', () => {
+    configWrite('removePlayerScrim', true);
+    configWrite('hidePlayerWatermark', true);
+    for (const name of rootClasses()) {
+      assert.doesNotMatch(name, /^ytark-theme-/i, `no theme class may exist: ${name}`);
+    }
+    assert.doesNotMatch(managedStyles()[0].textContent, /ytark-theme-oled/i, 'no OLED rule in the sheet');
+    assert.equal(configRead('uiTheme'), undefined, 'the key is retired, not reset');
+    assert.equal(configKeys().includes('uiTheme'), false, 'the key is not a setting any more');
+    assert.ok(!registry.findNode(registry.buildSettingsTree(), 'appearance.theme'),
+      'the Theme row is gone from the settings tree');
+    assert.ok(!Object.values(styles.ROOT_CLASSES).some(name => /^ytark-theme-/i.test(name)),
+      'no theme root class is defined');
+  });
+
+  it('no longer reacts to a uiTheme write', () => {
+    const cssBefore = managedStyles()[0].textContent;
+    configWrite('uiTheme', 'oled');
+    assert.equal(managedStyles()[0].textContent, cssBefore, 'the sheet is untouched by a retired key');
+    assert.ok(!rootClasses().some(name => /^ytark-theme-/i.test(name)));
+  });
+});
+
 describe('composition with the Premium wordmark', () => {
   it('keeps the lettering on the header foreground and the emblem paint, with no extra theme observer', async () => {
     const { YOUTUBE_PREMIUM_WORDMARK } = await import('../assets/youtubePremiumLogo.generated.js');
@@ -157,8 +219,10 @@ describe('composition with the Premium wordmark', () => {
     const rootObservers = () => FakeMutationObserver.instances.filter(item => item.active && item.root === root).length;
     const before = rootObservers();
 
-    for (const value of ['youtube', 'oled', 'youtube', 'oled']) {
-      configWrite('uiTheme', value);
+    // Appearance feature flips used to change the root classes alongside the
+    // (removed) theme: the wordmark must still need no observer of its own.
+    for (const value of [true, false, true, false]) {
+      configWrite('removePlayerScrim', value);
       branding.refreshInk(doc);
     }
     await waitFor(150);
@@ -167,65 +231,16 @@ describe('composition with the Premium wordmark', () => {
     const emblem = mark.querySelectorAll('[data-ytark-premium-paint]');
     const sourceFills = YOUTUBE_PREMIUM_WORDMARK.paths.filter(entry => entry.paint !== 'ink').map(entry => entry.fill);
     assert.deepEqual(emblem.map(node => node.getAttribute('fill')), sourceFills, 'the red emblem is never inverted');
-    assert.equal(rootObservers(), before, 'theme changes create no second Premium theme observer');
+    assert.equal(rootObservers(), before, 'appearance changes create no second Premium theme observer');
     branding.cleanup();
   });
 });
 
-describe('OLED Black labelling', () => {
-  it('describes exactly the surfaces the stylesheet themes, and no more', () => {
-    const node = registry.findNode(registry.buildSettingsTree(), 'appearance.theme');
-    assert.ok(node, 'the theme setting is in the tree');
-    assert.match(node.description, /surfaces YTArk can style/,
-      'the row says the theme is scoped, not global');
-    const oled = node.options.find(option => option.value === 'oled');
-    assert.match(oled.description, /app backdrop/i);
-    assert.match(oled.description, /browse, search and settings surfaces/i);
-    assert.match(oled.description, /YTArk dialogs/i);
-    assert.match(oled.description, /keep their own colours/i,
-      'and it says what is left to YouTube');
-    assert.doesNotMatch(oled.description, /everything|entire|all screens|whole app/i,
-      'no global-coverage claim');
-  });
-});
-
-describe('OLED Black coverage and lifecycle', () => {
+describe('lifecycle', () => {
   const css = () => managedStyles()[0].textContent;
-  const blocks = () => rulesFor(css(), styles.ROOT_CLASSES.oled);
-  const blockFor = fragment => blocks().find(block => block.selectors.some(selector => selector.includes(fragment)));
-
-  it('blacks the app backdrop, the browsing surfaces and the dialogs YTArk opens', () => {
-    // The root element gets its own rule (a descendant `html` would match nothing).
-    assert.match(css(), new RegExp(`html\\.${styles.ROOT_CLASSES.oled} \\{\\s*background-color: #000000 !important;`));
-    for (const selector of ['body', '#container', '.ytLrTvBrowseRendererHost',
-      '.ytLrGuideResponseContainer', '.ytLrClassicSearchPageHost', '.ytLrAccountSelectorHost',
-      '.ytLrOverlaySectionRendererOverlay', '.ytLrOverlayTwoPanelRendererActionPanel',
-      '.ytLrOverlayPanelRendererContent']) {
-      const needle = `html.${styles.ROOT_CLASSES.oled} ${selector}`;
-      const block = blocks().find(item => item.selectors.some(entry => entry.includes(needle)));
-      assert.ok(block, `${selector} is covered by the OLED rule`);
-      assert.match(block.declarations, /background-color: #000000 !important/, `${selector} is true black`);
-      assert.match(block.declarations, /background-image: none !important/, 'surface gradients cannot cover black');
-    }
-  });
-
-  it('keeps the focused entry visibly distinct from the black backgrounds', () => {
-    const focus = blockFor('yt-focus-container');
-    assert.ok(focus, 'the sidebar focus surface is styled under OLED');
-    assert.match(focus.declarations, new RegExp(`background-color: ${OLED_TOKENS.surfaceFocus} !important`));
-    assert.doesNotMatch(focus.declarations, /#000000/, 'focus is not painted black on black');
-    // The frontend's own focus pills are untouched, so focused controls keep
-    // their high-contrast look.
-    assert.doesNotMatch(css(), /zylon-focus[^{]*\{[^}]*background-color/);
-  });
-
-  it('publishes black theme variables and never a filter, tint or opacity change', () => {
-    assert.match(css(), /--yt-spec-general-background-a: #000000;/);
-    assert.match(css(), /--yt-spec-brand-background-solid: #000000;/);
-    assert.doesNotMatch(css(), /filter\s*:|backdrop-filter|mix-blend|opacity\s*:/i);
-  });
 
   it('is re-applied after the DOM is rebuilt, and restores a stylesheet the frontend dropped', () => {
+    configWrite('removePlayerScrim', true);
     // A route change: the frontend rebuilds its content and drops injected head
     // nodes. The classes and the stylesheet must both come back.
     root.setAttribute('class', 'frontend-owned');
@@ -235,16 +250,16 @@ describe('OLED Black coverage and lifecycle', () => {
     assert.ok(headObserver, 'one narrowly scoped observer watches <head>');
     headObserver.callback([{ type: 'childList', target: doc.head }]);
     assert.equal(managedStyles().length, 1, 'exactly one managed stylesheet again');
-    assert.match(css(), /html\.ytark-theme-oled/);
     assert.equal(theme.themeStatus().restorations, 1);
-    // The startup step (ui/ui.js) re-applies the theme once the TV DOM exists.
+    // The startup step (ui/ui.js) re-applies the appearance once the TV DOM exists.
     theme.updateStyle();
     assert.equal(managedStyles().length, 1, 're-applying never duplicates the stylesheet');
-    assert.ok(has(styles.ROOT_CLASSES.oled), 'the root class survives a frontend rewrite');
+    assert.ok(has(styles.ROOT_CLASSES.noScrim), 'the root class survives a frontend rewrite');
     assert.ok(has('frontend-owned'), 'frontend classes are kept');
   });
 
   it('stops restoring after a bounded number of removals instead of scanning forever', () => {
+    configWrite('removePlayerScrim', true);
     const headObserver = FakeMutationObserver.instances.find(item => item.root === doc.head);
     for (let index = 0; index < theme.MAX_STYLE_RESTORATIONS + 3 && headObserver.active; index += 1) {
       const style = managedStyles()[0];
@@ -254,24 +269,10 @@ describe('OLED Black coverage and lifecycle', () => {
     assert.ok(theme.themeStatus().restorations <= theme.MAX_STYLE_RESTORATIONS,
       `restorations are capped (${theme.themeStatus().restorations})`);
     assert.equal(headObserver.active, false, 'the observer gave up instead of fighting the frontend');
-    // One clean re-application brings the theme back for the rest of the session.
+    // One clean re-application brings the appearance back for the rest of the session.
     theme.resetThemeForTests();
     theme.updateStyle();
     assert.equal(managedStyles().length, 1);
-    assert.ok(has(styles.ROOT_CLASSES.oled));
-  });
-
-  it('restores the normal theme, including the saved colours, when OLED is turned off', () => {
-    configWrite('focusContainerColor', '#0a1628');
-    configWrite('routeColor', '#0d1f3c');
-    configWrite('uiTheme', 'youtube');
-    assert.equal(has(styles.ROOT_CLASSES.oled), false);
-    assert.match(css(), /#container \{ background-color: #0d1f3c !important; \}/);
-    assert.match(css(), /yt-focus-container \{ background-color: #0a1628; \}/);
-    // The OLED rules are still in the sheet but inert: they only apply through
-    // the root class, so no original style was permanently changed.
-    assert.match(css(), /html\.ytark-theme-oled/);
-    configWrite('uiTheme', 'oled');
-    assert.ok(has(styles.ROOT_CLASSES.oled));
+    assert.ok(has(styles.ROOT_CLASSES.noScrim));
   });
 });

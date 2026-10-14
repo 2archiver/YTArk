@@ -272,21 +272,6 @@ final class YtarkUpdater {
                 preferences(context).getString("updater_error_phase", ""));
     }
 
-    static String nativeTheme(Context context) {
-        String theme = preferences(context).getString("native_theme", NativeRoutePolicy.THEME_YOUTUBE);
-        return NativeRoutePolicy.THEME_OLED.equals(theme)
-                ? NativeRoutePolicy.THEME_OLED : NativeRoutePolicy.THEME_YOUTUBE;
-    }
-
-    static boolean persistNativeTheme(Context context, String theme) {
-        if (!NativeRoutePolicy.THEME_OLED.equals(theme)
-                && !NativeRoutePolicy.THEME_YOUTUBE.equals(theme)) return false;
-        SharedPreferences prefs = preferences(context);
-        if (theme.equals(prefs.getString("native_theme", NativeRoutePolicy.THEME_YOUTUBE))) return false;
-        prefs.edit().putString("native_theme", theme).apply();
-        return true;
-    }
-
     static long downloadBytes(Context context) {
         return preferences(context).getLong("downloaded_bytes", 0L);
     }

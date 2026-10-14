@@ -58,7 +58,6 @@ export function menuCommand(menuId, options = {}) {
   const parameters = { menuId };
   if (options.focusId) parameters.focusId = options.focusId;
   if (options.update) parameters.update = true;
-  if (options.returnTo) parameters.returnTo = options.returnTo;
   return custom('YTARK_MENU_SHOW', parameters);
 }
 
@@ -141,20 +140,10 @@ function resetRow(node) {
   );
 }
 
-function backToSearchRow() {
-  return buttonItem(
-    { title: tx('ytark.search.backToResults', 'Back to search results') },
-    { icon: 'SEARCH' },
-    [POPUP_BACK, custom('YTARK_DEFERRED', { action: 'YTARK_SEARCH_SHOW', parameters: { update: true } })],
-  );
-}
-
 /** Rows and their ids for a menu-like node, in display order. */
-export function menuRows(node, options = {}) {
-  const returnTo = options.returnTo || null;
+export function menuRows(node) {
   const ctx = {
-    returnTo,
-    refresh: focusId => menuCommand(node.id, { focusId, update: true, returnTo }),
+    refresh: focusId => menuCommand(node.id, { focusId, update: true }),
   };
   const rows = [];
   const ids = [];
@@ -179,16 +168,12 @@ export function menuRows(node, options = {}) {
     rows.push(resetRow(node));
     ids.push(`${node.id}.__reset`);
   }
-  if (returnTo === 'search') {
-    rows.push(backToSearchRow());
-    ids.push('__backToSearch');
-  }
   return { rows, ids };
 }
 
 /**
  * Open (or re-render in place) the menu with registry id `menuId`.
- * options: { focusId, focusIndex, update, returnTo }
+ * options: { focusId, focusIndex, update }
  */
 export function showSettingsMenu(menuId = 'root', options = {}) {
   const tree = buildSettingsTree();
@@ -205,7 +190,7 @@ export function showSettingsMenu(menuId = 'root', options = {}) {
     return showSettingsMenu(parent.id, { ...options, focusId: node.id });
   }
 
-  const { rows, ids } = menuRows(node, options);
+  const { rows, ids } = menuRows(node);
   let selectedIndex = 0;
   if (options.focusId && ids.includes(options.focusId)) {
     selectedIndex = ids.indexOf(options.focusId);
@@ -220,11 +205,11 @@ export function showSettingsMenu(menuId = 'root', options = {}) {
   // A menu replaces whatever panel was waiting for asynchronous metadata.
   awaitingPanelId = null;
   const parent = node.id === 'root' ? null : parentOf(tree, node.id);
-  const onDismiss = options.returnTo === 'search'
-    ? [deferred('YTARK_SEARCH_SHOW', { update: true })]
-    // Back from a submenu returns to its parent with focus on the row that was
-    // used, instead of dropping focus back to the top of the list.
-    : (parent ? [deferred('YTARK_MENU_SHOW', { menuId: parent.id, focusId: node.id, update: true })] : undefined);
+  // Back from a submenu returns to its parent with focus on the row that was
+  // used, instead of dropping focus back to the top of the list.
+  const onDismiss = parent
+    ? [deferred('YTARK_MENU_SHOW', { menuId: parent.id, focusId: node.id, update: true })]
+    : undefined;
   return showModal(header, overlayPanelItemListRenderer(rows, selectedIndex),
     node.menuId || `ytark-menu-${node.id}`, !!options.update, { onDismiss });
 }

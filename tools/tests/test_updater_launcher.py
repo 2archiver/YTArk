@@ -169,9 +169,14 @@ def updater_job_service(permission="android.permission.BIND_JOB_SERVICE", export
 
 
 def manifest_with_background_components(storage=None, service=None, boot_permission=True):
+    """The background components the compiled manifest gate checks.
+
+    ``storage`` is opt-in: 3.0 removed the Cache & Storage activity, so a
+    manifest carrying one is only produced to prove the gate refuses it.
+    """
     boot = "    E: uses-permission (line=80)\n      A: android:name=\"android.permission.RECEIVE_BOOT_COMPLETED\"\n" if boot_permission else ""
     return manifest(updater_activity(), launcher_proxy(),
-                    storage or storage_activity(), service or updater_job_service()) + boot
+                    storage or "", service or updater_job_service()) + boot
 
 
 def manifest(*activities: str, permission_block=compiled_permission_element(),
@@ -221,11 +226,8 @@ class UpdaterLauncherTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "signature permission"):
             validate_release.validate_updater_launcher(manifest(
                 updater_activity(permission="android.permission.INTERNET"), launcher_proxy()))
-        with self.assertRaisesRegex(ValueError, "signature permission"):
-            validate_release.validate_updater_background_components(manifest_with_background_components(
-                storage=storage_activity(permission="android.permission.INTERNET")))
 
-    def test_persistent_job_service_and_storage_route_are_required(self):
+    def test_persistent_job_service_is_required_and_the_storage_activity_is_refused(self):
         validate_release.validate_updater_background_components(manifest_with_background_components())
         with self.assertRaisesRegex(ValueError, "BIND_JOB_SERVICE"):
             validate_release.validate_updater_background_components(
@@ -233,12 +235,12 @@ class UpdaterLauncherTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "not be exported"):
             validate_release.validate_updater_background_components(
                 manifest_with_background_components(service=updater_job_service(exported="(type 0x12)0xffffffff")))
-        with self.assertRaisesRegex(ValueError, "ytark://storage"):
-            validate_release.validate_updater_background_components(
-                manifest_with_background_components(storage=storage_activity(host="updates")))
         with self.assertRaisesRegex(ValueError, "RECEIVE_BOOT_COMPLETED"):
             validate_release.validate_updater_background_components(
                 manifest_with_background_components(boot_permission=False))
+        with self.assertRaisesRegex(ValueError, "removed YTArk Cache & Storage activity"):
+            validate_release.validate_updater_background_components(
+                manifest_with_background_components(storage=storage_activity()))
 
     def test_a_manifest_without_an_application_element_is_refused(self):
         with self.assertRaisesRegex(ValueError, "no application element"):
@@ -390,7 +392,7 @@ class CompiledSignaturePermissionDeclarationTests(unittest.TestCase):
 
 
 class ExactRoutePermissionTests(unittest.TestCase):
-    """UpdateActivity and StorageActivity must require the exact permission name."""
+    """UpdateActivity must require the exact signature permission name."""
 
     def test_the_updates_route_permission_must_match_exactly(self):
         for wrong in ("android.permission.INTERNET", SCREEN_PERMISSION + "X",
@@ -400,14 +402,7 @@ class ExactRoutePermissionTests(unittest.TestCase):
                     validate_release.validate_updater_launcher(manifest(
                         updater_activity(permission=wrong), launcher_proxy()))
 
-    def test_the_storage_route_permission_must_match_exactly(self):
-        for wrong in ("android.permission.INTERNET", SCREEN_PERMISSION + "X",
-                      SCREEN_PERMISSION[:-1], None):
-            with self.subTest(permission=wrong):
-                with self.assertRaisesRegex(ValueError, "signature permission"):
-                    validate_release.validate_updater_background_components(
-                        manifest_with_background_components(
-                            storage=storage_activity(permission=wrong)))
+
 
 
 if __name__ == "__main__":

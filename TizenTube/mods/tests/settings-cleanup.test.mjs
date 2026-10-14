@@ -1,10 +1,10 @@
 // Settings cleanup for YTArk 2.5: the removed controls are gone everywhere
-// (tree, search, commands, preferences), every retained behaviour has exactly
-// one authoritative control, and About YTArk reports the installed version.
-// (ui/settingsRegistry.js, ui/settings.js, ui/settingsSearch.js,
-//  features/appVersion.js, config.js)
+// (tree, commands, preferences), every retained behaviour has exactly one
+// authoritative control, and About YTArk reports the installed version.
+// (ui/settingsRegistry.js, ui/settings.js, features/appVersion.js, config.js)
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   setupEnvironment, initEnglish, lastModal, modalItems, messageText, rowTitle, rowSubtitle,
   findRow, press, header, tick,
@@ -14,7 +14,6 @@ const { recorded, windowStub } = setupEnvironment({ version: '2.3.0' });
 await initEnglish();
 const { configRead, configWrite, configKeys, configDefault } = await import('../config.js');
 const registry = await import('../ui/settingsRegistry.js');
-const search = await import('../ui/settingsSearch.js');
 const appVersion = await import('../features/appVersion.js');
 const updater = await import('../features/updater.js');
 const resolve = await import('../resolveCommand.js');
@@ -27,20 +26,20 @@ const REMOVED_IDS = ['quickControls', 'quickControls.presets', 'quickControls.un
   'quickControls.quality', 'quickControls.userAgent', 'quickControls.resetUserAgent',
   'quickControls.hideShorts', 'quickControls.hidePreviews', 'quickControls.hideEndCards',
   'quickControls.hideRelated', 'quickControls.theme', 'quickControls.premiumLogo',
-  'quickControls.guideEntry', 'quickControls.ytSettingsLayout', 'misc.fixUi'];
-const REMOVED_ACTIONS = ['TV_APPLY_PRESET', 'TV_UNDO_PRESET', 'TV_SET_QUALITY', 'RESET_USER_AGENT_PROFILE'];
+  'quickControls.guideEntry', 'quickControls.ytSettingsLayout', 'misc.fixUi', 'search'];
+const REMOVED_ACTIONS = ['TV_APPLY_PRESET', 'TV_UNDO_PRESET', 'TV_SET_QUALITY', 'RESET_USER_AGENT_PROFILE',
+  'YTARK_SEARCH_OPEN', 'YTARK_SEARCH_SHOW', 'YTARK_SEARCH_EDIT', 'YTARK_SEARCH_CLEAR',
+  'YTARK_SEARCH_SET_QUERY', 'YTARK_SEARCH_OPEN_RESULT'];
 
 const tree = () => registry.buildSettingsTree();
-const index = () => search.buildSearchIndex(tree());
-const allIds = query => search.searchSettings(index(), query).map(result => result.entry.id);
 
-/** Every searchable string of every node, lowercased. */
+/** Every user-visible string of every node, lowercased. */
 function nodeTexts() {
   const lines = [];
   registry.walkTree(tree(), (node) => {
     lines.push({
       id: node.id,
-      text: [node.title, node.description, (node.keywords || []).join(' '),
+      text: [node.title, node.description,
         node.header && node.header.title, node.header && node.header.subtitle]
         .filter(Boolean).join(' ').toLowerCase(),
     });
@@ -50,7 +49,6 @@ function nodeTexts() {
 
 beforeEach(() => {
   recorded.length = 0;
-  search.resetSearchState();
 });
 
 describe('removed controls', () => {
@@ -60,7 +58,7 @@ describe('removed controls', () => {
     }
   });
 
-  it('are gone from every title, description and search keyword', () => {
+  it('are gone from every title and description', () => {
     for (const { id, text } of nodeTexts()) {
       for (const needle of ['preset', 'user-agent', 'user agent', 'fix ui', 'quick controls', 'spoof']) {
         assert.equal(text.includes(needle), false, `${id} still mentions "${needle}": ${text}`);
@@ -68,15 +66,16 @@ describe('removed controls', () => {
     }
   });
 
-  it('are gone from settings search, which stays in sync with the registry', () => {
-    for (const query of ['preset', 'presets', 'undo preset', 'user agent', 'useragent', 'ua', 'spoof',
-      'device profile', 'fix ui', 'fixui', 'animations', 'quick controls', 'quick quality']) {
-      assert.deepEqual(allIds(query), [], `"${query}" finds nothing`);
+  it('leave no settings search behind in the tree or the registry source', () => {
+    // The 3.0 removal deleted settings search entirely: no row, no search
+    // fields, no keywords, no search commands left in the registry. (The word
+    // "search" still occurs as a YouTube endpoint name, so the source check
+    // targets the retired identifiers, not the word.)
+    assert.equal(registry.findNode(tree(), 'search'), null, 'no search row in the tree');
+    const source = readFileSync(new URL('../ui/settingsRegistry.js', import.meta.url), 'utf8');
+    for (const needle of ['YTARK_SEARCH', 'buildSearchIndex', 'keywords:', 'search: false', 'settingsSearch']) {
+      assert.equal(source.includes(needle), false, `the registry still references "${needle}"`);
     }
-    // Search itself still works and still finds the retained settings.
-    assert.ok(allIds('theme').length > 0);
-    assert.ok(allIds('quality').includes('player.quality'));
-    assert.ok(allIds('shorts').includes('privacy.hideShorts'));
   });
 
   it('do nothing when an old command reaches the resolver', () => {
@@ -130,7 +129,6 @@ describe('one authoritative control per behaviour', () => {
       'privacy.hidePreviews': 'enablePreviews',
       'appearance.premiumLogo': 'enablePremiumLogo',
       'appearance.player.hideEndCards': 'enableHideEndScreenCards',
-      'appearance.theme': 'uiTheme',
       'player.quality': 'preferredVideoQuality',
       'player.hideRelated': 'hideRelatedVideosPlayer',
       'nav.guideEntry': 'enableYtarkGuideEntry',
@@ -193,9 +191,9 @@ describe('About YTArk', () => {
     assert.ok(build.openPopupAction.popup.overlaySectionRenderer.overlay.overlayTwoPanelRenderer
       .actionPanel.overlayPanelRenderer.content.scrollPaneRenderer, 'D-pad scrollable');
     const details = modalItems(build).map(messageText).join('\n');
-    assert.match(details, /versionName: 2\.9\.0/);
-    assert.match(details, /versionCode: 2090000/);
-    assert.match(details, /YTArk userscript: s28/);
+    assert.match(details, /versionName: 3\.0\.0/);
+    assert.match(details, /versionCode: 3000000/);
+    assert.match(details, /YTArk userscript: s29/);
     assert.match(details, /Android base: v2\.0\.2/);
 
     resolveCommand({ customAction: { action: 'YTARK_PANEL_SHOW', parameters: { id: 'about' } } });
@@ -231,7 +229,7 @@ describe('About YTArk', () => {
     await tick(20);
     resolveCommand({ customAction: { action: 'YTARK_PANEL_SHOW', parameters: { id: 'about' } } });
     const panel = lastModal(recorded, 'ytark-panel-about');
-    assert.equal(header(panel).subtitle, 'YTArk 2.9 (build metadata)', "this build's own version, labelled by source");
+    assert.equal(header(panel).subtitle, 'YTArk 3.0 (build metadata)', "this build's own version, labelled by source");
     const lines = modalItems(panel).map(messageText).filter(Boolean);
     assert.ok(lines.some(line => /packaging metadata/.test(line)), 'the source is stated');
     const reread = findRow(panel, 'Read the installed version again');
@@ -280,24 +278,21 @@ describe('YTArk and YouTube settings are told apart', () => {
 
   it('groups the retained controls into the documented categories', () => {
     assert.deepEqual(tree().children.map(node => node.id),
-      ['search', 'playback', 'appearance', 'privacy', 'navigation', 'storage', 'updates', 'about', 'support']);
-    for (const menuId of ['playback', 'appearance', 'privacy', 'navigation', 'storage', 'updates']) {
+      ['playback', 'appearance', 'privacy', 'navigation', 'updates', 'about', 'support']);
+    for (const menuId of ['playback', 'appearance', 'privacy', 'navigation', 'updates']) {
       const node = registry.findNode(tree(), menuId);
       assert.ok(node.title && node.description, `${menuId} has a title and a description`);
       assert.ok((node.children || []).length > 0, `${menuId} is not an empty destination`);
     }
+    assert.equal(registry.findNode(tree(), 'storage'), null, 'Cache & Storage is removed entirely');
+    assert.equal(registry.findNode(tree(), 'storage.open'), null);
   });
 
-  it('exposes recovery as opt-in, scoped native storage routes and an informational animation row', () => {
+  it('exposes recovery as opt-in and an informational animation row', () => {
     const recovery = registry.findNode(tree(), 'player.recovery');
     assert.equal(recovery.type, 'toggle');
     assert.equal(recovery.key, 'enablePlaybackRecovery');
     assert.equal(configDefault('enablePlaybackRecovery'), false);
-
-    const storage = registry.findNode(tree(), 'storage.open');
-    assert.equal(storage.type, 'action');
-    assert.equal(storage.command[0].customAction.action, 'YTARK_NATIVE_STORAGE_OPEN');
-    assert.match(storage.description, /temporary cache/);
 
     const animation = registry.findNode(tree(), 'nav.skipStartupAnimation');
     assert.equal(animation.type, 'panel', 'there is no setting that could promise an animation skip');

@@ -63,21 +63,19 @@ class UpdaterManifestPatchTests(unittest.TestCase):
         self.assertLess(xml.index("dev.cobalt.app.MainActivity"), xml.index(repack_apk.UPDATER_ACTIVITY))
         self.assertEqual(xml.count("android.intent.category.LEANBACK_LAUNCHER"), 2)
 
-    def test_persistent_hourly_job_and_storage_route_are_declared_without_exporting_the_service(self):
+    def test_persistent_hourly_job_is_declared_without_exporting_the_service(self):
         xml = self.patched()
         self.assertIn('android.permission.RECEIVE_BOOT_COMPLETED', xml)
         service = re.search(r'<service\s+android:name="' + re.escape(repack_apk.UPDATER_JOB_SERVICE) + r'"[^>]*/>', xml)
         self.assertIsNotNone(service)
         self.assertIn('android.permission.BIND_JOB_SERVICE', service.group(0))
         self.assertIn('android:exported="false"', service.group(0))
-        storage = re.search(r'<activity\s+android:name="' + re.escape(repack_apk.UPDATER_STORAGE_ACTIVITY) + r'".*?</activity>', xml, re.S)
-        self.assertIsNotNone(storage)
-        self.assertIn('android:host="storage"', storage.group(0))
-        self.assertIn('android:name="android.intent.action.VIEW"', storage.group(0))
-        self.assertIn('android:name="android.intent.category.DEFAULT"', storage.group(0))
-        self.assertIn('android:name="android.intent.category.BROWSABLE"', storage.group(0))
-        self.assertIn('android:exported="true"', storage.group(0))
-        self.assertIn(f'android:permission="{APP_ID}{repack_apk.UPDATER_SCREEN_PERMISSION_SUFFIX}"', storage.group(0))
+
+    def test_the_removed_storage_screen_has_no_activity_or_route(self):
+        xml = self.patched()
+        self.assertNotIn('StorageActivity', xml)
+        self.assertNotIn('android:host="storage"', xml)
+        self.assertNotIn('YTArk Cache', xml)
 
     def test_providers_and_receiver_are_private_and_the_file_provider_is_single_file(self):
         xml = self.patched()

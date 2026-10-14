@@ -81,7 +81,7 @@ describe('structural detection and idempotent insertion', () => {
     assert.equal(ids(reparsed).filter(id => id === layout.YTARK_CATEGORY_ID).length, 1);
     const ytark = cat(response, layout.YTARK_CATEGORY_ID);
     assert.deepEqual(ytark.items.map(row => row.settingActionRenderer.itemId),
-      ['tizentube_open_action', 'ytark_search_action', 'ytark_updates_action'],
+      ['tizentube_open_action', 'ytark_updates_action'],
       'What\'s new is not duplicated on the YouTube Settings page: it lives in YTArk Updates');
   });
 
@@ -172,25 +172,18 @@ describe('ordering, hiding and pinning by stable ids', () => {
 });
 
 describe('native Android screen routing through the real custom-action path', () => {
-  it('opens only the two YTArk-owned screens and blocks storage while playback is active', async () => {
+  it('routes only the YTArk-owned updates screen; the removed storage screen is a no-op', async () => {
     const { handleYtarkAction } = await import('../ui/ytarkActions.js');
     window.location.href = 'https://www.youtube.com/tv';
-    configWrite('uiTheme', 'oled');
     assert.equal(handleYtarkAction('YTARK_NATIVE_UPDATES_OPEN', {}), true);
-    assert.equal(window.location.href, 'ytark://updates?theme=oled');
-
-    configWrite('uiTheme', 'youtube');
-    video.paused = true;
-    video.ended = false;
-    video.networkState = 1;
-    assert.equal(handleYtarkAction('YTARK_NATIVE_STORAGE_OPEN', {}), true);
-    assert.equal(window.location.href, 'ytark://storage?theme=youtube');
+    assert.equal(window.location.href, 'ytark://updates', 'the route carries no theme query any more');
 
     window.location.href = 'https://www.youtube.com/tv';
     video.paused = false;
-    assert.equal(handleYtarkAction('YTARK_NATIVE_STORAGE_OPEN', {}), false);
+    assert.equal(handleYtarkAction('YTARK_NATIVE_STORAGE_OPEN', {}), false,
+      'the removed Cache & Storage command is a retired no-op');
     assert.equal(window.location.href, 'https://www.youtube.com/tv',
-      'active playback keeps the storage route closed');
+      'no storage route is emitted, playing or not');
     assert.equal(handleYtarkAction('YTARK_NATIVE_ADMIN_OPEN', {}), false,
       'no arbitrary native component is routed');
   });
@@ -207,20 +200,11 @@ describe('native Android screen routing through the real custom-action path', ()
     video.ended = false;
     video.networkState = 1;
     const before = toasts(recorded).length;
-    assert.equal(handleYtarkAction('YTARK_NATIVE_STORAGE_OPEN', {}), true);
-    await new Promise(resolve => setTimeout(resolve, 2400));
-    const shown = toasts(recorded).slice(before).map(toast => `${toast.title} ${toast.subtitle}`);
-    assert.ok(shown.some(text => /Cache & Storage did not open here/.test(text)),
-      `the storage fallback must be explained, got ${JSON.stringify(shown)}`);
-    assert.ok(shown.some(text => /TV apps row, then choose Cache & Storage/.test(text)),
-      'the fallback names the route that works');
-
-    const latest = toasts(recorded).length;
     assert.equal(handleYtarkAction('YTARK_NATIVE_UPDATES_OPEN', {}), true);
     await new Promise(resolve => setTimeout(resolve, 2400));
-    const updates = toasts(recorded).slice(latest).map(toast => `${toast.title} ${toast.subtitle}`);
+    const updates = toasts(recorded).slice(before).map(toast => `${toast.title} ${toast.subtitle}`);
     assert.ok(updates.some(text => /Open YTArk Updates in the TV apps row\./.test(text)),
-      'the updates fallback names the TV apps row');
+      `the updates fallback names the TV apps row, got ${JSON.stringify(updates)}`);
 
     // When the platform really takes the navigation over the page is hidden and
     // no "did not open" guidance may appear.

@@ -3,80 +3,92 @@
 export const YTARK_CHANGELOG = {
   "schema": 1,
   "source": "CHANGELOG.md",
-  "sourceSha256": "29251a50318f93da587aeb95bfe8795e5b543d48ea14ede54dff1e9ff7351a51",
+  "sourceSha256": "b1e7eaf0d6deaabb6b752f44fb75a3cf4511bf7efc919ade9422fb8de6c0f9a4",
   "entries": [
     {
-      "version": "2.9.0",
-      "display": "2.9",
+      "version": "3.0.0",
+      "display": "3.0",
       "status": "unreleased",
       "date": null,
       "publishedAt": null,
-      "tag": "v2.9.0",
-      "versionCode": 2090000,
-      "scriptTag": "s28",
-      "title": "YTArk 2.9",
+      "tag": "v3.0.0",
+      "versionCode": 3000000,
+      "scriptTag": "s29",
+      "title": "YTArk 3.0",
       "releaseUrl": null,
-      "facts": "Not yet published. Planned tag v2.9.0 · versionCode 2090000 · userscript s28 · one ARMv7 APK (armeabi-v7a) on TizenTubeCobalt v2.0.2. This is intended as a direct, signed in-place update to published 2.8.0; package ID, signing identity and app data directory stay unchanged.",
-      "summary": "Repaired ARMv7 release build, safer update installation, and settings and OLED fixes.",
+      "facts": "Not yet published. Planned tag v3.0.0 · versionCode 3000000 · userscript s29 · one ARMv7 APK (armeabi-v7a) on TizenTubeCobalt v2.0.2. A direct, signed in-place update to published 2.9.0; package ID, signing identity and app data directory stay unchanged.",
+      "summary": "One real in-app YTArk Updates page, and three features that could not work are removed.",
       "sections": [
         {
           "heading": "Added",
           "items": [
-            "Cache & Storage for the TV remote. Measures Android's app-cache directories off the UI thread and can clear only old files there; recently modified or unstatable files are retained. Downloaded update packages are a separate control with its own measured figure. Profile and local-storage directories outside those cache roots are not scanned, and cookies, account data, preferences, databases, watch position, downloads and installer-held APKs are never touched. Pause playback first.",
-            "Opt-in playback recovery. Uses the existing player state and PlayerService.loadVideo contract with bounded retries for sustained buffering and recoverable media errors. Supported VOD/DVR positions and live-edge intent are preserved; user pauses, seeking, completion, navigation, hidden or picture-in-picture playback and offline state stop retries, as does player text identifying sign-in, age or region restrictions. Android and the YouTube UI are not reloaded.",
-            "Persistent stable-release update automation. Android JobScheduler requests an hourly network-connected check and can download, resume and validate a compatible stable APK in the background. Checks and downloads can each be disabled, and Android may defer scheduled work.",
-            "Screen-only Updates and Storage URI contracts. The userscript emits only ytark://updates or ytark://storage, with an optional theme=oled or theme=youtube. Exported screen routes require YTArk's app-signature permission and accept only the matching URI; arbitrary actions, packages, components and parameters are rejected. The native Updates screen also has a Cache & Storage button, so the storage screen stays reachable from the TV apps row even where the base cannot dispatch the scheme in-page."
+            "In-app YTArk Updates page. The settings entry named YTArk Updates opens the real update page directly, and it is now the only update UI. On that page: Check for updates runs a real stable-release lookup against the official release API; Automatic check offers Every 1 hour, Every 3 hours or Never (default Every 1 hour, remembered per device); Download update and Install update start and re-run the verified ARMv7 APK handoff to Android's own installer; and the installed version, the latest compatible release, the last successful check time, and What's New / version history all live on the same page.",
+            "Faster startup (Experimental) in Settings → Navigation, default Off. When on, YTArk defers non-critical userscript work (settings translations, update checking, the What's New evaluation, the on-screen clock, QR encoding, changelog parsing) until after the first YouTube screen has rendered, with a bounded fallback to normal startup if the accelerated path fails, and a guard against double initialisation. It never delays ad blocking, theming, login or session restoration, or networking readiness. Measured speedups vary by device."
           ]
         },
         {
           "heading": "Changed",
           "items": [
-            "Cache cleanup is scoped to Android cache roots. Results report measured and deleted bytes rather than a guessed reclaimed amount, and partial or unavailable measurements are labelled instead of being presented as complete.",
-            "Native screens follow a validated theme value. Updates and Storage persist only oled or youtube when a matching route supplies it; YouTube's own theme, playback and app data are unchanged.",
-            "Release redirects and partial-download resumes are revalidated. Every redirect hop must stay on the exact HTTPS allowlist, and a resume requires matching URL, digest, size and ABI metadata.",
-            "Foreground updater checks share persisted cadence and single-flight work. Explicit automatic-check and automatic-download opt-outs remain respected, and a user-cancelled transfer is not restarted by another scheduler path.",
-            "Navigation includes startup-animation availability. This build has no optional YTArk startup animation or removable delay, so the row is informational only: it is not a toggle and it does not promise to remove Android's system splash."
+            "One scheduler for update checks. The in-app interval is the only automatic checker. It runs on foreground opportunities — app resume, opening YTArk Updates, and a bounded ticker while the app is in the foreground — and performs a network check only when the interval has elapsed, so a sleeping TV or a connectivity delay postpones work instead of producing exact hourly requests. The second, user-invisible background job from 2.9 is removed.",
+            "Honest download handoff. Download update asks the engine to download the verified official ARMv7 APK in the background; when the download completes, Android's own installer opens, and granting install permission there (exactly once) is required for the upgrade. Install update re-runs the same handoff. The pinned engine re-downloads on each attempt, so 3.0 does not claim resume or same-APK continue; the in-app native verifier still validates the downloaded bytes (checksum, package, version, ABI, signing certificate) and removes corrupt files, and Android enforces signature and version checks at install time.",
+            "Install completion is confirmed from the installed package. When the app returns after the installer, the page re-reads the installed version from the Android package and reports the update as installed only when the new version is actually present; data, cookies and sign-in are preserved by the in-place upgrade.",
+            "About YTArk distinguishes the installed YTArk version (Android package), the embedded engine build details (base tag and build), and the YouTube frontend version, reporting Unknown wherever a value cannot be verified."
           ]
         },
         {
           "heading": "Defaults and migration",
           "items": [
-            "Userscript settings schema 4 adds enablePlaybackRecovery, default off; only a missing key receives the default and no existing preference is migrated or reset.",
-            "Native automatic checks and downloads default on for the new updater preference; explicit off choices are retained.",
-            "The update stays compatible with the published 2.8.0 package and signing identity; no uninstall, data-directory change or Cobalt engine rebuild is part of it."
+            "The 3.0 upgrade retires the settings-search state and the OLED theme preference from the stored configuration without resetting anything else; app data, cookies and login are never touched. A device upgrading with the OLED theme enabled returns to the normal YouTube/YTArk theming with its custom colours intact. The old Skip Startup Animation row is replaced by Faster startup, initialised to Off."
           ]
         },
         {
           "heading": "Fixed",
           "items": [
-            "The 2.9 release build failure is fixed. The userscript step still required a settings-editor command that the 2.9 work had retired, so the 2.9 and 2.9.1 runs both stopped before repacking, signing or uploading anything. (The retired command's identifier is intentionally not repeated here: the bundled changelog ships inside the userscript, and the bundle contract forbids the retired names anywhere in the artefact.) The required and retired symbols now live in one checked-in contract (release/bundle-contract.json) that both workflows read, and a regression test fails when a required symbol disappears, a retired one returns, or a workflow grows a second copy of the list.",
-            "Installer success is confirmed against installed package metadata. A success result is polled but never trusted by itself; cancellation keeps the verified APK available for an explicit retry instead of reporting an install that did not happen.",
-            "Updater failures report the phase that actually failed. Check, download, APK validation and install failures stay distinct; rejecting the final APK is a validation failure, not a missing installer.",
-            "OLED surface gradients no longer paint over the black background. Coverage is still limited to the enumerated surfaces; full YouTube coverage needs device testing.",
-            "Update-file cleanup requires an explicit confirmation and protects both the pending installer APK and a resumable download, including when they are different files.",
-            "Automatic download selection respects skipped and cancelled releases and keeps a matching partial file for an explicit resume; work interrupted by an app restart is reconciled without counting an installer hand-off as a completed install.",
-            "Playback recovery cancels scheduled attempts on navigation and suspends them during picture-in-picture, and an error arriving after a media load event is not mistaken for healthy playback.",
-            "Search input stays open when OK is pressed; Done on the remote key grid submits the query.",
-            "About reports unavailable frontend versions as unavailable and recognizes the runtime client-version field.",
-            "Removed the redundant YouTube Settings layout editor; saved layouts and their scoped restore entry remain reachable."
+            "The settings entry named YTArk Updates now opens a working update page instead of the 2.9 status card that pointed at a separate apps-row app, because the pinned engine never dispatched the in-page route.",
+            "The About dialog no longer relies on a synchronous version read: the installed version comes from the Android package, the build details from this build's own metadata, and the YouTube frontend version is shown only when the frontend really publishes it."
+          ]
+        },
+        {
+          "heading": "Removed",
+          "items": [
+            "Settings search. It could never open a usable keyboard on this engine, so it is removed entirely: the search field, the on-screen key-grid keyboard, and every settings-search command. YouTube's own content search is untouched.",
+            "Cache & Storage management. The native storage screen and all of its rows (cache size, engine database, downloaded APK, data wipe) are removed; the pinned engine's internals are not exposed.",
+            "OLED Black. The forced true-black theme, its Appearance choice, its native theme persistence and the theme= route query are removed.",
+            "Skip Startup Animation. This build ships no optional YTArk startup animation, so the informational row is replaced by the real, experimental Faster startup toggle.",
+            "The separate YTArk Updates apps-row app. Its launcher icon, its native screen, its JobScheduler auto-check and the in-page ytark:// deep links are gone; the pinned Cobalt base does not dispatch in-page native routes, and 3.0 presents one coherent in-app experience instead of a second app entry."
           ]
         },
         {
           "heading": "Known limitations",
           "items": [
-            "Not device-verified. No signed 2.9 APK, PackageInstaller exercise, in-place upgrade, TV navigation run, OLED viewport matrix or cache operation has been executed on a physical device or TV emulator.",
-            "The repaired pipeline has not run in CI. The failing userscript step, the release-identity contract and the release metadata were reproduced and verified locally against this source, but proving a green GitHub Actions run needs the change on the trusted branch, which this candidate does not do by itself.",
-            "In-page custom-scheme dispatch is not available on the pinned runtime. The pinned Cobalt v2.0.2 source has no external-protocol handler, content's default returns \"handled\" without starting anything, and the base's only web-to-native bridge cannot open a screen, so a ytark:// page navigation is cancelled silently. The launcher proxy (TV apps row → YTArk Updates → Cache & Storage) is the reachable route; device confirmation of that route is still outstanding.",
-            "The release remains ARMv7-only on TizenTubeCobalt v2.0.2. The Google TV system keyboard remains device-unverified; the DPAD key grid stays as the documented fallback."
+            "The engine's APK download has no progress report on the pinned base, so the page shows an honest \"downloading — Android will open the installer when it finishes\" state instead of a fake progress bar.",
+            "The page cannot byte-verify the APK before the engine hands it to the installer; verification covers the published release metadata (identity, checksum, package, version, ABI, signing certificate) and the downloaded bytes (native verifier), plus Android's own install-time checks.",
+            "If the app is restarted while a download is in flight, the page offers the download again instead of guessing at an opaque engine state."
           ]
         },
         {
           "heading": "Validation",
           "items": [
-            "Candidate test, build and device evidence is recorded in docs/SETTINGS-2.9-RECOVERY-REVIEW.md. This entry is unpublished; no release or tag has been created."
+            "CI covers the update state machine, the interval scheduler, the configuration migration, the bundle contract, the repackaged manifest, and the version and release contract with Node, Python and host-JRE suites.",
+            "This release must be confirmed on a real ARMv7 Android TV before it is treated as fully shipped: update check, the automatic interval, download, installer consent, and the install itself."
           ]
         }
       ]
+    },
+    {
+      "version": "2.9.0",
+      "display": "2.9",
+      "status": "published",
+      "date": "2026-10-14",
+      "publishedAt": "2026-10-14T06:35Z",
+      "tag": "v2.9.0",
+      "versionCode": 2090000,
+      "scriptTag": "s28",
+      "title": "YTArk 2.9",
+      "releaseUrl": "https://github.com/2archiver/YTArk/releases/tag/v2.9.0",
+      "facts": "Published 2026-10-14 06:35 UTC as YTArk 2.9 · tag v2.9.0 · versionCode 2090000 · userscript s28 · one ARMv7 APK (armeabi-v7a) on TizenTubeCobalt v2.0.2. A direct, signed in-place update to published 2.8.0; package ID, signing identity and app data directory stay unchanged.",
+      "summary": "Repaired ARMv7 release build, safer update installation, and settings and OLED fixes.",
+      "sections": []
     },
     {
       "version": "2.8.0",

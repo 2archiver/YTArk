@@ -1,16 +1,13 @@
 /**
- * Dispatcher for the YTArk 2.3 custom actions (settings menus, search,
- * changelog, What's new and the YouTube Settings editor). resolveCommand.js
- * forwards every unknown custom action here.
+ * Dispatcher for the YTArk custom actions (settings menus, changelog,
+ * What's new and the YouTube Settings editor). resolveCommand.js forwards
+ * every unknown custom action here.
  */
 
 import { resetConfigKeys } from '../config.js';
 import { showToast } from './ytUI.js';
 import { showSettingsMenu, showPanel, showResetConfirm, resetScope } from './settings.js';
 import { buildSettingsTree, findNode } from './settingsRegistry.js';
-import {
-  showSettingsSearch, openSearchResult, editSearchQuery, setSearchQuery, resetSearchState,
-} from './settingsSearch.js';
 import { showChangelog, showChangelogVersion, showChangelogNote, showReleaseQr } from './changelogReader.js';
 import { dismissWhatsNew } from '../features/whatsNew.js';
 import { startVersionResolution } from '../features/appVersion.js';
@@ -18,9 +15,8 @@ import {
   showRestoreLayoutConfirm, restoreYtSettingsLayout,
 } from './ytSettingsEditor.js';
 import { tx } from '../translations/text.js';
-import { currentTheme } from './theme.js';
 
-const NATIVE_SCREEN_ROUTES = new Set(['updates', 'storage']);
+const NATIVE_SCREEN_ROUTES = new Set(['updates']);
 
 /**
  * How the user reaches each native screen without an in-page route.
@@ -34,7 +30,6 @@ const NATIVE_SCREEN_ROUTES = new Set(['updates', 'storage']);
  */
 const NATIVE_SCREEN_FALLBACK = {
   updates: 'Open YTArk Updates in the TV apps row.',
-  storage: 'Open YTArk Updates in the TV apps row, then choose Cache & Storage.',
 };
 
 function nativeFallback(screen) {
@@ -43,16 +38,15 @@ function nativeFallback(screen) {
 }
 
 function openNativeRoute(screen) {
-  const theme = currentTheme();
-  const route = NATIVE_SCREEN_ROUTES.has(screen) ? `ytark://${screen}?theme=${theme}` : '';
+  const route = NATIVE_SCREEN_ROUTES.has(screen) ? `ytark://${screen}` : '';
   if (!route) {
     showToast('YTArk', 'That native screen is not available through YTArk navigation.');
     return false;
   }
   try {
     if (typeof window === 'undefined' || !window.location) throw new Error('The Android route is unavailable.');
-    // Only the two YTArk-owned screen routes are emitted. The exported native
-    // Activities validate the exact scheme/host again; no package, component,
+    // The single YTArk-owned screen route is emitted. The exported native
+    // activity validates the exact scheme/host again; no package, component,
     // file path, or command can be supplied by this userscript action.
     //
     // The assignment is kept because it is harmless and becomes the working
@@ -66,7 +60,7 @@ function openNativeRoute(screen) {
         // An engine that does not report visibility at all is treated as "still
         // here", which is the observed behaviour of the pinned base.
         if (documentAtRequest.visibilityState !== 'hidden') {
-          showToast('YTArk', `${screen === 'storage' ? 'Cache & Storage' : 'Updates'} did not open here. ${nativeFallback(screen)}`);
+          showToast('YTArk', `Updates did not open here. ${nativeFallback(screen)}`);
         }
       }, 2200);
     }
@@ -94,17 +88,8 @@ export function handleYtarkAction(action, parameters) {
   switch (action) {
     case 'YTARK_NATIVE_UPDATES_OPEN':
       return openNativeRoute('updates');
-    case 'YTARK_NATIVE_STORAGE_OPEN': {
-      const video = typeof document !== 'undefined' && document.querySelector
-        ? document.querySelector('video') : null;
-      if (video && ((!video.paused && !video.ended) || video.networkState === 2)) {
-        showToast('YTArk Cache & Storage', 'Pause playback and wait for streaming to stop before clearing temporary cache.');
-        return false;
-      }
-      return openNativeRoute('storage');
-    }
     case 'YTARK_MENU_SHOW':
-      showSettingsMenu(p.menuId || 'root', { focusId: p.focusId, update: !!p.update, returnTo: p.returnTo });
+      showSettingsMenu(p.menuId || 'root', { focusId: p.focusId, update: !!p.update });
       return true;
     case 'YTARK_PANEL_SHOW':
       showPanel(p.id, { update: !!p.update });
@@ -133,31 +118,6 @@ export function handleYtarkAction(action, parameters) {
       defer(() => showSettingsMenu(p.menuId, { update: true, focusId: `${p.menuId}.__reset` }));
       return true;
     }
-    case 'YTARK_SEARCH_OPEN':
-      resetSearchState();
-      showSettingsSearch({ update: false });
-      // Opening Search focuses the real text field straight away and asks the
-      // platform for its keyboard, so the first OK lands in a field rather than
-      // on a passive row that needs a second press.
-      editSearchQuery();
-      return true;
-    case 'YTARK_SEARCH_SHOW':
-      showSettingsSearch({ update: p.update !== false, focusId: p.focusId });
-      return true;
-    case 'YTARK_SEARCH_EDIT':
-      editSearchQuery();
-      return true;
-    case 'YTARK_SEARCH_CLEAR':
-      setSearchQuery('');
-      showSettingsSearch({ update: true, focusId: '__field' });
-      return true;
-    case 'YTARK_SEARCH_SET_QUERY':
-      setSearchQuery(p.query);
-      showSettingsSearch({ update: true });
-      return true;
-    case 'YTARK_SEARCH_OPEN_RESULT':
-      openSearchResult(p.id);
-      return true;
     case 'YTARK_CHANGELOG_SHOW':
       showChangelog({ update: !!p.update, focusVersion: p.focusVersion });
       return true;
@@ -173,7 +133,7 @@ export function handleYtarkAction(action, parameters) {
     case 'YTARK_WHATS_NEW_DISMISS':
       dismissWhatsNew();
       if (p.refresh === 'changelog') showChangelog({ update: true });
-      else showSettingsMenu('root', { update: true, focusId: 'search' });
+      else showSettingsMenu('root', { update: true });
       return true;
     case 'YTARK_YTS_RESTORE_CONFIRM':
       showRestoreLayoutConfirm();

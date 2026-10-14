@@ -2,17 +2,16 @@
  * YTArk appearance manager.
  *
  * Owns exactly one managed <style data-ytark-managed-theme="true"> element and
- * three root classes on <html>:
- *   - `ytark-theme-oled`       OLED Black theme
+ * two root classes on <html>:
  *   - `ytark-no-player-scrim`  "Remove player dimming"
  *   - `ytark-hide-watermark`   "Hide channel watermark" (DOM safety net)
  *
  * The stylesheet holds the user's saved custom colours plus the static,
  * class-scoped feature rules from appearanceStyles.js. Switching a feature
- * flips a class; switching the theme back restores the saved custom colours
- * because they were never overwritten. The Premium wordmark keeps resolving
- * its ink from the live header colour through its own (single) theme
- * observer, which already reacts to class changes on <html>.
+ * flips a class; the custom colours are independent of the feature classes
+ * and are never overwritten. The Premium wordmark keeps resolving its ink
+ * from the live header colour through its own (single) theme observer, which
+ * already reacts to class changes on <html>.
  */
 
 import { configRead, configChangeEmitter } from '../config.js';
@@ -20,7 +19,7 @@ import { ROOT_CLASSES, buildAppearanceCss, buildCustomColorCss } from './appeara
 
 const STYLE_ATTRIBUTE = 'data-ytark-managed-theme';
 const STYLE_SELECTOR = `style[${STYLE_ATTRIBUTE}="true"]`;
-const WATCHED_KEYS = ['uiTheme', 'removePlayerScrim', 'hidePlayerWatermark', 'focusContainerColor', 'routeColor'];
+const WATCHED_KEYS = ['removePlayerScrim', 'hidePlayerWatermark', 'focusContainerColor', 'routeColor'];
 const STATIC_CSS = buildAppearanceCss();
 
 let managedStyle = null;
@@ -90,7 +89,6 @@ function setClass(element, name, enabled) {
 /** Desired root classes for the current configuration. */
 export function desiredRootClasses() {
   return {
-    [ROOT_CLASSES.oled]: configRead('uiTheme') === 'oled',
     [ROOT_CLASSES.noScrim]: configRead('removePlayerScrim') === true,
     [ROOT_CLASSES.hideWatermark]: configRead('hidePlayerWatermark') === true,
   };
@@ -177,10 +175,6 @@ function onConfigChange(event) {
   if (WATCHED_KEYS.includes(key)) updateStyle();
 }
 
-export function currentTheme() {
-  return configRead('uiTheme') === 'oled' ? 'oled' : 'youtube';
-}
-
 /** Test/diagnostic hook: tear down the observer and forget the style element. */
 export function resetThemeForTests() {
   if (rootObserver) rootObserver.disconnect();
@@ -213,7 +207,6 @@ export function themeStatus(d = doc()) {
     cssLength,
     restorations: styleRestorations,
     rootClasses: root ? Object.keys(desiredRootClasses()).filter(name => hasClass(root, name)) : [],
-    theme: currentTheme(),
   };
 }
 

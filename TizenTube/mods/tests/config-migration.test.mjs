@@ -19,22 +19,26 @@ function stored(storage) {
 }
 
 describe('fresh installation defaults', () => {
-  it('uses OLED Black and both player cleanup options, and persists the schema marker at once', async () => {
+  it('uses both player cleanup options, no theme preference, and persists the schema marker at once', async () => {
     const storage = propertyStorage();
     const config = await loadConfig(storage);
-    assert.equal(config.configRead('uiTheme'), 'oled');
+    // 3.0 retired the theme choice entirely: the key is not a setting any
+    // more, so a fresh install carries no value for it at all.
+    assert.equal(config.configKeys().includes('uiTheme'), false, 'the theme key is gone');
+    assert.equal(config.configRead('uiTheme'), undefined);
     assert.equal(config.configRead('hidePlayerWatermark'), true);
     assert.equal(config.configRead('removePlayerScrim'), true);
+    assert.equal(config.configRead('fasterStartup'), false, 'the experimental faster start begins off');
     assert.equal(config.getConfigMeta().freshInstall, true);
     assert.equal(config.configRead('lastSeenVersion'), '');
     // Persisted immediately: on the next launch YouTube's own storage exists,
     // and the marker keeps this install from being mistaken for an upgrade.
     assert.equal(stored(storage).configSchemaVersion, config.CONFIG_SCHEMA_VERSION);
-    assert.equal(stored(storage).uiTheme, 'oled');
 
     storage['yt.leanback.default::recurring_actions'] = '{}';
     const restarted = await loadConfig(storage);
-    assert.equal(restarted.configRead('uiTheme'), 'oled', 'the fresh-install defaults survive a restart');
+    assert.equal(restarted.configRead('hidePlayerWatermark'), true, 'the fresh-install defaults survive a restart');
+    assert.equal(restarted.configRead('fasterStartup'), false);
     assert.equal(restarted.getConfigMeta().freshInstall, false);
     assert.equal(restarted.getConfigMeta().migratedFrom, null);
   });
@@ -53,7 +57,6 @@ describe('upgrade from YTArk 2.2 or earlier', () => {
       }),
     });
     const config = await loadConfig(storage);
-    assert.equal(config.configRead('uiTheme'), 'youtube');
     assert.equal(config.configRead('hidePlayerWatermark'), false);
     assert.equal(config.configRead('removePlayerScrim'), false);
     assert.equal(config.configRead('lastSeenVersion'), config.LEGACY_VERSION_MARKER);
@@ -65,10 +68,8 @@ describe('upgrade from YTArk 2.2 or earlier', () => {
     assert.equal(stored(storage).configSchemaVersion, config.CONFIG_SCHEMA_VERSION);
 
     // The user opts in later; the explicit choice wins on every restart.
-    config.configWrite('uiTheme', 'oled');
     config.configWrite('hidePlayerWatermark', true);
     const restarted = await loadConfig(storage);
-    assert.equal(restarted.configRead('uiTheme'), 'oled');
     assert.equal(restarted.configRead('hidePlayerWatermark'), true);
     assert.equal(restarted.configRead('removePlayerScrim'), false);
     assert.equal(restarted.getConfigMeta().migratedFrom, null, 'the migration ran exactly once');
@@ -77,7 +78,7 @@ describe('upgrade from YTArk 2.2 or earlier', () => {
   it('treats an install with YouTube TV history but no YTArk settings as an upgrade', async () => {
     const storage = propertyStorage({ 'yt.leanback.default::recurring_actions': '{"data":{}}' });
     const config = await loadConfig(storage);
-    assert.equal(config.configRead('uiTheme'), 'youtube');
+    assert.equal(config.configRead('hidePlayerWatermark'), false, 'the kept-old-appearance default applies');
     assert.equal(config.getConfigMeta().freshInstall, false);
     assert.equal(storage['yt.leanback.default::recurring_actions'], '{"data":{}}', 'YouTube storage is only checked, never changed');
   });
@@ -94,6 +95,8 @@ describe('malformed saved settings', () => {
     const storage = propertyStorage({
       [CONFIG_KEY]: JSON.stringify({
         configSchemaVersion: 2,
+        // a stored theme choice: 3.0 retires the key outright, so the value
+        // is dropped at migration instead of being repaired or kept
         uiTheme: 'purple',
         enableAdBlock: 'false',
         dimmingTimeout: '30',
@@ -106,7 +109,7 @@ describe('malformed saved settings', () => {
       }),
     });
     const config = await loadConfig(storage);
-    assert.equal(config.configRead('uiTheme'), 'oled');
+    assert.equal(config.configRead('uiTheme'), undefined, 'the retired theme value is gone');
     assert.equal(config.configRead('enableAdBlock'), false);
     assert.equal(config.configRead('dimmingTimeout'), 30);
     assert.equal(config.configRead('dimmingOpacity'), 0.5);
@@ -124,7 +127,7 @@ describe('malformed saved settings', () => {
       const config = await loadConfig(storage);
       assert.equal(config.configRead('enableAdBlock'), true);
       // A corrupt value still proves the app ran before: keep the old look.
-      assert.equal(config.configRead('uiTheme'), 'youtube', raw);
+      assert.equal(config.configRead('hidePlayerWatermark'), false, raw);
     }
   });
 
@@ -137,10 +140,10 @@ describe('malformed saved settings', () => {
       '{"browseEndpoint":{"browseId":"FEtopics"}}');
     const migrated = config.migrateConfig(null, { hasLeanbackHistory: false });
     assert.equal(migrated.freshInstall, true);
-    assert.equal(migrated.config.uiTheme, 'oled');
+    assert.equal(migrated.config.fasterStartup, false);
     const future = config.migrateConfig({ configSchemaVersion: 99, uiTheme: 'youtube' }, {});
     assert.equal(future.config.configSchemaVersion, 99, 'a newer schema marker is never downgraded');
-    assert.equal(future.config.uiTheme, 'youtube');
+    assert.equal(future.config.uiTheme, 'youtube', 'a newer schema is left untouched, key included');
   });
 });
 
@@ -174,15 +177,16 @@ describe('upgrade from YTArk 2.4: removed preferences are retired, nothing else 
     assert.equal(meta.migratedFrom, 2);
     assert.deepEqual(meta.retired.slice().sort(), [
       'enableFixedUI', 'tvActivePreset', 'tvLastPresetSnapshot', 'tvQuickQuality',
-      'userAgentProfile', 'videoPreferredCodec',
+      'uiTheme', 'userAgentProfile', 'videoPreferredCodec',
     ]);
     // The removed user-agent override is reported once, so the retirement
     // migration in features/userAgentRetirement.js can restore the platform UA.
     assert.equal(meta.retiredValues.userAgentProfile, 'androidTv32');
+    assert.equal(meta.retiredValues.uiTheme, 'oled', 'the retired theme value is reported once');
 
     const persisted = stored(storage);
     for (const key of ['userAgentProfile', 'enableFixedUI', 'tvActivePreset', 'tvLastPresetSnapshot',
-      'tvQuickQuality', 'videoPreferredCodec']) {
+      'tvQuickQuality', 'videoPreferredCodec', 'uiTheme']) {
       assert.equal(Object.prototype.hasOwnProperty.call(persisted, key), false, `${key} is gone from storage`);
     }
     assert.equal(persisted.configSchemaVersion, config.CONFIG_SCHEMA_VERSION);
@@ -196,7 +200,7 @@ describe('upgrade from YTArk 2.4: removed preferences are retired, nothing else 
     assert.equal(config.configRead('preferredVideoQuality'), '1080p');
     assert.equal(config.configRead('focusContainerColor'), '#0a1628');
     assert.equal(config.configRead('routeColor'), '#0d1f3c');
-    assert.equal(config.configRead('uiTheme'), 'oled');
+    assert.equal(config.configRead('uiTheme'), undefined, 'the OLED choice is retired with its value');
     assert.equal(config.configRead('enableAdBlock'), false);
     assert.equal(config.configRead('enablePremiumLogo'), true);
     // The legacy codec value survives under the key the player reads.
@@ -213,7 +217,7 @@ describe('upgrade from YTArk 2.4: removed preferences are retired, nothing else 
     const config = await loadConfig(storage);
     assert.deepEqual(config.getConfigMeta().retired, []);
     for (const key of ['userAgentProfile', 'enableFixedUI', 'tvActivePreset', 'tvLastPresetSnapshot',
-      'tvQuickQuality', 'videoPreferredCodec']) {
+      'tvQuickQuality', 'videoPreferredCodec', 'uiTheme']) {
       assert.equal(config.configKeys().includes(key), false, `${key} is not a setting any more`);
       assert.equal(Object.prototype.hasOwnProperty.call(stored(storage), key), false, key);
     }
@@ -233,8 +237,8 @@ describe('writes, resets and storage failure', () => {
     });
     assert.doesNotThrow(() => config.configWrite('enableClock', true));
     assert.doesNotThrow(() => config.configWrite('enableClock', false));
-    config.configWriteMany({ uiTheme: 'youtube', removePlayerScrim: false });
-    assert.equal(config.configRead('uiTheme'), 'youtube');
+    config.configWriteMany({ enableSigninReminder: true, removePlayerScrim: false });
+    assert.equal(config.configRead('enableSigninReminder'), true);
     assert.equal(config.lastPersistSucceeded(), false);
     assert.equal(failures.length, 1, 'one notice per session, no toast spam');
   });
@@ -252,10 +256,10 @@ describe('writes, resets and storage failure', () => {
     const keys = [];
     const listener = event => keys.push(event.detail.key);
     config.configChangeEmitter.addEventListener('configChange', listener);
-    config.configWriteMany({ uiTheme: 'youtube', hidePlayerWatermark: false, removePlayerScrim: false });
+    config.configWriteMany({ enableSigninReminder: true, hidePlayerWatermark: false, removePlayerScrim: false });
     config.configChangeEmitter.removeEventListener('configChange', listener);
     assert.equal(writes, 1);
-    assert.deepEqual(keys, ['uiTheme', 'hidePlayerWatermark', 'removePlayerScrim']);
+    assert.deepEqual(keys, ['enableSigninReminder', 'hidePlayerWatermark', 'removePlayerScrim']);
   });
 
   it('resets only the requested YTArk keys and never other storage', async () => {

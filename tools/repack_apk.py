@@ -480,7 +480,6 @@ UPDATER_PACKAGE = "io.github.twoarchiver.ytark.updater"
 UPDATER_ACTIVITY = UPDATER_PACKAGE + ".UpdateActivity"
 UPDATER_LAUNCHER_ACTIVITY = UPDATER_PACKAGE + ".UpdateLauncherActivity"
 UPDATER_SCREEN_PERMISSION_SUFFIX = ".permission.OPEN_NATIVE_SCREEN"
-UPDATER_STORAGE_ACTIVITY = UPDATER_PACKAGE + ".StorageActivity"
 UPDATER_PROVIDER = UPDATER_PACKAGE + ".UpdateBootstrapProvider"
 UPDATE_FILE_PROVIDER = UPDATER_PACKAGE + ".PendingUpdateProvider"
 UPDATER_RECEIVER = UPDATER_PACKAGE + ".UpdateActionReceiver"
@@ -496,8 +495,8 @@ def patch_updater_manifest(decoded_dir: str, app_id: str) -> None:
     if not re.search(r"xmlns:android\s*=", xml):
         raise SystemExit("ERROR: decoded manifest has no android namespace.")
     if (UPDATER_PROVIDER in xml or UPDATER_ACTIVITY in xml or UPDATER_LAUNCHER_ACTIVITY in xml
-            or UPDATER_STORAGE_ACTIVITY in xml or UPDATER_RECEIVER in xml
-            or UPDATER_JOB_SERVICE in xml or UPDATE_FILE_PROVIDER in xml):
+            or UPDATER_RECEIVER in xml or UPDATER_JOB_SERVICE in xml
+            or UPDATE_FILE_PROVIDER in xml):
         raise SystemExit("ERROR: native YTArk updater components already exist in the manifest.")
 
     screen_permission = app_id + UPDATER_SCREEN_PERMISSION_SUFFIX
@@ -555,21 +554,6 @@ def patch_updater_manifest(decoded_dir: str, app_id: str) -> None:
       <intent-filter>
         <action android:name="android.intent.action.MAIN" />
         <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
-      </intent-filter>
-    </activity>
-    <activity
-        android:name="{UPDATER_STORAGE_ACTIVITY}"
-        android:label="YTArk Cache &amp; Storage"
-        android:permission="{screen_permission}"
-        android:theme="@android:style/Theme.Material.NoActionBar"
-        android:screenOrientation="landscape"
-        android:excludeFromRecents="true"
-        android:exported="true">
-      <intent-filter>
-        <action android:name="android.intent.action.VIEW" />
-        <category android:name="android.intent.category.DEFAULT" />
-        <category android:name="android.intent.category.BROWSABLE" />
-        <data android:scheme="ytark" android:host="storage" />
       </intent-filter>
     </activity>
     <service
