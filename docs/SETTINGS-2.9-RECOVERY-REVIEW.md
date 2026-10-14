@@ -77,8 +77,11 @@ log-forensics case, because the wrong depth is provable locally —
    gone.
 4. **New native theme regression test** — `NativeThemePolicyTest.java` (OLED is
    exactly `#ff000000`, normal palette, opaque colours, ~3:1 quiet-text contrast,
-   invalid/`null`/whitespace themes fall back to normal). Written but **not yet
-   executed on a JVM** (no `javac` here); it is wired into the shared runner.
+   invalid/`null`/whitespace themes fall back to normal). No `javac` exists
+   in this sandbox, so it was written here and executed in CI instead: the
+   PR #47 run compiled it with `javac --release 8` and ran it on Temurin 17
+   in the shared runner. That is the platform-independent policy layer on a
+   host JRE — **not** an APK or dex compile.
 5. **Identity and documentation consistency** — release identity, generated
    metadata, changelog, workflows, tests and acceptance docs now all carry the
    2.9.0 recovery identity (section 4).
@@ -183,7 +186,7 @@ verified only; the toast path is simulated-DOM verified.
 | Duplicate/retired settings removal | **Implemented + Verified (Node + bundle contract)** | `settings-cleanup.test.mjs`; contract `retiredActions` absence checks | Device |
 | Focus/scroll restore in native + YTArk panels | **Implemented + Verified (source/Node)** | `restoreFocus()` in both activities, panel focus tests | Device |
 | About accuracy (YTArk version vs service-delivered frontend vs base vs engine; missing → “Unavailable”) | **Implemented + Verified (Node)** | `features/appVersion.js` (`FRONTEND_VERSION_PATTERN`, no bundled version is presented as the frontend’s; engine stays unavailable; base tag in Build details) | Device |
-| Native theming of UpdateActivity/StorageActivity | **Implemented + Verified (source)**; test Unverified | `NativeThemePolicy` + new `NativeThemePolicyTest` (JVM not run here) | JVM run |
+| Native theming of UpdateActivity/StorageActivity | **Implemented + Verified (source)**; policy layer Verified (CI host-JRE) | `NativeThemePolicy` + `NativeThemePolicyTest`, compiled and run green by the PR #47 CI run | device render on a TV |
 
 ## 7. OLED surface matrix
 
@@ -223,6 +226,7 @@ audited set, not a device-observed one.
 | Live version gate (`check-version` against GitHub) | exit 0 (16 releases) |
 | Java sources syntax-parsed (`javalang`, 35 files, incl. new test) | 0 syntax errors — **not** a compile |
 | Signed ARMv7 candidate build / repack / sign / device run | **NOT RUN** (see §9) |
+| PR #47 validation run `38518006997` (`494144e`) | **success**, all 10 steps: first green run of the repaired workflows; the updater step compiled the 15 host policy sources with `javac --release 8` and ran all 11 test classes, `NativeThemePolicyTest` included, on Temurin 17 |
 
 ## 9. Blocked items — exact blockers and next actions
 
