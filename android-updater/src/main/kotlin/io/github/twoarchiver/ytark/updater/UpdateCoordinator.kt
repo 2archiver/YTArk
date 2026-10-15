@@ -173,7 +173,7 @@ class UpdateCoordinator private constructor(context: Context) {
         val suffix = " Showing saved release ${cache.tag.removePrefix("v")} from $age (stale)."
         val message = if (stale) rateMessage.trimEnd('.') + "." + suffix else rateMessage
         if (validator.code(validator.installed()) >= cache.code) {
-            set(state.copy(phase = UpdatePhase.Idle, candidate = null, verifiedPath = null, pendingIdentity = null, stale = stale, retryAt = retryAt, releaseTag = cache.tag, errorCategory = if (stale) "rate_limit" else "", stage = "check", httpStatus = if (stale) 403 else 0, message = if (stale) message else "Installed version is current. Latest compatible: ${cache.tag.removePrefix("v")}."))
+            set(state.copy(phase = UpdatePhase.Idle, candidate = null, verifiedPath = null, pendingIdentity = null, stale = stale, retryAt = retryAt, releaseTag = cache.tag, errorCategory = if (stale) "rate_limit" else "", stage = "check", httpStatus = if (stale) 403 else 0, latestVersion = cache.tag.removePrefix("v"), message = if (stale) message else "Installed version is current. Latest compatible: ${cache.tag.removePrefix("v")}."))
         } else {
             set(UpdateStates.staleAvailable(state, cache.candidate(), retryAt, message))
         }

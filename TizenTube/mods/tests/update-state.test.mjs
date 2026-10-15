@@ -15,6 +15,7 @@ import {
   isNewerVersion,
   numericVersionKey,
   parseNativeState,
+  sanitizeDiagnostic,
   validateReleasePayload,
   versionCodeForVersion,
 } from '../features/updateState.js';
@@ -395,5 +396,32 @@ describe('official manual-install release page', () => {
     for (const bad of ['', undefined, 'v2.1', '2.1.2', 'v2.1.2/../x', 'v2.1.2?x=1']) {
       assert.equal(officialReleasePageUrl(bad), LATEST_RELEASE_PAGE, `rejects ${String(bad)}`);
     }
+  });
+});
+
+describe('diagnostic sanitization', () => {
+  test('redacts URLs, secrets and headers with one [redacted] convention', () => {
+    assert.equal(sanitizeDiagnostic('https://secret.example/token=abc'), '[redacted]');
+    assert.equal(sanitizeDiagnostic('see https://secret.example/token=abc now'), 'see [redacted] now');
+    assert.equal(sanitizeDiagnostic('HTTPS://SECRET.EXAMPLE/TOKEN=ABC'), '[redacted]');
+    assert.equal(sanitizeDiagnostic('token=abc123'), 'token=[redacted]');
+    assert.equal(sanitizeDiagnostic('Authorization: Bearer abcdef123456'), 'Authorization=[redacted]');
+    assert.equal(sanitizeDiagnostic('header Bearer abcdef123456 sent'), 'header authorization=[redacted] sent');
+    assert.equal(sanitizeDiagnostic('https://host/x?a=1&token=abc&sig=zzz'), '[redacted]');
+    assert.equal(sanitizeDiagnostic('10.0.0.1'), '[ip]');
+  });
+
+  test('handles blank input, multiline text, truncation and repeated runs', () => {
+    assert.equal(sanitizeDiagnostic(null), '');
+    assert.equal(sanitizeDiagnostic(''), '');
+    assert.equal(sanitizeDiagnostic('   '), '');
+    const multi = sanitizeDiagnostic('line1\nAuthorization: Bearer abcdef123456\nline3');
+    assert.ok(!multi.includes('abcdef123456') && !multi.includes('\n'), multi);
+    const cut = sanitizeDiagnostic(`${'filler text '.repeat(60)}token=tailsecret`);
+    assert.equal(cut.length, 240);
+    assert.ok(cut.endsWith('...'), cut);
+    assert.ok(!cut.includes('tailsecret'), cut);
+    const once = sanitizeDiagnostic('try https://x.example/y token=z \n10.0.0.1');
+    assert.equal(sanitizeDiagnostic(once), once);
   });
 });

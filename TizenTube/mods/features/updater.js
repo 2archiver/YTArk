@@ -28,6 +28,7 @@ import {
   formatTimestamp,
   isNewerVersion,
   parseNativeState,
+  sanitizeDiagnostic,
   validateReleasePayload,
   unknownArchitectureMessage,
   incompatibleArchitectureMessage,
@@ -183,7 +184,7 @@ export function buildAbiEvidence(readArchitecture, readInstalledVersion, { delay
           verdict: VERDICTS.unknown,
           reason: 'evidence-error',
           architecture: null,
-          bridge: { status: 'error', detail: String(error).slice(0, 200) },
+          bridge: { status: 'error', detail: sanitizeDiagnostic(error).slice(0, 200) },
           installedBuild: { status: 'unknown', version: 'unknown' },
           details: ['The architecture evidence could not be computed; treating it as unknown.'],
         };
@@ -700,7 +701,7 @@ export function createUpdateController(overrides = {}) {
     } catch (error) {
       const message = error && error.name === 'AbortError'
         ? 'The update check timed out. Nothing was downloaded or changed.'
-        : String((error && error.message) || error || 'The update check failed.');
+        : sanitizeDiagnostic((error && error.message) || error || 'The update check failed.');
       state.fallbackError = message;
       const model = baseModel();
       model.state = 'check_error';

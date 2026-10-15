@@ -34,6 +34,8 @@ Recovers from GitHub rate limits, incomplete downloads and installer errors.
 - GitHub rate limits show a retry time and the saved release age.
 - Incomplete downloads stay partial, then verify before install.
 - Installer cancel, block, storage and signature errors stay distinct.
+- Error details are scrubbed of URLs and credentials; timeouts and offline failures now give distinct guidance.
+- A rate limit is detected from real evidence only, and a server retry deadline is never shortened.
 ### Known limitations
 - Physical TV install, permission screens and upgrades still need device verification.
 - A download does not continue across process death. A leftover partial can resume only when the stored ETag still matches.

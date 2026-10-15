@@ -1,11 +1,16 @@
 package io.github.twoarchiver.ytark.updater
 
-/** Display-only interpretation of the existing 3.1 state. Never drives update eligibility. */
+/** Display-only interpretation of the existing state. Never drives update eligibility. */
 object UpdatePresentation {
     private val current = Regex("^Installed version is current\\. Latest compatible: ([0-9]+\\.[0-9]+\\.[0-9]+)\\.$")
-    fun latest(s: UpdateState): String = s.candidate?.version
-        ?: current.matchEntire(s.message)?.groupValues?.get(1) ?: "Not available"
+    fun latest(s: UpdateState): String {
+        s.candidate?.let { return it.version }
+        if (s.latestVersion.isNotBlank()) return s.latestVersion
+        return current.matchEntire(s.message)?.groupValues?.get(1) ?: "Not available"
+    }
+
     fun status(s: UpdateState): String = when {
+        s.phase == UpdatePhase.Idle && s.candidate == null && s.latestVersion.isNotBlank() && s.errorCategory.isBlank() -> "Up to date"
         current.matches(s.message) -> "Up to date"
         s.phase == UpdatePhase.Available && s.message == "YTArk ${s.candidate?.version} is available." -> "Update available"
         s.phase == UpdatePhase.Downloading -> progress(s.bytes, s.candidate?.size ?: 0, s.speedBps)

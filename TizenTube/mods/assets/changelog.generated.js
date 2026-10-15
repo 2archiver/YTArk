@@ -4,7 +4,7 @@ export const YTARK_CHANGELOG = {
   "schema": 1,
   "source": "CHANGELOG.md",
   "summaryFallback": "No short highlights available for this version.",
-  "sourceSha256": "1fc9448ce6ef2e8ed60833c281116fcf595967373ec0fac46f9bcb5a0dc887f2",
+  "sourceSha256": "3c5c22444f8744f70be8805a5dd71b1fc0eb282635c1496dfb5cab9d4b4f50a4",
   "entries": [
     {
       "version": "3.3.0",
@@ -31,7 +31,9 @@ export const YTARK_CHANGELOG = {
           "items": [
             "GitHub rate limits show a retry time and the saved release age.",
             "Incomplete downloads stay partial, then verify before install.",
-            "Installer cancel, block, storage and signature errors stay distinct."
+            "Installer cancel, block, storage and signature errors stay distinct.",
+            "Error details are scrubbed of URLs and credentials; timeouts and offline failures now give distinct guidance.",
+            "A rate limit is detected from real evidence only, and a server retry deadline is never shortened."
           ]
         },
         {

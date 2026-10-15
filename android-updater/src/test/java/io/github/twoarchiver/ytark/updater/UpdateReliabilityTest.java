@@ -19,6 +19,7 @@ public final class UpdateReliabilityTest {
 
     public static void main(String[] args) throws Exception {
         parsesRateLimitResponsesAndRefusesTightLoops();
+        serverDeadlinesAreHonoredAndMalformedValuesStayBounded();
         formatsRetryTime();
         cachePlanSkipsNetworkAndManualBypassesFreshness();
         repositoryDedupesDiscoveryAgainstAFakeSource();
@@ -27,9 +28,10 @@ public final class UpdateReliabilityTest {
         assetSelectionRejectsMissingAmbiguousEmptyAndForeignApks();
         redirectsAndPartialDownloadsUseTheLocalServer();
         errorMappingNeverUsesTheGenericFallbacks();
+        sanitizeRemovesEverySecretShape();
         stateMachineAndPermissionAndInstallerStatuses();
         backoffIsBoundedAndCancellable();
-        System.out.println("UpdateReliability tests passed (11 groups).");
+        System.out.println("UpdateReliability tests passed (13 groups).");
     }
 
     private static void parsesRateLimitResponsesAndRefusesTightLoops() {
@@ -40,6 +42,10 @@ public final class UpdateReliabilityTest {
         assertTrue(RateLimitPolicy.isLimited(403, null, "30", null, ""), "Retry-After marks a limit");
         assertFalse(RateLimitPolicy.isLimited(404, "0", null, null, "too many requests"), "404 is not a rate limit");
         assertFalse(RateLimitPolicy.isLimited(403, "10", null, null, "Resource not accessible"), "unrelated 403");
+        // X-RateLimit-Reset alone is not evidence of limiting: GitHub sends it on
+        // ordinary permission failures too.
+        assertFalse(RateLimitPolicy.isLimited(403, "50", null, "1700000000", "Resource not accessible"), "reset header alone is a forbidden response");
+        assertFalse(RateLimitPolicy.isLimited(403, null, null, "1700000000", "Resource not accessible by integration"), "reset header without quota evidence");
         long withHeader = RateLimitPolicy.retryAtMillis(429, "90", null, null, "too many requests", now);
         assertEquals(now + 90_000L, withHeader, "Retry-After seconds");
         long reset = RateLimitPolicy.retryAtMillis(403, null, "2500", "0", "", 1_000L);
@@ -49,6 +55,36 @@ public final class UpdateReliabilityTest {
         assertTrue(missing - now >= 60_000L, "no tight retry");
         long tiny = RateLimitPolicy.retryAtMillis(429, "1", null, null, "", now);
         assertTrue(tiny >= now + 60_000L, "one-second Retry-After is floored");
+    }
+
+    private static void serverDeadlinesAreHonoredAndMalformedValuesStayBounded() {
+        long now = 1_000_000L;
+        // A valid server deadline longer than one day is a promise, not a local
+        // fallback: it must survive the old 24-hour cap without being shortened.
+        long twoDays = RateLimitPolicy.retryAtMillis(429, "172800", null, null, "", now);
+        assertEquals(now + 172_800_000L, twoDays, "a two-day Retry-After is not capped at 24 hours");
+        // HTTP-date Retry-After is honored as an absolute deadline.
+        long date = RateLimitPolicy.retryAtMillis(429, "Thu, 01 Jan 1970 00:20:00 GMT", null, null, "", now);
+        assertEquals(1_200_000L, date, "HTTP-date Retry-After");
+        // Past deadlines expire to the pacing floor instead of blocking forever.
+        long past = RateLimitPolicy.retryAtMillis(429, "Thu, 01 Jan 1970 00:00:10 GMT", null, null, "", now);
+        assertEquals(now + 60_000L, past, "a past Retry-After relaxes to the pacing floor");
+        // Malformed and overflowing values are not trusted; the bounded local
+        // fallback applies (15 minutes for a rate limit, never a tight loop).
+        long malformed = RateLimitPolicy.retryAtMillis(429, "soon", null, null, "", now);
+        assertEquals(now + 15 * 60_000L, malformed, "malformed Retry-After uses the bounded fallback");
+        long overflowing = RateLimitPolicy.retryAtMillis(429, "99999999999999999999", null, null, "", now);
+        assertEquals(now + 15 * 60_000L, overflowing, "overflowing Retry-After uses the bounded fallback");
+        long implausibleReset = RateLimitPolicy.retryAtMillis(403, null, "99999999999", "0", "", now);
+        assertEquals(now + 15 * 60_000L, implausibleReset, "an implausible epoch reset uses the bounded fallback");
+        // A rate-limit reset in the past (wall clock moved forward) must not block.
+        long futureReset = RateLimitPolicy.retryAtMillis(403, null, "2500", "0", "", now);
+        assertTrue(futureReset > now, "future reset stays in the future");
+        long hugeNow = Long.MAX_VALUE / 2;
+        assertEquals(hugeNow + 60_000L, RateLimitPolicy.retryAtMillis(403, null, "2500", "0", "", hugeNow), "an expired reset relaxes to the floor after a clock change");
+        // Saturating arithmetic: near the Long boundary nothing wraps negative.
+        long saturated = RateLimitPolicy.retryAtMillis(429, "90", null, null, "", Long.MAX_VALUE - 5L);
+        assertEquals(Long.MAX_VALUE, saturated, "deadline arithmetic saturates instead of wrapping");
     }
 
     private static void formatsRetryTime() {
@@ -220,6 +256,9 @@ public final class UpdateReliabilityTest {
     private static void errorMappingNeverUsesTheGenericFallbacks() {
         long now = 50_000L;
         assertMapped(new java.net.SocketTimeoutException("timed out"), "timeout", "Connection timed out");
+        assertMapped(new java.net.UnknownHostException("api.github.com"), "offline", "Network unavailable");
+        assertMapped(new java.net.ConnectException("Connection refused"), "offline", "Network unavailable");
+        assertMapped(new IOException("could not reach the service", new java.net.UnknownHostException("api.github.com")), "offline", "Network unavailable");
         assertMapped(new IOException("No compatible APK found. Release v9 has no ARMv7 package."), "no_compatible_apk", "No compatible APK found");
         assertMapped(new IOException("Not enough storage. Free space and retry."), "storage", "Not enough storage");
         assertMapped(new IOException("Download interrupted. Retry to continue the download."), "download_interrupted", "Download interrupted");
@@ -239,6 +278,51 @@ public final class UpdateReliabilityTest {
         MappedError mapped = UpdateErrorMapper.map(limited, "check", now, "v3.2.0");
         assertTrue(mapped.message.startsWith("GitHub rate limit reached"), mapped.message);
         assertEquals(403, mapped.httpStatus, "status retained");
+        // Causes survive wrapper exceptions: the rate-limit category is still found.
+        MappedError wrapped = UpdateErrorMapper.map(new IOException("transfer failed", limited), "check", now, "v3.2.0");
+        assertEquals("rate_limit", wrapped.category, "HTTP cause survives the wrapper");
+    }
+
+    private static void sanitizeRemovesEverySecretShape() {
+        // URL-only secret, any scheme case, and URLs embedded in a sentence.
+        String urlOnly = UpdateTexts.sanitize("https://secret.example/token=abc");
+        assertEquals("[redacted]", urlOnly, "URL-only secret");
+        String sentence = UpdateTexts.sanitize("see https://secret.example/token=abc now");
+        assertTrue(sentence.contains("see [redacted] now"), sentence);
+        String upper = UpdateTexts.sanitize("HTTPS://SECRET.EXAMPLE/TOKEN=ABC");
+        assertFalse(upper.contains("HTTPS://"), upper);
+        assertFalse(upper.contains("ABC"), upper);
+        assertTrue(upper.contains("[redacted]"), upper);
+        // Query and signed-URL credentials disappear with the URL.
+        String signed = UpdateTexts.sanitize("https://host.example/x?a=1&token=abc123&sig=zzz9");
+        assertFalse(signed.contains("abc123"), signed);
+        assertFalse(signed.contains("zzz9"), signed);
+        assertTrue(signed.contains("[redacted]"), signed);
+        // Plain pairs and Authorization/Bearer header forms.
+        assertEquals("token=[redacted]", UpdateTexts.sanitize("token=abc123"), "plain token pair");
+        String auth = UpdateTexts.sanitize("Authorization: Bearer abcdef123456");
+        assertFalse(auth.contains("abcdef123456"), auth);
+        String bearer = UpdateTexts.sanitize("header Bearer abcdef123456 sent");
+        assertFalse(bearer.contains("abcdef123456"), bearer);
+        // Multiline text is flattened and still scrubbed line by line.
+        String multi = UpdateTexts.sanitize("line1\nAuthorization: Bearer abcdef123456\nline3");
+        assertFalse(multi.contains("abcdef123456"), multi);
+        assertFalse(multi.contains("\n"), multi);
+        // Blank and null inputs stay empty.
+        assertEquals("", UpdateTexts.sanitize(null), "null");
+        assertEquals("", UpdateTexts.sanitize(""), "empty");
+        assertEquals("", UpdateTexts.sanitize("   "), "blank");
+        // Truncation happens after scrubbing: a secret-bearing suffix can never survive.
+        StringBuilder longText = new StringBuilder();
+        for (int i = 0; i < 60; i++) longText.append("filler text ");
+        longText.append("token=tailsecret");
+        String cut = UpdateTexts.sanitize(longText.toString());
+        assertEquals(240, cut.length(), "length truncation");
+        assertTrue(cut.endsWith("..."), cut);
+        assertFalse(cut.contains("tailsecret"), cut);
+        // Repeated sanitization is stable.
+        String once = UpdateTexts.sanitize("try https://x.example/y token=z \n10.0.0.1");
+        assertEquals(once, UpdateTexts.sanitize(once), "repeated sanitization is stable");
     }
 
     private static void stateMachineAndPermissionAndInstallerStatuses() {
@@ -286,7 +370,6 @@ public final class UpdateReliabilityTest {
     }
 
     private static CachedRelease cache(long fetchedAt, String tag, long code) {
-        String version = tag.substring(1);
         return new CachedRelease(fetchedAt, "etag", "modified", tag, code, "YTArk-" + tag + "-armv7.apk",
                 "https://github.com/2archiver/YTArk/releases/download/" + tag + "/YTArk-" + tag + "-armv7.apk",
                 1000L, HASH, "notes", true);
