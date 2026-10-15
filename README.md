@@ -1,8 +1,8 @@
 # YTArk
 
-releases: github.com/2archiver/YTArk/releases⁠YTArk
+releases: https://github.com/2archiver/YTArk/releases⁠YTArk
 
-ko-fi: ko-fi.com/2archiver
+ko-fi: https://ko-fi.com/2archiver
 is an independent Android TV / Google TV application based on
 [TizenTubeCobalt](https://github.com/reisxd/TizenTubeCobalt). It keeps the
 upstream YouTube TV frontend, its account/sign-in and **Continue as guest**
