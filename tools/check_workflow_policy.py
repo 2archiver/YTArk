@@ -285,6 +285,20 @@ def check(path: Path, failures: list[str]) -> None:
     elif name == "ci.yml":
         if not found & {"pull_request"}:
             failures.append("ci.yml: pull request validation must run on pull_request")
+    elif name == "build-candidate.yml":
+        # Candidate-only: builds and uploads a workflow artefact, never publishes.
+        if found - {"pull_request", "workflow_dispatch"}:
+            failures.append(f"build-candidate.yml: unexpected triggers {sorted(found)}")
+        if "pull_request" not in found:
+            failures.append("build-candidate.yml: must run on pull_request so PR heads are built")
+        if "github.event.pull_request.head.repo.full_name == github.repository" not in text:
+            failures.append("build-candidate.yml: fork pull requests must never run this workflow")
+        if re.search(r"secrets\.", text):
+            failures.append("build-candidate.yml: candidate builds must not reference secrets")
+        if re.search(r"^\s+contents:\s*write", text, re.M):
+            failures.append("build-candidate.yml: candidate builds must not request contents: write")
+        if re.search(r"gh\s+release|git\s+push|publish_release\.py\s+publish", text):
+            failures.append("build-candidate.yml: candidate builds must not publish or push")
 
 
 def concurrency_groups() -> dict[str, str]:
@@ -305,7 +319,7 @@ def main() -> int:
     for path in paths:
         check(path, failures)
     names = {p.name for p in paths}
-    for required in ("ci.yml", "build-apk.yml", "publish-release.yml"):
+    for required in ("ci.yml", "build-apk.yml", "publish-release.yml", "build-candidate.yml"):
         if required not in names:
             failures.append(f"missing workflow {required}")
 

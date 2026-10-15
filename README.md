@@ -103,7 +103,7 @@ Requirements
 * Permission to install APK files from the selected installation source.
 * An internet connection for YouTube playback and online integrations.
 
-YTArk’s documented release pipeline targets the armeabi-v7a architecture. A device with a 64-bit processor is not necessarily incompatible, but its Android environment must support the APK’s architecture.
+YTArk’s release APK (`YTArk-v<version>-armv7.apk`) is a 32-bit armeabi-v7a build, repacked from the 32-bit `cobalt-arm.apk` base of TizenTubeCobalt v2.0.2. It is not an arm64 build, and YTArk does not claim arm64 support. A device with a 64-bit processor is not necessarily incompatible, but its Android environment must be able to install 32-bit armeabi-v7a APKs. Whether a particular TV does so is a device question; device installation is not verified by this repository.
 
 Installation
 

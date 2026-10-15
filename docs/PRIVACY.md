@@ -10,15 +10,20 @@ stores, or transmits Google account identifiers, cookies, or OAuth tokens.
 | Party | What it receives | What it never receives |
 |---|---|---|
 | **Google / YouTube** (upstream TV frontend and Cobalt player) | Normal YouTube traffic: sign-in, playback, subscriptions, search, watch history. This is the stock YouTube TV experience, governed by Google's privacy policy and your Google account settings. | — |
-| **SponsorBlock** (`sponsor.ajay.app`, HTTPS) | Sponsor-segment lookups: a 4-hex-char prefix of the SHA-256 of a video ID, and the requested category list. DeArrow title/thumbnail lookups use the full video ID. | Account data, cookies, watch history, IP-linked identity beyond ordinary HTTPS metadata. YTArk sends no SponsorBlock votes or submissions. |
+| **SponsorBlock** (`sponsor.ajay.app`, HTTPS) | Sponsor-segment lookups: a 4-hex-char prefix of the SHA-256 of a video ID, and the requested category list. | Account data, cookies, watch history, IP-linked identity beyond ordinary HTTPS metadata. YTArk sends no SponsorBlock votes or submissions. |
+| **DeArrow title lookups** (`sponsor.ajay.app`, HTTPS, only when *Enable DeArrow* is on) | Only a 4-hex-char prefix of the SHA-256 of a video ID (`/api/branding/{prefix}`). The server cannot tell which of the ~130 videos in that bucket is being watched. The request carries no cookies and no referrer. | The full video ID, account data, cookies, watch history. YTArk sends no DeArrow votes or submissions. |
+| **DeArrow thumbnail images** (`dearrow-thumb.ajay.app`, HTTPS, only when *Enable DeArrow Thumbnails* is also on) | The **full video ID** and a timestamp, to fetch a community-chosen frame. This is not hidden by hash-prefixing: the thumbnail service requires the video ID. | Account data, cookies, watch history. |
 | **GitHub** (`api.github.com`, `github.com`, HTTPS) | Update checks (stable release metadata) and APK downloads, from your device's IP address. | Account data or anything from the YouTube session. |
 | **jsDelivr** (`cdn.jsdelivr.net`, HTTPS) | Fetch of the bundled userscript bytes at launch. | Account data or anything from the YouTube session. |
 
 Network calls added by YTArk are HTTPS-only. Google account authentication,
 token refresh, playback, subscriptions, search, ad blocking and SponsorBlock
-endpoints are never intercepted, proxied, or redirected by YTArk — including
-when ad blocking is enabled. Ad filtering removes ad renderers client-side
-inside the TV frontend only.
+endpoints are never redirected or proxied by YTArk — including when ad blocking
+is enabled. Ad filtering removes ad renderers client-side inside the TV frontend
+only. The one local read of YouTube responses is DeArrow: when *Enable DeArrow*
+is on, YTArk reads the title and thumbnail fields of browse, search and next
+responses on the device and rewrites them before the TV frontend uses them. No
+part of those responses is sent anywhere by that step.
 
 ## What YTArk stores on the device
 

@@ -20,6 +20,11 @@
 //                its own cleanup (the retired Cobalt user-agent override).
 //   4            YTArk 2.8.0: adds opt-in playback recovery; it defaults off and
 //                merges without changing stored preferences or YouTube session data.
+//   5            Current marker. An installation stamped 4 or lower runs the
+//                RETIRED_KEYS sweep when it reaches 5, which also removes the legacy
+//                startup-animation keys (skipStartupAnimation,
+//                enableSkipStartupAnimation). The release that introduced marker 5 is
+//                not recorded in this checkout; see docs/SETTINGS-3.5-AUDIT.md.
 
 const CONFIG_KEY = 'ytaf-configuration';
 export const CONFIG_SCHEMA_VERSION = 5;

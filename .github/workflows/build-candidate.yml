@@ -1,0 +1,335 @@
+name: Build the YTArk ARMv7 release candidate (no publication)
+
+# Candidate-only pipeline for review. It builds the same ARMv7 APK as
+# build-apk.yml and runs the same package checks, then uploads the result as a
+# workflow artefact. It cannot publish anything:
+# - no job requests contents: write; there is no release, tag or publish step;
+# - no secrets are referenced. Signing uses the pinned, public Hearth community
+#   keystore through prepare_signing_key.sh, verified by commit and blob SHA;
+# - it runs only for same-repository pull requests and manual dispatch. Fork
+#   pull requests never run it.
+# The checkout uses the pull request head commit, not the merge commit, so the
+# artefact records the exact commit that was reviewed.
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, reopened, synchronize, ready_for_review]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  ANDROID_HOME: /usr/local/lib/android/sdk
+  API_LEVEL: "34"
+  BUILD_TOOLS: "34.0.0"
+
+jobs:
+  candidate:
+    name: Build, sign and package-check the ARMv7 candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    if: github.event_name == 'workflow_dispatch' || github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout the pull request head commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+
+      - name: Record the source commit under test
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "${{ github.event.pull_request.head.sha || github.sha }}"
+          echo "CANDIDATE_SOURCE_SHA=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+          echo "Candidate source commit: $(git rev-parse HEAD)"
+
+      - name: Set up Java 17
+        uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6.0.1
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Set up Node.js for the userscript build
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: |
+            TizenTube/mods/package-lock.json
+            tools/kotlin/package-lock.json
+
+      - name: Verify the bundled Premium vector wordmark before building
+        run: |
+          set -euo pipefail
+          python3 tools/fetch_premium_logo.py --verify-only --out-dir TizenTube/mods/assets
+          python3 tools/build_logo_asset.py --check
+
+      - name: Verify CHANGELOG.md and the bundled changelog data before building
+        run: |
+          set -euo pipefail
+          python3 tools/build_changelog.py --check
+
+      - name: Verify the embedded build metadata before building
+        run: |
+          set -euo pipefail
+          python3 tools/build_buildinfo.py --check
+
+      - name: Validate the release workflows before they run
+        run: |
+          set -euo pipefail
+          python3 tools/check_workflow_policy.py
+
+      - name: Build and test the userscript bundle
+        working-directory: TizenTube/mods
+        run: |
+          set -euo pipefail
+          npm ci --no-audit --no-fund
+          node --test tests/*.test.mjs
+          npm run build
+          node --check ../dist/userScript.js
+          python3 ../../tools/check_bundle_contract.py
+          echo "Built YTArk userscript: $(wc -c < ../dist/userScript.js) bytes, sha256 $(sha256sum ../dist/userScript.js | cut -d' ' -f1)"
+
+      - name: Load release version
+        run: python3 tools/validate_release.py emit-env --file "$GITHUB_ENV"
+
+      - name: Bind the APK to the userscript URL it would load
+        run: |
+          set -euo pipefail
+          test -n "${SCRIPT_TAG:-}"
+          # The script tag is published only by a later, separate release step.
+          # Until then this URL does not resolve, and the candidate's bundled
+          # userscript is the one that was built and tested here.
+          script_url="https://cdn.jsdelivr.net/gh/${GITHUB_REPOSITORY}@${SCRIPT_TAG}/userScript.js?v="
+          echo "SCRIPT_URL=$script_url" >> "$GITHUB_ENV"
+          echo "Candidate APK script URL: $script_url"
+
+      - name: Install Android build tools and validate release inputs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          export PATH="$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools:$PATH"
+          (set +o pipefail; yes | sdkmanager --licenses >/dev/null)
+          sdkmanager "platforms;android-${API_LEVEL}" "build-tools;${BUILD_TOOLS}" "platform-tools"
+          echo "$ANDROID_HOME/build-tools/$BUILD_TOOLS" >> "$GITHUB_PATH"
+          echo "$ANDROID_HOME/platform-tools" >> "$GITHUB_PATH"
+          mkdir -p "$RUNNER_TEMP/ytark-validation"
+          gh api "repos/$GITHUB_REPOSITORY/releases/latest" \
+            > "$RUNNER_TEMP/ytark-validation/latest-release.json"
+          gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            > "$RUNNER_TEMP/ytark-validation/published-releases.json"
+          python3 tools/validate_release.py check-version \
+            --latest-json "$RUNNER_TEMP/ytark-validation/latest-release.json" \
+            --releases-json "$RUNNER_TEMP/ytark-validation/published-releases.json"
+          test -n "$BASE_TAG"
+          gh api "repos/reisxd/TizenTubeCobalt/releases/tags/$BASE_TAG" \
+            > "$RUNNER_TEMP/ytark-validation/base-release.json"
+
+      - name: Prepare the pinned YTArk signing key (public Hearth community keystore)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # No Actions secrets are passed here: with none configured,
+          # prepare_signing_key.sh fetches the pinned community keystore and
+          # refuses it unless its blob SHA and certificate match the pins.
+          bash tools/prepare_signing_key.sh
+
+      - name: Compile Kotlin updater and run production contract tests
+        run: |
+          set -euo pipefail
+          chmod +x tools/build_android_updater.sh
+          tools/build_android_updater.sh "$RUNNER_TEMP/ytark-updater/classes.dex" 2>&1 | tee "$RUNNER_TEMP/updater-build.log"
+
+      - name: Download and verify the pinned upstream ARMv7 Cobalt base
+        run: |
+          set -euo pipefail
+          python3 tools/fetch_base_apks.py \
+            --release-json "$RUNNER_TEMP/ytark-validation/base-release.json" \
+            --base-tag "$BASE_TAG" \
+            --output-dir base \
+            --checksums-out base-apk-sha256.txt
+          python3 tools/validate_release.py check-base-checksums \
+            --checksums base-apk-sha256.txt --base-dir base
+
+      - name: Install pinned Apktool
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          APKTOOL_URL="$(gh api repos/iBotPeaches/Apktool/releases/tags/v3.0.3 \
+            --jq '.assets[] | select(.name == "apktool_3.0.3.jar") | .browser_download_url')"
+          test -n "$APKTOOL_URL"
+          curl -fsSL --retry 3 "$APKTOOL_URL" -o "$RUNNER_TEMP/apktool.jar"
+          echo "dbf930b076c6b9be08d57c449cacefc3bdd6b71ebd59b3066fc0e1f5b14f9423  $RUNNER_TEMP/apktool.jar" | sha256sum -c -
+          java -jar "$RUNNER_TEMP/apktool.jar" --version
+
+      - name: Repack the ARMv7 Cobalt base
+        run: |
+          set -euo pipefail
+          mkdir -p work
+          python3 -u tools/repack_apk.py \
+            --base base/cobalt-arm.apk --architecture armv7 \
+            --out "work/${APK_ARMV7%.apk}-unsigned.apk" \
+            --updater-dex "$RUNNER_TEMP/ytark-updater/classes.dex" \
+            --app-name "$APP_NAME" --app-id "$APP_ID" \
+            --script-url "$SCRIPT_URL" --version-code "$VERSION_CODE" \
+            --version-name "$VERSION_NAME" \
+            --apktool "java -jar $RUNNER_TEMP/apktool.jar" \
+            --zipalign "$ANDROID_HOME/build-tools/$BUILD_TOOLS/zipalign" 2>&1 | tee "$RUNNER_TEMP/repack.log"
+
+      - name: Verify alignment, sign the ARMv7 candidate and validate the package
+        run: |
+          set -euo pipefail
+          zipalign -c -p 4 "work/${APK_ARMV7%.apk}-unsigned.apk"
+          export YTARK_EXPECTED_CERT_SHA256="$SIGNING_CERT_SHA256"
+          bash tools/sign_apks.sh work
+          stray_count="$(find work -maxdepth 1 -name '*-armv7.apk' ! -name "${APK_ARMV7%.apk}.apk" | wc -l)"
+          test "$stray_count" -eq 0
+          mkdir -p release-assets
+          mv "work/${APK_ARMV7%.apk}.apk" "release-assets/$APK_ARMV7"
+          zipalign -c -p 4 "release-assets/$APK_ARMV7"
+          "$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt" dump xmltree \
+            "release-assets/$APK_ARMV7" AndroidManifest.xml > work/compiled-manifest.txt
+          python3 tools/validate_release.py check-apk \
+            --apk "release-assets/$APK_ARMV7" --architecture armv7 \
+            --cert-file signing/YTArk-cert-sha256.txt \
+            --aapt "$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt" \
+            --apksigner "$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner"
+
+      - name: Create and verify the ARMv7 candidate checksums
+        run: |
+          set -euo pipefail
+          cp TizenTube/dist/userScript.js release-assets/userScript.js
+          cp base-apk-sha256.txt release-assets/base-apk-sha256.txt
+          (
+            cd release-assets
+            sha256sum "$APK_ARMV7" userScript.js > SHA256SUMS.txt
+          )
+          python3 tools/validate_release.py check-checksums \
+            --checksums release-assets/SHA256SUMS.txt \
+            --armv7 "release-assets/$APK_ARMV7" \
+            --user-script release-assets/userScript.js
+          python3 tools/validate_release.py check-base-checksums \
+            --checksums release-assets/base-apk-sha256.txt --base-dir base
+
+      - name: Check upgrade eligibility against the previous published APK
+        run: |
+          set -euo pipefail
+          mkdir -p update-smoke
+          : > update-smoke/eligibility.properties
+          # Downloads the latest published APK, then compares package ID,
+          # versionCode ordering, ABI and signer. It does not install anything.
+          python3 tools/prepare_update_smoke.py \
+            --latest-json "$RUNNER_TEMP/ytark-validation/latest-release.json" \
+            --architecture armv7 \
+            --artifact-dir update-smoke \
+            --output update-smoke/eligibility.properties \
+            --cert-file signing/YTArk-cert-sha256.txt \
+            --aapt "$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt" \
+            --apksigner "$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner"
+          cp "release-assets/$APK_ARMV7" update-smoke/current-ytark-armv7.apk
+          cat update-smoke/eligibility.properties
+
+      - name: DeArrow live API probe (informational; not a release gate)
+        # Exercises the shipped branding module against the real service. It
+        # cannot change the candidate, so a failure here is reported as a
+        # warning instead of blocking the artefact.
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          node tools/dearrow_live_probe.mjs > "$RUNNER_TEMP/dearrow-probe.txt" 2>&1
+          rc=$?
+          summary="$(tr '\n' ' ' < "$RUNNER_TEMP/dearrow-probe.txt" | cut -c1-900)"
+          if [ "$rc" -eq 0 ]; then
+            echo "::notice title=DeArrow live API probe::exit=0 ${summary}"
+          else
+            echo "::warning title=DeArrow live API probe::exit=${rc} ${summary}"
+          fi
+          exit "$rc"
+
+      - name: Write the candidate verification report
+        run: |
+          set -euo pipefail
+          apk="release-assets/$APK_ARMV7"
+          aapt="$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt"
+          apksigner="$ANDROID_HOME/build-tools/$BUILD_TOOLS/apksigner"
+          report="candidate-report.md"
+          {
+            echo "# YTArk ${VERSION_NAME} ARMv7 release candidate (not published)"
+            echo
+            echo "- Source commit tested: \`${CANDIDATE_SOURCE_SHA}\`"
+            echo "- Workflow run: \`${GITHUB_RUN_ID}\` attempt \`${GITHUB_RUN_ATTEMPT}\`"
+            echo "- APK: \`$APK_ARMV7\`, $(wc -c < "$apk") bytes"
+            echo "- APK SHA-256: \`$(sha256sum "$apk" | cut -d' ' -f1)\`"
+            echo "- userScript.js SHA-256: \`$(sha256sum release-assets/userScript.js | cut -d' ' -f1)\`"
+            echo "- Base APK (\`cobalt-arm.apk\` ${BASE_TAG}) SHA-256: \`$(sha256sum base/cobalt-arm.apk | cut -d' ' -f1)\`"
+            echo
+            echo "## Package"
+            echo '```'
+            "$aapt" dump badging "$apk" | grep -E "^package:|sdkVersion|native-code" || true
+            echo '```'
+            echo
+            echo "## Signer"
+            echo '```'
+            "$apksigner" verify --verbose --print-certs "$apk" | grep -E "Verifies|Signer #1|certificate SHA-256" || true
+            echo '```'
+            echo
+            echo "## Archive integrity and alignment"
+            echo '```'
+            unzip -tq "$apk"
+            zipalign -c -p 4 "$apk" && echo "zipalign -p 4: OK"
+            echo '```'
+            echo
+            echo "## Upgrade eligibility (static; no install performed)"
+            echo '```'
+            cat update-smoke/eligibility.properties
+            echo '```'
+            echo
+            echo "## Not verified by this workflow"
+            echo "- Installation or launch on a TV or emulator (NOT RUN)."
+            echo "- Google session preservation, unknown-app permission flow, cancel, timeout, DeArrow display and D-pad navigation (NOT RUN)."
+            echo "- Playback of the candidate's bundled script: the script URL points at tag ${SCRIPT_TAG}, which does not exist until a release publishes it (NOT RUN)."
+          } > "$report"
+          cat "$report" >> "$GITHUB_STEP_SUMMARY"
+          # Annotations stay readable through the API even when artefacts and
+          # logs are unavailable, so the key evidence is surfaced here as well.
+          apk_sha="$(sha256sum "$apk" | cut -d' ' -f1)"
+          package_line="$("$aapt" dump badging "$apk" | sed -n "s/^package: name='\([^']*\)' versionCode='\([^']*\)' versionName='\([^']*\)'.*/\1 versionCode=\2 versionName=\3/p" | head -1)"
+          native_line="$("$aapt" dump badging "$apk" | sed -n "s/^native-code: //p" | head -1)"
+          signer_sha="$("$apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1)"
+          echo "::notice title=YTArk ARMv7 candidate evidence::source=${CANDIDATE_SOURCE_SHA} file=${APK_ARMV7} sha256=${apk_sha} ${package_line} native=${native_line} signer_sha256=${signer_sha}"
+          echo "::notice title=YTArk ARMv7 upgrade eligibility (static, previous published APK)::$(tr '\n' ' ' < update-smoke/eligibility.properties)"
+          echo "::notice title=YTArk ARMv7 userScript evidence::userScript.js sha256=$(sha256sum release-assets/userScript.js | cut -d' ' -f1) size=$(wc -c < release-assets/userScript.js)"
+
+      - name: Record the candidate manifest
+        run: |
+          set -euo pipefail
+          cp candidate-report.md release-assets/candidate-report.md
+          python3 tools/publish_release.py write-manifest \
+            --output candidate-manifest.json \
+            --candidate-dir . \
+            --commit "$CANDIDATE_SOURCE_SHA" \
+            --run-id "$GITHUB_RUN_ID"
+          cat candidate-manifest.json
+
+      - name: Upload the ARMv7 candidate artefact (not a release)
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ytark-3.5.0-armv7-candidate-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            release-assets/*
+            update-smoke/eligibility.properties
+            candidate-manifest.json
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Surface build diagnostics if a step fails
+        if: failure()
+        run: |
+          python3 tools/ci_diagnostics.py "$RUNNER_TEMP/updater-build.log" "$RUNNER_TEMP/repack.log"
