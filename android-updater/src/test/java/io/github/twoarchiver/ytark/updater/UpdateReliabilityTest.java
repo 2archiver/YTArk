@@ -15,6 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public final class UpdateReliabilityTest {
     private static final String HASH = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
     private static final String OTHER = "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789";
+    private static final String ACTUAL_V33_HASH = "4e0ff6d8cdd8b8552ef5a7e35f6ba7d69c1777fd1eb0b08ec61519f34d17f218";
     private static final TimeZone UTC = TimeZone.getTimeZone("UTC");
 
     public static void main(String[] args) throws Exception {
@@ -23,15 +24,17 @@ public final class UpdateReliabilityTest {
         formatsRetryTime();
         cachePlanSkipsNetworkAndManualBypassesFreshness();
         repositoryDedupesDiscoveryAgainstAFakeSource();
+        parsesActualPublishedReleaseSchema();
         concurrentChecksJoinOneFlight();
         versionOrderingIsNumeric();
         assetSelectionRejectsMissingAmbiguousEmptyAndForeignApks();
         redirectsAndPartialDownloadsUseTheLocalServer();
+        transportKeepsNetworkCauseForClassification();
         errorMappingNeverUsesTheGenericFallbacks();
         sanitizeRemovesEverySecretShape();
         stateMachineAndPermissionAndInstallerStatuses();
         backoffIsBoundedAndCancellable();
-        System.out.println("UpdateReliability tests passed (13 groups).");
+        System.out.println("UpdateReliability tests passed (15 groups).");
     }
 
     private static void parsesRateLimitResponsesAndRefusesTightLoops() {
@@ -96,6 +99,14 @@ public final class UpdateReliabilityTest {
 
     private static void cachePlanSkipsNetworkAndManualBypassesFreshness() {
         long now = 10 * ScheduleRules.HOUR;
+        CachedRelease valid = cache(now - 1000, "v3.3.0", 3030000L);
+        assertTrue(valid.complete(), "official, version-matched cache is reusable");
+        CachedRelease foreign = new CachedRelease(valid.fetchedAt, valid.etag, valid.lastModified, valid.tag, valid.code,
+                valid.asset, "https://evil.example/update.apk", valid.size, valid.sha256, valid.notes, valid.sumsVerified);
+        assertFalse(foreign.complete(), "corrupt/foreign cached URL is rejected before a conditional response can reuse it");
+        CachedRelease wrongCode = new CachedRelease(valid.fetchedAt, valid.etag, valid.lastModified, valid.tag, 3030100L,
+                valid.asset, valid.url, valid.size, valid.sha256, valid.notes, valid.sumsVerified);
+        assertFalse(wrongCode.complete(), "cached versionCode must match the real release mapping");
         assertEquals("blocked", ReleaseCachePolicy.plan(true, 1, now, now, "v3.2.0", true, now + 1000), "manual respects rate window");
         assertEquals("cache", ReleaseCachePolicy.plan(false, 1, now, now - 1000, "v3.2.0", true, 0), "fresh automatic cache");
         assertEquals("api", ReleaseCachePolicy.plan(true, 1, now, now - 1000, "v3.2.0", true, 0), "manual bypasses freshness");
@@ -131,6 +142,69 @@ public final class UpdateReliabilityTest {
         assertTrue(probed instanceof Discovery.UseCache, "matching latest tag skips the API");
         assertEquals(1, same.probes, "one redirect probe");
         assertEquals(0, same.metas, "probe hit does not call the API");
+
+        FakeSource forbiddenProbe = new FakeSource();
+        forbiddenProbe.probeError = new HttpFailure(403, now + 60_000L, "GitHub HTTP 403.", "http");
+        try {
+            new UpdateRepository(forbiddenProbe).discover(false, 1, now + 2 * ScheduleRules.HOUR, 0L, cache);
+            throw new AssertionError("an ordinary forbidden probe must not switch endpoints");
+        } catch (HttpFailure expected) {
+            assertEquals(403, expected.getStatus(), "403 is preserved from the shared GitHub host");
+            assertEquals(0, forbiddenProbe.metas, "no endpoint switch after a forbidden response");
+        }
+        FakeSource offlineProbe = new FakeSource();
+        offlineProbe.probeError = new IOException("Could not resolve the host", new java.net.UnknownHostException("api.github.com"));
+        try {
+            new UpdateRepository(offlineProbe).discover(false, 1, now + 2 * ScheduleRules.HOUR, 0L, cache);
+            throw new AssertionError("an offline probe must not issue a second request");
+        } catch (IOException expected) {
+            assertEquals("offline", UpdateErrorMapper.map(expected, "check", now, "v3.3.0").category,
+                    "the preserved root cause classifies DNS failures");
+            assertEquals(0, offlineProbe.metas, "no API request after connectivity failure");
+        }
+
+        FakeSource notModified = new FakeSource();
+        notModified.document = new MetadataDocument(304, "", "etag", "modified");
+        Discovery reused = new UpdateRepository(notModified).discover(true, 1, now, 0L, cache);
+        assertTrue(reused instanceof Discovery.UseCache, "304 reuses a complete validated cache");
+        assertEquals("v3.2.0", ((Discovery.UseCache) reused).cache.tag, "304 retains the cached release");
+
+        FakeSource emptyCache304 = new FakeSource();
+        emptyCache304.document = new MetadataDocument(304, "", "", "");
+        try {
+            new UpdateRepository(emptyCache304).discover(true, 1, now, 0L, null);
+            throw new AssertionError("304 without a cache must not claim a fresh release");
+        } catch (ReleaseMetadataFailure expected) {
+            assertTrue(expected.getMessage().contains("without a valid saved release"), expected.getMessage());
+        }
+
+        for (String invalid : new String[] { "<html>proxy error</html>", "{\"draft\":false", "{}" }) {
+            try {
+                ReleaseMetadataParser.parse(invalid, null);
+                throw new AssertionError("malformed/missing release metadata must be rejected: " + invalid);
+            } catch (IOException expected) {
+                MappedError mapped = UpdateErrorMapper.map(expected, "check", now, "v3.3.0");
+                assertEquals("metadata", mapped.category, "invalid release data is not a generic fallback");
+            }
+        }
+    }
+
+    private static void parsesActualPublishedReleaseSchema() throws Exception {
+        String resourceRoot = System.getProperty("ytark.test.resources");
+        assertTrue(resourceRoot != null && !resourceRoot.isEmpty(), "test resource path is provided by the shared runner");
+        java.nio.file.Path fixture = java.nio.file.Paths.get(resourceRoot, "github-v3.3.0-release.json");
+        String json = new String(Files.readAllBytes(fixture), StandardCharsets.UTF_8);
+        ParsedRelease parsed = ReleaseMetadataParser.parse(json, null);
+        assertEquals("v3.3.0", parsed.candidate.getTag(), "real release schema tag");
+        assertEquals(3030000L, parsed.candidate.getCode(), "real release schema versionCode");
+        assertEquals("YTArk-v3.3.0-armv7.apk", parsed.candidate.getAsset(), "real release schema ARMv7 asset selection");
+        assertEquals(ACTUAL_V33_HASH, parsed.candidate.getSha256(), "real GitHub asset digest");
+        assertTrue(parsed.needsSums, "the production schema permits a same-release SHA256SUMS fallback");
+        assertEquals("https://github.com/2archiver/YTArk/releases/download/v3.3.0/SHA256SUMS.txt",
+                parsed.sumsUrl, "the checksum asset is constrained to the same official tag");
+        ParsedRelease checked = ReleaseMetadataParser.parse(json,
+                ACTUAL_V33_HASH + "  YTArk-v3.3.0-armv7.apk\n");
+        assertEquals(ACTUAL_V33_HASH, checked.candidate.getSha256(), "actual published checksum contract");
     }
 
     private static void concurrentChecksJoinOneFlight() throws Exception {
@@ -253,11 +327,32 @@ public final class UpdateReliabilityTest {
         }
     }
 
+    private static void transportKeepsNetworkCauseForClassification() throws Exception {
+        int port;
+        try (java.net.ServerSocket reserved = new java.net.ServerSocket()) {
+            reserved.bind(new InetSocketAddress("127.0.0.1", 0));
+            port = reserved.getLocalPort();
+        }
+        IOException wrapped = null;
+        try {
+            JdkHttp.exchange("http://127.0.0.1:" + port + "/", "GET", java.util.Collections.emptyMap(), LocalhostGate.INSTANCE, 1024);
+        } catch (IOException expected) {
+            wrapped = expected;
+        }
+        assertTrue(wrapped != null, "closed local port must fail");
+        assertTrue(wrapped.getCause() instanceof java.net.ConnectException,
+                "transport sanitization preserves the original connection exception type");
+        MappedError mapped = UpdateErrorMapper.map(wrapped, "check", 50_000L, "v3.4.0");
+        assertEquals("connection", mapped.category, "the wrapped production transport failure is not generic");
+        assertFalse(mapped.detail.contains("127.0.0.1"), "private/local addresses do not reach diagnostics");
+        assertTrue(mapped.detail.contains("ConnectException"), "collapsed diagnostics keep the cause type");
+    }
+
     private static void errorMappingNeverUsesTheGenericFallbacks() {
         long now = 50_000L;
         assertMapped(new java.net.SocketTimeoutException("timed out"), "timeout", "Connection timed out");
         assertMapped(new java.net.UnknownHostException("api.github.com"), "offline", "Network unavailable");
-        assertMapped(new java.net.ConnectException("Connection refused"), "offline", "Network unavailable");
+        assertMapped(new java.net.ConnectException("Connection refused"), "connection", "Could not connect");
         assertMapped(new IOException("could not reach the service", new java.net.UnknownHostException("api.github.com")), "offline", "Network unavailable");
         assertMapped(new IOException("No compatible APK found. Release v9 has no ARMv7 package."), "no_compatible_apk", "No compatible APK found");
         assertMapped(new IOException("Not enough storage. Free space and retry."), "storage", "Not enough storage");
@@ -266,10 +361,22 @@ public final class UpdateReliabilityTest {
         assertMapped(new IOException("APK signer is incompatible with the installed app."), "signature_mismatch", "App signature mismatch");
         assertMapped(new IOException("Install permission required."), "permission", "Install permission required");
         assertMapped(new IOException("Installation cancelled."), "install_cancelled", "Installation cancelled");
-        MappedError unexpected = UpdateErrorMapper.map(new IllegalStateException("https://secret.example/token=abc"), "check", now, "v3.3.0");
-        assertEquals("unexpected", unexpected.category, "unknown category");
-        assertFalse(unexpected.message.contains("Failed safely"), unexpected.message);
+        MappedError unexpected = UpdateErrorMapper.map(new IllegalStateException("https://secret.example/token=abc /data/user/0/io.github.twoarchiver.ytark/files/update.apk"), "check", now, "v3.4.0");
+        assertEquals("unexpected", unexpected.category, "unknown category stays honest");
+        assertTrue(unexpected.message.contains("unexpected error"), unexpected.message);
         assertFalse(unexpected.message.equals("Download failed"), unexpected.message);
+        assertFalse(unexpected.detail.contains("secret.example"), unexpected.detail);
+        assertFalse(unexpected.detail.contains("/data/user/0"), unexpected.detail);
+        assertFalse(unexpected.detail.contains("update.apk"), unexpected.detail);
+
+        MappedError metadata = UpdateErrorMapper.map(new ReleaseMetadataFailure("Release metadata object is malformed."), "check", now, "v3.4.0");
+        assertEquals("metadata", metadata.category, "invalid release documents are not generic errors");
+        MappedError runtime = UpdateErrorMapper.map(new NoClassDefFoundError("relocated kotlin runtime missing"), "check", now, "v3.4.0");
+        assertEquals("runtime", runtime.category, "private runtime linkage failure is classified");
+        MappedError forbidden = UpdateErrorMapper.map(new HttpFailure(403, now + 60_000L, "GitHub HTTP 403.", "http"), "check", now, "v3.4.0");
+        assertEquals("forbidden", forbidden.category, "ordinary 403 is not a rate limit");
+        MappedError server = UpdateErrorMapper.map(new HttpFailure(503, now + 60_000L, "GitHub HTTP 503.", "http"), "check", now, "v3.4.0");
+        assertEquals("server", server.category, "server failures stay separate");
         String sanitized = UpdateTexts.sanitize("https://secret.example/token=abc");
         assertFalse(sanitized.contains("token=abc"), sanitized);
         assertFalse(sanitized.contains("https://"), sanitized);
@@ -298,6 +405,11 @@ public final class UpdateReliabilityTest {
         assertFalse(signed.contains("abc123"), signed);
         assertFalse(signed.contains("zzz9"), signed);
         assertTrue(signed.contains("[redacted]"), signed);
+        String paths = UpdateTexts.sanitize("failed /data/user/0/io.github.twoarchiver.ytark/files/update.apk file:///storage/emulated/0/Download/private.apk C:\\Users\\Private\\update.apk");
+        assertFalse(paths.contains("/data/user/0"), paths);
+        assertFalse(paths.contains("/storage/emulated"), paths);
+        assertFalse(paths.contains("C:\\Users"), paths);
+        assertTrue(paths.contains("[path]"), paths);
         // Plain pairs and Authorization/Bearer header forms.
         assertEquals("token=[redacted]", UpdateTexts.sanitize("token=abc123"), "plain token pair");
         String auth = UpdateTexts.sanitize("Authorization: Bearer abcdef123456");
@@ -399,8 +511,9 @@ public final class UpdateReliabilityTest {
         int texts;
         String tag = "v3.3.0";
         String sums = "";
+        IOException probeError;
         MetadataDocument document = new MetadataDocument(200, "{}", "", "");
-        public String probeLatestTag() { probes++; return tag; }
+        public String probeLatestTag() throws IOException { probes++; if (probeError != null) throw probeError; return tag; }
         public MetadataDocument metadata(String etag, String lastModified) { metas++; return document; }
         public String text(String url) { texts++; return sums; }
     }

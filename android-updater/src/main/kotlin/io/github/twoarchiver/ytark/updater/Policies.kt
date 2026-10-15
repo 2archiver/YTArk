@@ -20,6 +20,31 @@ object InstallGate {
         else -> Step.REQUEST_PERMISSION
     }
 }
+
+/** Pure entry-flow decisions; Android settings access remains in UpdateActivity. */
+object InstallPermissionEntryPolicy {
+    const val ROUTE_UNSUPPORTED = "unsupported"
+    const val ROUTE_PACKAGE_SOURCE = "package_source"
+    const val ROUTE_SECURITY_SETTINGS = "security_settings"
+
+    @JvmStatic fun routeForApi(api: Int): String = when {
+        api >= 26 -> ROUTE_PACKAGE_SOURCE
+        api in 24..25 -> ROUTE_SECURITY_SETTINGS
+        else -> ROUTE_UNSUPPORTED
+    }
+
+    @JvmStatic fun shouldRequestOnEntry(freshEntry: Boolean, granted: Boolean?, attempted: Boolean, inFlight: Boolean) =
+        freshEntry && granted == false && !attempted && !inFlight
+
+    @JvmStatic fun shouldOpenFromAction(granted: Boolean, inFlight: Boolean) = !granted && !inFlight
+
+    @JvmStatic fun returnStatus(inFlight: Boolean, granted: Boolean): String = when {
+        !inFlight -> "ignore"
+        granted -> "granted"
+        else -> "denied"
+    }
+}
+
 object InstallerResultPolicy {
     enum class Outcome { CONFIRMED, CANCELLED_WITH_VERIFIED_APK, UNCONFIRMED_WITH_VERIFIED_APK, UNCONFIRMED_NO_APK }
     @JvmStatic fun outcome(confirmed: Boolean, remains: Boolean, cancelled: Boolean) = when {

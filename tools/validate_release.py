@@ -621,6 +621,23 @@ def validate_updater_launcher(tree: str) -> None:
     print("Verified private YTArk Updates screen; no updater launcher or exported route.")
 
 
+MIN_TARGET_SDK_FOR_REQUEST_INSTALL_PACKAGES = 26
+
+
+def validate_install_unknown_sources_target_sdk(badging: str) -> int:
+    """API 26+ per-source authorization requires a target SDK of at least 26."""
+    target = re.search(r"^targetSdkVersion:'(\d+)'", badging, re.M)
+    if not target:
+        raise ValueError("aapt could not read the APK target SDK required for install authorization")
+    target_sdk = int(target.group(1))
+    if target_sdk < MIN_TARGET_SDK_FOR_REQUEST_INSTALL_PACKAGES:
+        raise ValueError(
+            "REQUEST_INSTALL_PACKAGES unknown-source authorization requires targetSdkVersion >= 26; "
+            f"the APK targets {target_sdk}"
+        )
+    return target_sdk
+
+
 def validate_apk(path: str, architecture: str, expected_cert_file: str,
                  aapt: str, apksigner: str) -> None:
     config = load_config()
@@ -634,6 +651,7 @@ def validate_apk(path: str, architecture: str, expected_cert_file: str,
         raise ValueError(f"Expected APK filename {expected_name}, got {apk.name}")
 
     badging = run([aapt, "dump", "badging", str(apk)])
+    target_sdk = validate_install_unknown_sources_target_sdk(badging)
     package = re.search(r"^package: name='([^']+)' versionCode='([^']+)' versionName='([^']*)'", badging, re.M)
     if not package:
         raise ValueError("aapt could not read package/version metadata from the APK")
@@ -727,7 +745,7 @@ def validate_apk(path: str, architecture: str, expected_cert_file: str,
     if actual_cert != expected_cert:
         raise ValueError(f"APK signing certificate mismatch: got {actual_cert}, expected {expected_cert}")
 
-    print(f"Verified {apk.name}: {APP_ID} {config['VERSION_NAME']} ({config['VERSION_CODE']}), {abi}, certificate {actual_cert}")
+    print(f"Verified {apk.name}: {APP_ID} {config['VERSION_NAME']} ({config['VERSION_CODE']}), {abi}, target SDK {target_sdk}, certificate {actual_cert}")
 
 
 def file_sha256(path: Path) -> str:

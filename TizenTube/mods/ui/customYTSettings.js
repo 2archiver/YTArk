@@ -14,7 +14,7 @@ import { t } from 'i18next';
 import { configRead, configWrite } from '../config.js';
 import {
   applySettingsLayout, extractCatalog, mergeCatalog, catalogEquals, isSettingsResponse, categoryOf,
-  YTARK_CATEGORY_ID,
+  patchPremiumSettingsRow, YTARK_CATEGORY_ID,
 } from '../features/ytSettingsLayout.js';
 import { tx } from '../translations/text.js';
 
@@ -57,7 +57,11 @@ function recordCatalog(items) {
 /** Patch a parsed settings response in place. Returns true when patched. */
 function PatchSettings(settingsObject) {
   if (!isSettingsResponse(settingsObject)) return false;
-  if (hasYtarkCategory(settingsObject.items)) return false;
+  // Apply this presentation-only row change to the YouTube model itself. It is
+  // route-scoped and idempotent, so new account/settings responses receive the
+  // same label without observers or DOM polling.
+  const premiumChanged = patchPremiumSettingsRow(settingsObject);
+  if (hasYtarkCategory(settingsObject.items)) return premiumChanged;
   try {
     recordCatalog(settingsObject.items);
   } catch (error) {

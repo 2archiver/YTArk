@@ -22,18 +22,31 @@ import validate_release
 
 
 class Armv7OnlyReleaseContractTests(unittest.TestCase):
+    def test_unknown_sources_permission_requires_a_compatible_target_sdk(self):
+        self.assertEqual(
+            validate_release.validate_install_unknown_sources_target_sdk("targetSdkVersion:'26'"),
+            26,
+        )
+        self.assertEqual(
+            validate_release.validate_install_unknown_sources_target_sdk("targetSdkVersion:'35'"),
+            35,
+        )
+        with self.assertRaisesRegex(ValueError, "targetSdkVersion >= 26"):
+            validate_release.validate_install_unknown_sources_target_sdk("targetSdkVersion:'25'")
+        with self.assertRaisesRegex(ValueError, "could not read"):
+            validate_release.validate_install_unknown_sources_target_sdk("package: name='example'")
+
     def test_expected_clean_semver_version_and_asset_names(self):
         config = validate_release.load_config()
-        # The 3.3 identity: display "3.3" with the clean versionCode mapping,
-        # above the published 3.2.0 (3020000). The panel below is intentionally
-        # literal: it is the release contract a user sees, not a value derived
-        # from the same file it checks.
-        self.assertEqual(config["VERSION_NAME"], "3.3.0")
-        self.assertEqual(config["DISPLAY_VERSION"], "3.3")
-        self.assertEqual(config["VERSION_CODE"], "3030000")
-        self.assertEqual(config["VERSION_TAG"], "v3.3.0")
-        self.assertEqual(config["RELEASE_NAME"], "YTArk 3.3")
-        self.assertEqual(config["APK_ARMV7"], "YTArk-v3.3.0-armv7.apk")
+        # The 3.4 identity: display "3.4" with the clean versionCode mapping,
+        # above the published 3.3.0 (3030000). Keep the contract literal so the
+        # tests verify the actual release identity rather than echoing config.
+        self.assertEqual(config["VERSION_NAME"], "3.4.0")
+        self.assertEqual(config["DISPLAY_VERSION"], "3.4")
+        self.assertEqual(config["VERSION_CODE"], "3040000")
+        self.assertEqual(config["VERSION_TAG"], "v3.4.0")
+        self.assertEqual(config["RELEASE_NAME"], "YTArk 3.4")
+        self.assertEqual(config["APK_ARMV7"], "YTArk-v3.4.0-armv7.apk")
         self.assertEqual(validate_release.apk_filename(config["VERSION_NAME"], "armv7"), config["APK_ARMV7"])
         # Only one architecture is published from 2.1.2 onwards.
         self.assertNotIn("APK_ARM64", config)
@@ -73,13 +86,23 @@ class Armv7OnlyReleaseContractTests(unittest.TestCase):
 
     def test_release_version_code_exceeds_every_published_stable_release(self):
         latest = {
-            "tag_name": "v2.0.4-ytark.17",
-            "draft": False,
-            "prerelease": False,
-            "body": "Version 2.0.4-ytark.17 (versionCode 20017)",
+            "tag_name": "v3.3.0", "draft": False, "prerelease": False,
+            "body": "YTArk 3.3.0 (versionCode 3030000)",
         }
         releases = [
             latest,
+            {
+                "tag_name": "v3.2.0", "draft": False, "prerelease": False,
+                "body": "YTArk 3.2.0 (versionCode 3020000)",
+            },
+            {
+                "tag_name": "v3.1.0", "draft": False, "prerelease": False,
+                "body": "YTArk 3.1.0 (versionCode 3010000)",
+            },
+            {
+                "tag_name": "v2.9.0", "draft": False, "prerelease": False,
+                "body": "YTArk 2.9.0 (versionCode 2090000)",
+            },
             {
                 "tag_name": "v2.0.4-ytark.16", "draft": False, "prerelease": False,
                 "body": "Version 2.0.4-ytark.16 (versionCode 20016)",
@@ -92,22 +115,6 @@ class Armv7OnlyReleaseContractTests(unittest.TestCase):
                 "tag_name": "v2.1.2", "draft": False, "prerelease": False,
                 "body": "YTArk 2.1.2\n\nAndroid versionCode: 2010200\n",
             },
-            {
-                "tag_name": "v2.9.0", "draft": False, "prerelease": False,
-                "body": "YTArk 2.9 (versionCode 2090000)",
-            },
-            {
-                "tag_name": "v2.8.0", "draft": False, "prerelease": False,
-                "body": "YTArk 2.8 (versionCode 2080000)",
-            },
-            {
-                "tag_name": "v2.7.0", "draft": False, "prerelease": False,
-                "body": "YTArk 2.7.0 (versionCode 2070000)",
-            },
-            {
-                "tag_name": "v2.0.2-personal.14", "draft": False, "prerelease": False,
-                "body": "Version 2.0.2-personal.14 (versionCode 20014)",
-            },
             {"tag_name": "v99.0.0", "draft": True, "prerelease": False, "body": ""},
             {"tag_name": "v99.0.0-rc.1", "draft": False, "prerelease": True, "body": ""},
         ]
@@ -116,20 +123,19 @@ class Armv7OnlyReleaseContractTests(unittest.TestCase):
             latest_path = root / "latest.json"
             releases_path = root / "releases.json"
             latest_path.write_text(json.dumps(latest), encoding="utf-8")
-            # The latest published v2.9.0 APK must be exceeded by the 3.0 candidate.
-            self.assertGreater(int(validate_release.load_config()["VERSION_CODE"]), 2090000)
+            self.assertGreater(int(validate_release.load_config()["VERSION_CODE"]), 3030000)
             releases_path.write_text(json.dumps([releases[:5], releases[5:]]), encoding="utf-8")
             validate_release.check_version(str(latest_path), str(releases_path))
 
-            # A published release above the candidate (3.3.1 = 3030100) must block it.
+            # A published release above the candidate (3.4.1 = 3040100) must block it.
             too_high = dict(releases[1])
-            too_high["tag_name"] = "v3.3.1"
-            too_high["body"] = "Version 3.3.1 (versionCode 3030100)"
+            too_high["tag_name"] = "v3.4.1"
+            too_high["body"] = "Version 3.4.1 (versionCode 3040100)"
             releases_path.write_text(json.dumps(releases + [too_high]), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "must exceed every published release|must be newer"):
                 validate_release.check_version(str(latest_path), str(releases_path))
 
-            inconsistent = dict(releases[1])
+            inconsistent = dict(releases[4])
             inconsistent["body"] = "Version 2.0.4-ytark.16 (versionCode 20017)"
             releases_path.write_text(json.dumps(releases[:1] + [inconsistent]), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "versionCode 20017, expected 20016"):

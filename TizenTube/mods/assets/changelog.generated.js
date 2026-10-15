@@ -4,20 +4,69 @@ export const YTARK_CHANGELOG = {
   "schema": 1,
   "source": "CHANGELOG.md",
   "summaryFallback": "No short highlights available for this version.",
-  "sourceSha256": "3c5c22444f8744f70be8805a5dd71b1fc0eb282635c1496dfb5cab9d4b4f50a4",
+  "sourceSha256": "9a39eab5af4e2b1c44905c7818e2d0f8745e341232193ee6948980f8aad3c655",
   "entries": [
     {
-      "version": "3.3.0",
-      "display": "3.3",
+      "version": "3.4.0",
+      "display": "3.4",
       "status": "unreleased",
       "date": null,
       "publishedAt": null,
+      "tag": "v3.4.0",
+      "versionCode": 3040000,
+      "scriptTag": "s33",
+      "title": "YTArk 3.4",
+      "releaseUrl": null,
+      "facts": "Not yet published. Planned tag v3.4.0 · versionCode 3040000 · userscript s33 · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.",
+      "summary": "Cleaner About and settings, permission-ready Updates, and clearer release checks.",
+      "sections": [
+        {
+          "heading": "Added",
+          "items": [
+            "Updates asks for install authorization on entry; denial leaves a manual action and never blocks checks."
+          ]
+        },
+        {
+          "heading": "Changed",
+          "items": [
+            "About and settings are cleaner; the row reads “YouTube Premium” and faster startup stays opt-in."
+          ]
+        },
+        {
+          "heading": "Fixed",
+          "items": [
+            "Release checks distinguish offline, timeout, HTTP, metadata and runtime failures with sanitized diagnostics."
+          ]
+        },
+        {
+          "heading": "Validation",
+          "items": [
+            "Conditional responses, malformed metadata, empty-cache first runs and incompatible assets have explicit fixture coverage.",
+            "API 24–25, denied-return, fresh-entry, duplicate-prompt and permission-revocation decisions have policy coverage."
+          ]
+        },
+        {
+          "heading": "Known limitations",
+          "items": [
+            "TV permission screens, startup speed, session-preserving upgrades and ARMv7 runtime still need device testing.",
+            "A download does not continue across process death; a partial resumes only when its stored ETag still matches.",
+            "The s33 userscript endpoint becomes live only through the existing release publication workflow."
+          ]
+        }
+      ]
+    },
+    {
+      "version": "3.3.0",
+      "display": "3.3",
+      "status": "published",
+      "date": "2026-10-15",
+      "publishedAt": "2026-10-15T07:03Z",
       "tag": "v3.3.0",
       "versionCode": 3030000,
       "scriptTag": "s32",
       "title": "YTArk 3.3",
-      "releaseUrl": null,
-      "facts": "Not yet published. Planned tag v3.3.0 · versionCode 3030000 · userscript s32 · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.",
+      "releaseUrl": "https://github.com/2archiver/YTArk/releases/tag/v3.3.0",
+      "facts": "Published 2026-10-15 07:03 UTC as YTArk 3.3 · tag v3.3.0 · versionCode 3030000 · userscript s32 · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.",
       "summary": "Recovers from GitHub rate limits, incomplete downloads and installer errors.",
       "sections": [
         {
@@ -40,8 +89,7 @@ export const YTARK_CHANGELOG = {
           "heading": "Known limitations",
           "items": [
             "Physical TV install, permission screens and upgrades still need device verification.",
-            "A download does not continue across process death. A leftover partial can resume only when the stored ETag still matches.",
-            "The s32 userscript endpoint becomes live only through the existing release publication workflow."
+            "A download does not continue across process death. A leftover partial can resume only when the stored ETag still matches."
           ]
         }
       ]
