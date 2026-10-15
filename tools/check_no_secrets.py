@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import re
 import subprocess
+import threading
 import sys
 from pathlib import Path
 
@@ -68,8 +69,22 @@ def _iter_history_blobs() -> list[tuple[str, bytes]]:
         ["git", "cat-file", "--batch"], cwd=ROOT,
         stdin=subprocess.PIPE, stdout=subprocess.PIPE)
     assert proc.stdin and proc.stdout
-    proc.stdin.write(("\n".join(oids) + "\n").encode("ascii"))
-    proc.stdin.close()
+    # Feed stdin from a helper thread. Writing every object id before reading
+    # any output deadlocks once the id list exceeds the pipe buffer: git blocks
+    # writing blobs to a stdout nobody reads, and this process blocks writing
+    # ids to a stdin git no longer reads.
+    payload = ("\n".join(oids) + "\n").encode("ascii")
+
+    def _feed() -> None:
+        try:
+            proc.stdin.write(payload)
+        except BrokenPipeError:
+            pass
+        finally:
+            proc.stdin.close()
+
+    feeder = threading.Thread(target=_feed, daemon=True)
+    feeder.start()
     while True:
         header = proc.stdout.readline()
         if not header:
