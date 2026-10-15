@@ -1,0 +1,22 @@
+{
+  "tag_name": "v3.3.0",
+  "draft": false,
+  "prerelease": false,
+  "body": "YTArk 3.3\n\nRecovers from GitHub rate limits, incomplete downloads and installer errors.\n\n- GitHub rate limits show a retry time and the saved release age.\n- Incomplete downloads stay partial, then verify before install.\n- Installer cancel, block, storage and signature errors stay distinct.\n\nARMv7 (armeabi-v7a): Download APK.\n\n<!-- Package io.github.twoarchiver.ytark; 3.3.0; versionCode 3030000; base TizenTubeCobalt v2.0.2. -->",
+  "assets": [
+    {
+      "name": "YTArk-v3.3.0-armv7.apk",
+      "size": 98405590,
+      "browser_download_url": "https://github.com/2archiver/YTArk/releases/download/v3.3.0/YTArk-v3.3.0-armv7.apk",
+      "digest": "sha256:4e0ff6d8cdd8b8552ef5a7e35f6ba7d69c1777fd1eb0b08ec61519f34d17f218",
+      "content_type": "application/vnd.android.package-archive"
+    },
+    {
+      "name": "SHA256SUMS.txt",
+      "size": 169,
+      "browser_download_url": "https://github.com/2archiver/YTArk/releases/download/v3.3.0/SHA256SUMS.txt",
+      "digest": "sha256:1cc98f21b8779662b2c56e290cf12464007ef844c45f8cc02e803705dd2f5c1e",
+      "content_type": "application/octet-stream"
+    }
+  ]
+}

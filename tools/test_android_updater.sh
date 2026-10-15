@@ -17,6 +17,7 @@ POLICY_SOURCES=(
 )
 TEST_CLASSES=(
   InstallGateTest
+  InstallPermissionEntryTest
   InstallerResultPolicyTest
   NativeRoutePolicyTest
   NativeThemePolicyTest
@@ -34,5 +35,5 @@ sources=()
 for name in "${POLICY_SOURCES[@]}"; do sources+=("$SRC/$name"); done
 "${KOTLINC[@]}" -jvm-target 1.8 -no-reflect -classpath "$STDLIB" -d "$OUT/policies.jar" "${sources[@]}" "$ROOT/android-updater/src/test/kotlin/StateTest.kt"
 javac --release 8 -classpath "$OUT/policies.jar:$STDLIB" -d "$OUT" "$TESTS"/*Test.java
-for name in "${TEST_CLASSES[@]}"; do java -cp "$OUT:$OUT/policies.jar:$STDLIB" "io.github.twoarchiver.ytark.updater.$name"; done
+for name in "${TEST_CLASSES[@]}"; do java -Dytark.test.resources="$ROOT/android-updater/src/test/resources" -cp "$OUT:$OUT/policies.jar:$STDLIB" "io.github.twoarchiver.ytark.updater.$name"; done
 java -cp "$OUT/policies.jar:$STDLIB" io.github.twoarchiver.ytark.updater.StateTestKt

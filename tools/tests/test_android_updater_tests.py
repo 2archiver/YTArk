@@ -136,11 +136,19 @@ class UpdateScreenRemovalTests(unittest.TestCase):
         text = (MAIN_DIR / "UpdateActivity.kt").read_text()
         created = re.findall(r'(\w+Button)=button\((\d+),', text)
         self.assertEqual([name for name, _ in created],
-                         ['checkButton', 'intervalButton', 'primaryButton', 'cancelButton', 'currentNotesButton', 'candidateNotesButton', 'detailsButton'])
-        self.assertEqual(len({id for _, id in created}), 7)
+                         ['allowInstallsButton', 'checkButton', 'intervalButton', 'primaryButton', 'cancelButton', 'currentNotesButton', 'candidateNotesButton', 'detailsButton'])
+        self.assertEqual(len({id for _, id in created}), 8)
+        self.assertIn('ENTRY_PERMISSION', text)
+        self.assertIn('fresh_entry_pending', text)
+        self.assertIn('permission_entry_attempted', text)
+        self.assertIn('permission_route_in_flight', text)
+        self.assertIn('InstallPermissionEntryPolicy.shouldRequestOnEntry', text)
+        self.assertIn('InstallAuthorizationAccess.settingsIntent', text)
+        self.assertIn('InstallAuthorizationAccess.granted', text)
+        self.assertIn('Android could not open the install-authorization screen', text)
         self.assertIn('findViewById<View>(focusId)', text)
         self.assertIn('currentFocus?.id', text)
-        render = text.split('private fun render')[1]
+        render = text.split('private fun render(s: UpdateState)', 1)[1]
         self.assertIn('Retry check', render)
         self.assertIn('Retry download', render)
         self.assertIn('Retry install', render)
@@ -155,6 +163,26 @@ class UpdateScreenRemovalTests(unittest.TestCase):
         self.assertNotIn('s.candidate?.notes', render, 'raw notes never enter the default view')
         self.assertIn('ReleaseHighlights.summary(installed)', text)
         self.assertIn('ReleaseHighlights.summary(it.version)', render)
+
+    def test_permission_entry_has_api_specific_routes_and_saved_no_loop_state(self):
+        activity = (MAIN_DIR / "UpdateActivity.kt").read_text(encoding="utf-8")
+        installer = (MAIN_DIR / "InstallCoordinator.kt").read_text(encoding="utf-8")
+        policies = (MAIN_DIR / "Policies.kt").read_text(encoding="utf-8")
+        repacker = (ROOT / "tools" / "repack_apk.py").read_text(encoding="utf-8")
+        release_validator = (ROOT / "tools" / "validate_release.py").read_text(encoding="utf-8")
+        for marker in ('"fresh_entry_pending"', '"permission_entry_attempted"',
+                       '"permission_route_in_flight"', 'beginFreshPageEntry()',
+                       'finishEntryPermissionReturn()', 'ENTRY_PERMISSION', 'Allow installs'):
+            self.assertIn(marker, activity)
+        self.assertIn('context.packageManager.canRequestPackageInstalls()', installer)
+        self.assertIn('Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES', installer)
+        self.assertIn('Settings.ACTION_SECURITY_SETTINGS', installer)
+        self.assertIn('package:${context.packageName}', installer)
+        self.assertIn('Settings.Secure.INSTALL_NON_MARKET_APPS', installer)
+        self.assertIn('api >= 26', policies)
+        self.assertIn('api in 24..25', policies)
+        self.assertIn('android.permission.REQUEST_INSTALL_PACKAGES', repacker)
+        self.assertIn('validate_install_unknown_sources_target_sdk', release_validator)
 
 
 class RepackDefaultsTests(unittest.TestCase):

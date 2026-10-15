@@ -1,14 +1,13 @@
-YTArk 3.3 — candidate, not published
+YTArk 3.4 — candidate, not published
 
-Recovers from GitHub rate limits, incomplete downloads and installer errors.
+Cleaner About and settings, permission-ready Updates, and clearer release checks.
 
-- GitHub rate limits show a retry time and the saved release age.
-- Incomplete downloads stay partial, then verify before install.
-- Installer cancel, block, storage and signature errors stay distinct.
+- Release checks distinguish offline, timeout, HTTP, metadata and runtime failures with sanitized diagnostics.
+- About and settings are cleaner; the row reads “YouTube Premium” and faster startup stays opt-in.
+- Updates asks for install authorization on entry; denial leaves a manual action and never blocks checks.
 
-The 3.2 Updates page, signing identity and ARMv7 Cobalt v2.0.2 base are unchanged.
-Physical TV install, permission screens and session-preserving upgrades remain
-unverified. A download does not continue across process death. The s32 userscript
-endpoint is not live until release publication.
+The existing package identity, signing identity and TizenTubeCobalt v2.0.2 ARMv7 base remain unchanged. The s33 userscript endpoint becomes live only through the existing release publication workflow.
 
-<!-- Package io.github.twoarchiver.ytark; 3.3.0; versionCode 3030000; base TizenTubeCobalt v2.0.2. -->
+TV permission screens, startup speed, session-preserving upgrades and ARMv7 runtime remain unverified in this environment. A download does not continue across process death; a partial can resume only when its stored ETag still matches.
+
+<!-- Package io.github.twoarchiver.ytark; 3.4.0; versionCode 3040000; base TizenTubeCobalt v2.0.2. -->

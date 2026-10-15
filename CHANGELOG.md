@@ -22,9 +22,29 @@ Conventions:
 - Capabilities inherited from TizenTube and TizenTubeCobalt are listed under
   "Upstream base and inherited capabilities", not as YTArk additions.
 
-## [3.3.0] — Unreleased
+## [3.4.0] — Unreleased
 
-> Not yet published. Planned tag `v3.3.0` · versionCode 3030000 · userscript `s32` · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.
+> Not yet published. Planned tag `v3.4.0` · versionCode 3040000 · userscript `s33` · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.
+
+Cleaner About and settings, permission-ready Updates, and clearer release checks.
+
+### Added
+- Updates asks for install authorization on entry; denial leaves a manual action and never blocks checks.
+### Changed
+- About and settings are cleaner; the row reads “YouTube Premium” and faster startup stays opt-in.
+### Fixed
+- Release checks distinguish offline, timeout, HTTP, metadata and runtime failures with sanitized diagnostics.
+### Validation
+- Conditional responses, malformed metadata, empty-cache first runs and incompatible assets have explicit fixture coverage.
+- API 24–25, denied-return, fresh-entry, duplicate-prompt and permission-revocation decisions have policy coverage.
+### Known limitations
+- TV permission screens, startup speed, session-preserving upgrades and ARMv7 runtime still need device testing.
+- A download does not continue across process death; a partial resumes only when its stored ETag still matches.
+- The s33 userscript endpoint becomes live only through the existing release publication workflow.
+
+## [3.3.0] — 2026-10-15
+
+> Published 2026-10-15 07:03 UTC as [YTArk 3.3](https://github.com/2archiver/YTArk/releases/tag/v3.3.0) · tag `v3.3.0` · versionCode 3030000 · userscript `s32` · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.
 
 Recovers from GitHub rate limits, incomplete downloads and installer errors.
 
@@ -39,7 +59,6 @@ Recovers from GitHub rate limits, incomplete downloads and installer errors.
 ### Known limitations
 - Physical TV install, permission screens and upgrades still need device verification.
 - A download does not continue across process death. A leftover partial can resume only when the stored ETag still matches.
-- The s32 userscript endpoint becomes live only through the existing release publication workflow.
 
 ## [3.2.0] — 2026-10-14
 

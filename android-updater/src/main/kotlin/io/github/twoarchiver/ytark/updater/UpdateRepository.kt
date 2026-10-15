@@ -34,6 +34,11 @@ class ReleaseHttp : MetadataSource {
             requireUpdate(tag != null, "Unexpected latest-release redirect.")
             return@call tag!!
         }
+        if (head.status == 403 || head.status == 404 || head.status in 500..599) {
+            throw httpFailure(head)
+        }
+        // HEAD may be unsupported by an intermediary. Only this non-error
+        // optimization failure falls back to the authoritative API endpoint.
         throw IOException("Could not resolve the latest stable release page (HTTP ${head.status}).")
     }
 

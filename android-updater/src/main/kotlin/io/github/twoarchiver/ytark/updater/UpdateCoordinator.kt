@@ -39,7 +39,7 @@ class UpdateCoordinator private constructor(context: Context) {
                 files = DownloadController(app, validator)
                 recover(store.load())
                 UpdateSchedule.replace(app, state.hours)
-            } catch (e: Exception) { fail(e, "restore") } finally { occupied.set(false); notifyState() }
+            } catch (e: Throwable) { handleFailure(e, "restore") } finally { occupied.set(false); notifyState() }
         }
     }
     fun observe(listener: (UpdateState) -> Unit) { listeners.add(listener); listener(state) }
@@ -57,7 +57,14 @@ class UpdateCoordinator private constructor(context: Context) {
         UpdatePhase.Checking -> "check"
         else -> state.stage.ifBlank { "check" }
     }
-    private fun fail(e: Exception, forcedStage: String? = null) {
+    private fun handleFailure(error: Throwable, forcedStage: String? = null) {
+        // Runtime linkage failures are recoverable updater errors. Do not mask
+        // VM-fatal conditions or thread cancellation as a UI state.
+        if (error is VirtualMachineError || error is ThreadDeath) throw error
+        fail(error, forcedStage)
+    }
+
+    private fun fail(e: Throwable, forcedStage: String? = null) {
         val mapped = UpdateErrorMapper.map(e, forcedStage ?: stage(), System.currentTimeMillis(), state.candidate?.tag ?: state.releaseTag)
         if (mapped.category == "rate_limit") {
             store.setRateUntil(mapped.retryAt)
@@ -73,14 +80,18 @@ class UpdateCoordinator private constructor(context: Context) {
         }
         val downloadCancel = cancelled.get() && state.candidate != null && state.phase in setOf(UpdatePhase.Downloading, UpdatePhase.Validating)
         val next = if (downloadCancel) UpdateStates.cancelled(state) else UpdateStates.failed(state, mapped, state.candidate?.tag ?: state.releaseTag)
-        try { set(next) } catch (_: Exception) { state = next; notifyState() }
+        try { set(next) } catch (persistFailure: Throwable) {
+            if (persistFailure is VirtualMachineError || persistFailure is ThreadDeath) throw persistFailure
+            state = next
+            notifyState()
+        }
     }
     private fun submit(work: () -> Unit): Boolean {
         if (!occupied.compareAndSet(false, true)) return false
-        worker.execute { try { work() } catch (e: Exception) { fail(e) } finally { occupied.set(false); notifyState() } }
+        worker.execute { try { work() } catch (e: Throwable) { handleFailure(e) } finally { occupied.set(false); notifyState() } }
         return true
     }
-    fun enqueue(work: () -> Unit) { worker.execute { try { work() } catch (e: Exception) { fail(e, "install") } } }
+    fun enqueue(work: () -> Unit) { worker.execute { try { work() } catch (e: Throwable) { handleFailure(e, "install") } } }
     private fun recover(saved: UpdateState = state) {
         val c = saved.candidate
         if (c == null) { set(saved.copy(phase = UpdatePhase.Idle, pendingIdentity = null, verifiedPath = null, speedBps = 0)); return }
@@ -115,7 +126,7 @@ class UpdateCoordinator private constructor(context: Context) {
             try {
                 var auto = automatic
                 while (true) {
-                    try { runCheck(auto) } catch (e: Exception) { fail(e) }
+                    try { runCheck(auto) } catch (e: Throwable) { handleFailure(e, "check") }
                     if (!deduper.finish()) break
                     auto = false
                 }
@@ -229,7 +240,7 @@ class UpdateCoordinator private constructor(context: Context) {
         hoursOverride = h
         try { UpdateSchedule.replace(app, h) } catch (_: Exception) { }
         if (h == 0) stopAutomaticWork()
-        worker.execute { try { set(state.copy(hours = h)); UpdateSchedule.replace(app, h) } catch (e: Exception) { fail(e) } }
+        worker.execute { try { set(state.copy(hours = h)); UpdateSchedule.replace(app, h) } catch (e: Throwable) { handleFailure(e) } }
     }
     fun prepareInstall(returning: Boolean, result: (Candidate?, File?) -> Unit) {
         if (!returning && state.busy) { result(null, null); return }
@@ -253,7 +264,7 @@ class UpdateCoordinator private constructor(context: Context) {
                 set(next)
                 if (phase == UpdatePhase.AwaitingInstaller) requireUpdate(store.prefs.edit().putString("installer_file", file.path).commit(), "Cannot retain installer APK.")
                 main.post(done)
-            } catch (e: Exception) { fail(e, "install") }
+            } catch (e: Throwable) { handleFailure(e, "install") }
         }
     }
     fun externalReturned(message: String) { submit { recover(); if (state.candidate != null) set(state.copy(phase = if (state.verifiedPath != null) UpdatePhase.Ready else UpdatePhase.Available, pendingIdentity = null, message = message)) } }

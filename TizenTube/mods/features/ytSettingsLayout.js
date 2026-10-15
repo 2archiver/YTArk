@@ -83,6 +83,74 @@ export function rowIdOf(row) {
   return setting && setting.length <= 120 ? `setting:${setting}` : null;
 }
 
+const PURCHASES_CATEGORY_ID = 'SETTING_CAT_PURCHASES';
+const PREMIUM_ROW_ID = 'item:PREMIUM_LANDING_PAGE';
+const PREMIUM_ENGLISH_SOURCE_LABEL = 'Get YouTube Premium';
+const PREMIUM_ENGLISH_LABEL = 'YouTube Premium';
+
+function replaceText(value, text) {
+  if (typeof value === 'string') return text;
+  if (!isPlainObject(value)) return value;
+  if (Array.isArray(value.runs)) {
+    const first = value.runs.find(run => isPlainObject(run));
+    value.runs = first ? [{ ...first, text }] : [{ text }];
+    return value;
+  }
+  if (typeof value.simpleText === 'string') {
+    value.simpleText = text;
+    return value;
+  }
+  if (typeof value.content === 'string') {
+    value.content = text;
+    return value;
+  }
+  return value;
+}
+
+/**
+ * Change only YouTube's stable Premium landing action in the Purchases section.
+ * The route, item identity, thumbnail, and every other renderer field stay
+ * untouched. English wording is localized only when the frontend supplied the
+ * English source label; other locales keep YouTube's own localized title.
+ */
+export function patchPremiumSettingsRow(response) {
+  if (!isSettingsResponse(response)) return false;
+  for (const item of response.items) {
+    const category = categoryOf(item);
+    if (!category || category.categoryId !== PURCHASES_CATEGORY_ID || !Array.isArray(category.items)) continue;
+    const row = category.items.find(candidate => rowIdOf(candidate) === PREMIUM_ROW_ID);
+    const found = rendererOf(row);
+    if (!found || found.type !== 'settingActionRenderer') continue;
+    const renderer = found.renderer;
+    const currentTitle = textOf(renderer.title).replace(/\s+/g, ' ').trim();
+    if (currentTitle !== PREMIUM_ENGLISH_SOURCE_LABEL && currentTitle !== PREMIUM_ENGLISH_LABEL) continue;
+
+    const accessible = renderer.accessibility && renderer.accessibility.accessibilityData;
+    const changed = currentTitle !== PREMIUM_ENGLISH_LABEL
+      || (renderer.actionLabel !== undefined && textOf(renderer.actionLabel) !== PREMIUM_ENGLISH_LABEL)
+      || !!(accessible && typeof accessible.label === 'string' && accessible.label.includes(PREMIUM_ENGLISH_SOURCE_LABEL))
+      || (typeof renderer.accessibilityLabel === 'string' && renderer.accessibilityLabel.includes(PREMIUM_ENGLISH_SOURCE_LABEL))
+      || Object.prototype.hasOwnProperty.call(renderer, 'summary');
+    renderer.title = replaceText(renderer.title, PREMIUM_ENGLISH_LABEL);
+    if (renderer.actionLabel !== undefined) {
+      renderer.actionLabel = replaceText(renderer.actionLabel, PREMIUM_ENGLISH_LABEL);
+    }
+    if (accessible && typeof accessible.label === 'string'
+        && accessible.label.includes(PREMIUM_ENGLISH_SOURCE_LABEL)) {
+      accessible.label = accessible.label.replace(PREMIUM_ENGLISH_SOURCE_LABEL, PREMIUM_ENGLISH_LABEL);
+    }
+    if (typeof renderer.accessibilityLabel === 'string'
+        && renderer.accessibilityLabel.includes(PREMIUM_ENGLISH_SOURCE_LABEL)) {
+      renderer.accessibilityLabel = renderer.accessibilityLabel.replace(PREMIUM_ENGLISH_SOURCE_LABEL, PREMIUM_ENGLISH_LABEL);
+    }
+    // The native subtitle advertises a purchase and conflicts with the new
+    // neutral label. Removing it does not alter the genuine destination.
+    delete renderer.summary;
+    return changed;
+  }
+  return false;
+}
+
 function hasAccountCommand(value, depth = 0) {
   if (depth > 8 || value === null || typeof value !== 'object') return false;
   if (Array.isArray(value)) return value.some(entry => hasAccountCommand(entry, depth + 1));

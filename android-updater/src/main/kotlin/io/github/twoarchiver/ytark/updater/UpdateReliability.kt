@@ -6,8 +6,13 @@ import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InputStream
 import java.io.InterruptedIOException
+import java.net.ConnectException
 import java.net.HttpURLConnection
+import java.net.NoRouteToHostException
+import java.net.SocketException
+import java.net.SocketTimeoutException
 import java.net.URI
+import java.net.UnknownHostException
 import java.net.URL
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -24,6 +29,7 @@ import java.util.concurrent.atomic.AtomicReference
  */
 
 class HttpFailure(val status: Int, val retryAt: Long, message: String, val category: String) : IOException(message)
+class ReleaseMetadataFailure @JvmOverloads constructor(message: String, cause: Throwable? = null) : IOException(message, cause)
 
 class RemoteAsset @JvmOverloads constructor(
     @JvmField val name: String,
@@ -46,7 +52,18 @@ class CachedRelease(
     @JvmField val notes: String,
     @JvmField val sumsVerified: Boolean
 ) {
-    fun complete(): Boolean = tag.startsWith("v") && sha256.length == 64 && size > 0 && asset.isNotEmpty() && url.startsWith("https://")
+    fun complete(): Boolean = try {
+        val version = tag.removePrefix("v")
+        tag == "v$version"
+            && code == UpdateReleaseContract.expectedVersionCodeForVersion(version)
+            && asset == UpdateReleaseContract.assetNameForVersion(version, "armv7")
+            && UpdateReleaseContract.requireOfficialAssetUrl(url, tag, asset) == url
+            && UpdateReleaseContract.parseSha256Digest(sha256) == sha256
+            && size in 1..512L * 1024 * 1024
+            && fetchedAt > 0L
+    } catch (_: Exception) {
+        false
+    }
     fun candidate(): Candidate = Candidate(tag, code, asset, url, size, sha256, notes)
     fun touched(now: Long): CachedRelease = CachedRelease(now, etag, lastModified, tag, code, asset, url, size, sha256, notes, sumsVerified)
 }
@@ -99,6 +116,10 @@ object UpdateTexts {
     private val bearerCred = Regex("(?i)\\bbearer\\s+[A-Za-z0-9._~+/=-]{4,}")
     private val secretPair = Regex("(?i)(token|authorization|password|passwd|secret|sig|signature|credential|api[_-]?key|access[_-]?key)\\s*[=:]\\s*[^\\s&\"']+")
 
+    private val fileUrl = Regex("(?i)\\bfile:(?:/{1,3})?\\S+")
+    private val privatePath = Regex("(?i)(?<![A-Za-z0-9])/(?:data|storage|sdcard|mnt|home|tmp|private|var|proc|root|system|vendor|users|android)/[^\\s\"'<>]+")
+    private val windowsPath = Regex("(?i)\\b[A-Z]:[\\\\/][^\\s\"'<>]+")
+
     @JvmStatic fun sanitize(raw: String?): String {
         if (raw.isNullOrBlank()) return ""
         var text = raw
@@ -106,6 +127,9 @@ object UpdateTexts {
         text = bearerCred.replace(text, "authorization=[redacted]")
         text = secretPair.replace(text, "$1=[redacted]")
         text = Regex("(?i)\\bhttps?://\\S+").replace(text, "[redacted]")
+        text = fileUrl.replace(text, "[path]")
+        text = privatePath.replace(text, "[path]")
+        text = windowsPath.replace(text, "[path]")
         text = Regex("\\b\\d{1,3}(?:\\.\\d{1,3}){3}\\b").replace(text, "[ip]")
         text = text.replace(Regex("[\\r\\n\\t]+"), " ").trim()
         return if (text.length <= 240) text else text.take(237) + "..."
@@ -355,27 +379,46 @@ object UpdateErrorMapper {
         val http = chain.filterIsInstance<HttpFailure>().firstOrNull()
         val names = chain.joinToString(" ") { it.javaClass.simpleName }
         val raw = chain.joinToString(" ") { it.message ?: "" }
+        val lower = raw.lowercase(Locale.US)
         val detail = buildString {
             append("Stage: ").append(if (stage.isBlank()) "updater" else stage)
             if (tag.isNotBlank()) append("\nRelease: ").append(tag.take(32))
             if (http != null) append("\nHTTP status: ").append(http.status)
-            append("\nCategory: ")
-            append(UpdateTexts.sanitize(names).ifBlank { "error" })
+            append("\nCause chain:")
+            chain.forEachIndexed { index, cause ->
+                append("\n").append(index + 1).append(". ")
+                    .append(cause.javaClass.simpleName.ifBlank { "UnknownThrowable" })
+                val safe = UpdateTexts.sanitize(cause.message)
+                if (safe.isNotBlank()) append(": ").append(safe)
+            }
+        }.take(1600)
+
+        if (http != null && (http.category == "rate_limit" || http.status == 429)) {
+            val retry = http.retryAt.takeIf { it > now }
+                ?: RateLimitPolicy.retryAtMillis(http.status, null, null, null, "", now)
+            return MappedError("rate_limit", http.message ?: RateLimitPolicy.message(retry, now, TimeZone.getDefault()), detail, retry, http.status, stage)
         }
-        if (http != null && http.category == "rate_limit") {
-            return MappedError("rate_limit", http.message ?: RateLimitPolicy.message(http.retryAt, now, TimeZone.getDefault()), detail, http.retryAt, http.status, stage)
-        }
-        val lower = raw.lowercase(Locale.US)
+
+        val hasLinkageFailure = chain.any { it is LinkageError || it is ClassNotFoundException }
         val category = when {
+            http?.status == 403 -> "forbidden"
+            http?.status == 404 -> "no_release"
+            http != null && http.status in 500..599 -> "server"
+            hasLinkageFailure -> "runtime"
+            chain.any { it is ReleaseMetadataFailure } -> "metadata"
             // Name-resolution and connect-refusal failures are network
-            // availability problems, not timeouts; keep them distinct so the
-            // offline guidance is reachable.
-            names.contains("UnknownHost") || names.contains("ConnectException") -> "offline"
+            // availability problems, not timeouts.
+            names.contains("UnknownHost") || names.contains("NoRouteToHost") -> "offline"
             names.contains("SocketTimeout") || lower.contains("timed out") || lower.contains("timeout") -> "timeout"
+            names.contains("ConnectException") || names.contains("SocketException") -> "connection"
+            lower.contains("release metadata") || lower.contains("invalid release tag")
+                || lower.contains("missing versioncode metadata") || lower.contains("versioncode disagrees")
+                || lower.contains("not explicitly published stable") || lower.contains("untrusted release source")
+                || lower.contains("untrusted release asset") || lower.contains("checksum asset") -> "metadata"
             lower.contains("no compatible") || lower.contains("armeabi-v7a") || lower.contains("no unique compatible") -> "no_compatible_apk"
             lower.contains("not enough storage") || lower.contains("no space") || lower.contains("enospc") -> "storage"
             lower.contains("signer is incompatible") || lower.contains("signature mismatch") || lower.contains("signatures do not match") -> "signature_mismatch"
-            lower.contains("checksum") || lower.contains("signature verification") || lower.contains("corrupt apk") || lower.contains("malformed") || names.contains("ApkFormat") || names.contains("ZipException") -> "verification"
+            lower.contains("checksum") || lower.contains("signature verification") || lower.contains("corrupt apk") || lower.contains("malformed apk") || names.contains("ApkFormat") || names.contains("ZipException") -> "verification"
             lower.contains("install permission") || lower.contains("unknown apps") -> "permission"
             lower.contains("installation cancelled") || lower.contains("install cancelled") -> "install_cancelled"
             lower.contains("download cancelled") -> "cancelled"
@@ -386,6 +429,12 @@ object UpdateErrorMapper {
         val message = when (category) {
             "timeout" -> "Connection timed out. Check the network and retry."
             "offline" -> "Network unavailable. Check the connection and retry."
+            "connection" -> "Could not connect to the update service. Check the network and retry."
+            "forbidden" -> "The update service denied this request (HTTP 403). It was not confirmed as a rate limit; retry later."
+            "no_release" -> "No stable YTArk release is published yet. Check again later."
+            "server" -> "The update service is temporarily unavailable (HTTP ${http?.status ?: 0}). Retry later."
+            "metadata" -> "The release response was incomplete or invalid. Your installed app is unchanged; retry the check."
+            "runtime" -> "The updater could not run on this app build. Reopen Updates and retry; your installed app is unchanged."
             "no_compatible_apk" -> firstSafe(raw, "No compatible APK found. This release has no ARMv7 package for this device.")
             "storage" -> "Not enough storage. Free space and retry."
             "signature_mismatch" -> "App signature mismatch. The installed app was not removed or replaced."
@@ -397,7 +446,7 @@ object UpdateErrorMapper {
             "http" -> "The update service returned HTTP ${http?.status ?: 0}. Try again later."
             else -> "The update stopped because of an unexpected error. Your installed app is unchanged."
         }
-        val retry = http?.retryAt ?: (now + 60_000L)
+        val retry = http?.retryAt?.takeIf { it > 0 } ?: (now + 60_000L)
         return MappedError(category, message, detail, retry, http?.status ?: 0, stage)
     }
 
@@ -532,10 +581,26 @@ class UpdateRepository(private val source: MetadataSource) {
             if (cache != null && cache.tag == tag) return Discovery.UseCache(cache.touched(now), false, 0L)
         } catch (e: HttpFailure) {
             if (e.category == "rate_limit") return Discovery.RateLimited(e.retryAt, cache)
-        } catch (_: IOException) {
-            // The public latest-page redirect is an optimisation. The API remains authoritative.
+            // Do not switch endpoints after a real HTTP error (notably 403/5xx).
+            throw e
+        } catch (e: IOException) {
+            // The public latest-page redirect is an optimization, but a known
+            // connectivity failure is the check's result, not a reason to make
+            // a second request to another endpoint.
+            if (isConnectivityFailure(e)) throw e
         }
         return fetchApi(cache, now)
+    }
+
+    private fun isConnectivityFailure(error: Throwable): Boolean {
+        var cause: Throwable? = error
+        var depth = 0
+        while (cause != null && depth++ < 6) {
+            if (cause is UnknownHostException || cause is NoRouteToHostException
+                || cause is ConnectException || cause is SocketTimeoutException || cause is SocketException) return true
+            cause = cause.cause
+        }
+        return false
     }
 
     private fun fetchApi(cache: CachedRelease?, now: Long): Discovery {
@@ -545,8 +610,14 @@ class UpdateRepository(private val source: MetadataSource) {
             if (e.category == "rate_limit") return Discovery.RateLimited(e.retryAt, cache)
             throw e
         }
-        if (doc.status == 304 && cache != null) return Discovery.UseCache(cache.touched(now), false, 0L)
-        requireUpdate(doc.status == 200 && doc.body.isNotEmpty(), "GitHub HTTP ${doc.status}. Try again later.")
+        if (doc.status == 304) {
+            if (cache != null) return Discovery.UseCache(cache.touched(now), false, 0L)
+            throw ReleaseMetadataFailure("Release metadata returned 304 Not Modified without a valid saved release.")
+        }
+        if (doc.status != 200) {
+            throw HttpFailure(doc.status, now + 60_000L, "Release API returned HTTP ${doc.status}.", "http")
+        }
+        if (doc.body.isBlank()) throw ReleaseMetadataFailure("Release metadata response was empty.")
         var parsed = ReleaseMetadataParser.parse(doc.body, null)
         var sumsVerified = !parsed.needsSums
         if (parsed.needsSums) {
@@ -597,7 +668,7 @@ class CancelHandle {
  * Redirects are followed only when [RedirectGate] allows the next hop.
  */
 object JdkHttp {
-    private const val USER_AGENT = "YTArk/3.3 (+https://github.com/2archiver/YTArk)"
+    private const val USER_AGENT = "YTArk/3.4 (+https://github.com/2archiver/YTArk)"
 
     @JvmStatic @JvmOverloads @Throws(IOException::class)
     fun exchange(url: String, method: String, headerMap: Map<String, String>, gate: RedirectGate, maxBytes: Int, follow: Boolean = true, cancel: CancelHandle = CancelHandle()): HttpResult {
@@ -746,7 +817,10 @@ object JdkHttp {
     private fun sanitize(error: IOException, fallback: String): IOException {
         if (error is HttpFailure || error is InterruptedIOException) return error
         val safe = UpdateTexts.sanitize(error.message).ifBlank { fallback }
-        return IOException(if (safe.contains("://")) fallback else safe)
+        // Keep the original type/cause so the coordinator can classify DNS,
+        // refused connections and timeouts. Every cause message is sanitized
+        // before it reaches the technical-details view.
+        return IOException(if (safe.contains("://")) fallback else safe, error)
     }
 }
 

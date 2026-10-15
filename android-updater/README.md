@@ -1,4 +1,4 @@
-# Kotlin updater (3.1 candidate)
+# Kotlin updater (YTArk 3.4 development)
 
 Production code is in `src/main/kotlin`. No Java updater implementation remains.
 The existing Java host assertions compile against the Kotlin policies; additional
@@ -42,18 +42,23 @@ One JobScheduler ID (7280, retained from 3.0) handles 1 hour / 3 hours / Never.
 Intervals are approximate. Foreground overdue checks wait 30 seconds; no release
 fetch runs in provider initialization. Background downloads never launch Android UI.
 
-`InstallCoordinator` requires an explicit visible-page action, revalidates off
-main thread and persists the candidate-bound permission request. It checks
-`canRequestPackageInstalls()` on API 26+, uses the package-specific special
-Settings screen, consumes continuation once, and checks visibility again before
-handoff. Installation uses ACTION_INSTALL_PACKAGE with a scoped, read-only
+Opening YTArk Updates checks actual install authorization and, on a fresh page
+entry only, opens Android's permission screen once when authorization is missing.
+API 26+ uses `PackageManager.canRequestPackageInstalls()` and
+`ACTION_MANAGE_UNKNOWN_APP_SOURCES` with the real application ID. API 24–25 use
+the legacy unknown-sources setting and Security route; unsupported/OEM routes
+remain recoverable. Back or denial updates the page and never loops. The explicit
+Allow installs action remains available, and this permission flow never starts a
+download or installation.
+
+`InstallCoordinator` still requires an explicit visible-page install action,
+revalidates off main thread and persists the candidate-bound install request.
+Permission is re-read immediately before handoff, including after Android Settings
+returns. Installation uses Android's installer with a scoped, read-only
 content URI and RETURN_RESULT. It retains the staged APK through cancellation and
 never interprets a result code as success: installed package/version reconciliation
 is authoritative. No runtime dangerous-permission prompt is used.
 
 ## Verification boundary
 
-See `docs/YTARK-3.1-ACCEPTANCE.md`. Compilation/policy/DEX verification is not proof
-of Android system UI, Cobalt runtime, TV focus or login-preserving upgrades. The
-candidate's `s30` userscript endpoint becomes available only after authorized
-publication; neither script tags nor releases are published by branch CI.
+See `docs/YTARK-3.1-ACCEPTANCE.md` for the earlier acceptance boundary. Compilation/policy/DEX verification is not proof of Android system UI, Cobalt runtime, TV focus or login-preserving upgrades. The candidate's `s33` userscript endpoint becomes available only after authorized publication; neither script tags nor releases are published by branch CI.

@@ -25,7 +25,7 @@ import qrcode from 'qrcode-npm';
 import { configRead, configDefault } from '../config.js';
 import {
   installedVersionInfo, installedVersionLabel, youtubeFrontendVersion,
-  startVersionResolution, VERSION_SOURCES,
+  VERSION_SOURCES,
 } from '../features/appVersion.js';
 import {
   overlayPanelItemListRenderer, scrollPaneRenderer, overlayMessageRenderer, QrCodeRenderer, buttonItem,
@@ -33,7 +33,6 @@ import {
 import { YTARK_BUILD_INFO } from '../assets/buildInfo.generated.js';
 import { tx } from '../translations/text.js';
 import { changelogEntryFor } from '../features/whatsNew.js';
-import { YTARK_CHANGELOG } from '../assets/changelog.generated.js';
 
 const qrcodes = {};
 
@@ -152,85 +151,73 @@ function startupDestination(id, titleKey, icon, endpoint) {
 }
 
 /**
- * About YTArk — the short, TV-readable identity panel.
- *
- * Layout contract (see the 2.7 acceptance checklist): the header carries the
- * name, the subtitle carries the single "YTArk <version>" line, the content
- * holds identity information, short release highlights and navigable subsections; the
- * closing line is the only legal sentence. Nothing here repeats the version,
- * and no fixed height or absolute position is used: the frontend renders these
- * rows, wraps them and scrolls them at 720p, 1080p and 4K.
+ * About YTArk — a compact identity panel for TV screens. The first line is the
+ * installed short version, highlights come only from that bundled release
+ * entry, and detailed metadata / attribution stay behind navigable rows.
  */
+function aboutHighlightLines(version) {
+  const entry = changelogEntryFor(version);
+  if (!entry || !Array.isArray(entry.sections)) return [];
+  const lines = [];
+  for (const section of entry.sections) {
+    if (!section || !Array.isArray(section.items)
+        || ['Known limitations', 'Validation', 'Notes'].includes(section.heading)) continue;
+    for (const raw of section.items) {
+      const text = String(raw || '').replace(/\s+/g, ' ').trim();
+      if (!text) continue;
+      lines.push(text.length > 132 ? `${text.slice(0, 129).replace(/\s+\S*$/, '')}…` : text);
+      if (lines.length >= 3) return lines;
+    }
+  }
+  return lines;
+}
+
 function aboutPanel() {
   const info = installedVersionInfo();
   const version = info.loading
     ? tx('ytark.about.versionLoading', 'Reading the installed version…')
     : `YTArk ${ytarkDisplayVersion()}`;
-  const items = [];
-  if (!info.loading && info.source !== VERSION_SOURCES.package) {
-    items.push(overlayMessageRenderer(tx(
-      'ytark.about.versionSource',
-      'Read from this build\'s packaging metadata: the platform did not report the installed package version.')));
+  const items = [overlayMessageRenderer(tx(
+    'ytark.about.description', 'Independent enhancements for the YouTube TV app.'))];
+  const highlights = info.loading ? [] : aboutHighlightLines(info.version);
+  if (highlights.length) {
+    items.push(overlayMessageRenderer(tx('ytark.about.highlights', 'What’s new')));
+    for (const highlight of highlights) items.push(overlayMessageRenderer(`• ${highlight}`));
   }
-  // Only reported when the running frontend really publishes its own version;
-  // it is the YouTube TV app version, never the YTArk version.
-  const youtube = youtubeFrontendVersion();
-  items.push(overlayMessageRenderer(`YouTube Frontend Version: ${youtube || 'Unavailable'}`));
-  items.push(overlayMessageRenderer('The YouTube frontend is delivered by YouTube, not bundled with the APK.'));
-  items.push(overlayMessageRenderer('Cobalt Version/Commit: Unavailable (Android base is listed in Build details)'));
-  const release = changelogEntryFor(info.version);
-  items.push(overlayMessageRenderer(tx('ytark.about.highlights', 'Current-version highlights')));
-  items.push(overlayMessageRenderer(info.loading
-    ? tx('ytark.about.highlightsLoading', 'Reading release highlights…')
-    : (release ? release.summary : YTARK_CHANGELOG.summaryFallback)));
-
   items.push(
     buttonItem(
       {
-        title: tx('ytark.about.buildDetailsTitle', 'Build details'),
-        subtitle: tx('ytark.about.buildDetailsSubtitle', 'versionName · versionCode · userscript · Android base'),
-      },
-      { icon: 'INFO' },
-      [custom('YTARK_PANEL_SHOW', { id: 'about.buildInfo' })],
-    ),
-    buttonItem(
-      {
-        title: tx('ytark.about.noticesTitle', 'Third-party notices and licences'),
-        subtitle: tx('ytark.about.noticesSubtitle', 'Attribution and licence texts that ship with YTArk'),
-      },
-      { icon: 'LIST' },
-      [custom('YTARK_PANEL_SHOW', { id: 'about.notices' })],
-    ),
-    buttonItem(
-      {
-        title: tx('ytark.about.changelog', 'Changelog / Version history'),
-        subtitle: tx('ytark.about.changelogSubtitle', 'View full release notes and earlier versions'),
+        title: tx('ytark.about.changelog', 'Changelog'),
+        subtitle: tx('ytark.about.changelogSubtitle', 'Full release notes and earlier versions'),
       },
       { icon: 'HISTORY' },
       [custom('YTARK_CHANGELOG_SHOW', { focusVersion: info.version || '' })],
     ),
     buttonItem(
       {
-        title: 'YTArk Updates',
-        subtitle: 'Check for and install updates',
+        title: tx('ytark.about.buildDetailsTitle', 'Technical details'),
+        subtitle: tx('ytark.about.buildDetailsSubtitle', 'Version code, engine and frontend identifiers'),
       },
-      { icon: 'HISTORY' },
-      [custom('YTARK_NATIVE_UPDATES_OPEN', {})],
+      { icon: 'INFO' },
+      [custom('YTARK_PANEL_SHOW', { id: 'about.buildInfo' })],
+    ),
+    buttonItem(
+      {
+        title: tx('ytark.about.noticesTitle', 'Credits & licenses'),
+        subtitle: tx('ytark.about.noticesSubtitle', 'Project attribution and bundled licence notices'),
+      },
+      { icon: 'LIST' },
+      [custom('YTARK_PANEL_SHOW', { id: 'about.notices' })],
+    ),
+    buttonItem(
+      {
+        title: tx('ytark.about.projectLink', 'Project link'),
+        subtitle: tx('ytark.about.projectLinkSubtitle', 'YTArk on GitHub'),
+      },
+      { icon: 'OPEN_IN_NEW' },
+      [custom('YTARK_PANEL_SHOW', { id: 'about.project' })],
     ),
   );
-  if (!info.loading && info.source !== VERSION_SOURCES.package) {
-    items.push(buttonItem(
-      {
-        title: tx('ytark.about.rereadVersion', 'Read the installed version again'),
-        subtitle: tx('ytark.about.rereadVersionDescription', 'Asks the platform for the installed YTArk package version'),
-      },
-      { icon: 'SYSTEM_UPDATE' },
-      [custom('YTARK_VERSION_REREAD', {})],
-    ));
-  }
-  items.push(overlayMessageRenderer(tx(
-    'ytark.about.independent',
-    'About: YTArk is an independent Android TV application. YouTube remains a Google service.')));
   return {
     title: 'About YTArk',
     subtitle: version,
@@ -238,47 +225,58 @@ function aboutPanel() {
   };
 }
 
-/** Collapsible-style build information: its own navigable panel, scrollable. */
+/** Technical metadata is separate from the short About screen and scrollable. */
 function aboutBuildInfoPanel() {
   const build = YTARK_BUILD_INFO || {};
-  const backend = installedVersionInfo();
-  const lines = [
-    `${tx('ytark.about.package', 'Android package')}: ${build.appId || 'io.github.twoarchiver.ytark'}`,
-    `${tx('ytark.about.versionName', 'versionName')}: ${build.versionName || 'unknown'}`,
-    `${tx('ytark.about.versionCode', 'versionCode')}: ${build.versionCode === undefined ? 'unknown' : String(build.versionCode)}`,
-    `${tx('ytark.about.scriptVersion', 'YTArk userscript')}: ${build.scriptTag || 'unknown'}`,
-    `${tx('ytark.about.baseTag', 'Android base')}: ${build.baseTag || 'unknown'}`,
-  ];
-  if (!backend.loading && backend.version) {
-    lines.push(`${tx('ytark.about.installedVersionName', 'Installed version reported by the platform')}: ${backend.version}`);
+  const installed = installedVersionInfo();
+  const lines = [];
+  if (build.versionName) lines.push(`${tx('ytark.about.versionName', 'Build versionName')}: ${build.versionName}`);
+  if (build.versionCode !== undefined && build.versionCode !== null) {
+    lines.push(`${tx('ytark.about.versionCode', 'versionCode')}: ${String(build.versionCode)}`);
   }
+  if (build.appId) lines.push(`${tx('ytark.about.package', 'Android package')}: ${build.appId}`);
+  if (build.commit || build.buildCommit) {
+    lines.push(`${tx('ytark.about.buildCommit', 'Build commit')}: ${build.commit || build.buildCommit}`);
+  }
+  if (build.baseTag) lines.push(`${tx('ytark.about.baseTag', 'Android engine/base')}: ${build.baseTag}`);
+  if (build.scriptTag) lines.push(`${tx('ytark.about.scriptVersion', 'YTArk userscript revision')}: ${build.scriptTag}`);
+  if (installed.source === VERSION_SOURCES.package && installed.version && installed.version !== build.versionName) {
+    lines.push(`${tx('ytark.about.installedVersionName', 'Installed package version')}: ${installed.version}`);
+  }
+  const frontend = youtubeFrontendVersion();
+  if (frontend) lines.push(`${tx('ytark.about.frontendVersion', 'YouTube frontend version')}: ${frontend}`);
   return {
-    title: tx('ytark.about.buildDetailsTitle', 'Build details'),
-    subtitle: tx('ytark.about.buildDetailsSubtitle', 'versionName · versionCode · userscript · Android base'),
+    title: tx('ytark.about.buildDetailsTitle', 'Technical details'),
+    subtitle: tx('ytark.about.buildDetailsSubtitle', 'Version code, engine and frontend identifiers'),
     content: scrollPaneRenderer(lines.map(line => overlayMessageRenderer(line))),
   };
 }
 
 /**
- * Attribution and licence pointers. Kept (never deleted) but out of the
- * primary dialog, with the full texts named so they stay findable and open.
+ * Attribution and licence pointers. Kept grouped and scrollable so the primary
+ * About screen stays readable without dropping third-party notices.
  */
 function aboutNoticesPanel() {
   const build = YTARK_BUILD_INFO || {};
-  const lines = [
-    tx('ytark.about.noticeBase',
-      'YTArk is an independent build of TizenTubeCobalt {{base}} (TizenTube, GNU GPL v3). Its source is published at https://github.com/2archiver/YTArk under the repository licence.',
-      { base: build.baseTag || 'v2.0.2' }),
-    tx('ytark.about.noticeComponents',
-      'Bundled and adapted components keep their own licences: TizenTube (GPL-3.0-only), TizenTubeCobalt/Cobalt (BSD-style Cobalt licence with its own NOTICE), SponsorBlock, DeArrow and the QR encoder. Full texts are in NOTICE.md and TizenTube/LICENSE in the repository and in the release assets.'),
-    tx('ytark.about.noticeTrademarks',
-      'Google, Android, YouTube and YouTube TV are trademarks of Google LLC. The optional YouTube Premium wordmark is a local visual only; it does not provide a subscription or account benefits.'),
-  ];
+  const lines = [];
+  if (build.baseTag) {
+    lines.push(`YTArk is an independent build based on TizenTubeCobalt ${build.baseTag} (TizenTube, GNU GPL v3).`);
+  } else {
+    lines.push('YTArk is an independent Android TV application. Source: https://github.com/2archiver/YTArk.');
+  }
+  lines.push(
+    'Bundled and adapted components keep their own licences: TizenTube (GPL-3.0-only), TizenTubeCobalt/Cobalt (BSD-style Cobalt licence with its own NOTICE), SponsorBlock, DeArrow and the QR encoder. Full texts are in NOTICE.md and TizenTube/LICENSE in the repository and release assets.',
+    'Google, Android, YouTube and YouTube TV are trademarks of Google LLC. The optional YouTube Premium wordmark is a local visual only; it does not provide a subscription or account benefits.',
+  );
   return {
-    title: tx('ytark.about.noticesTitle', 'Third-party notices and licences'),
-    subtitle: tx('ytark.about.noticesSubtitle', 'Attribution and licence texts that ship with YTArk'),
+    title: tx('ytark.about.noticesTitle', 'Credits & licenses'),
+    subtitle: tx('ytark.about.noticesSubtitle', 'Project attribution and bundled licence notices'),
     content: scrollPaneRenderer(lines.map(line => overlayMessageRenderer(line))),
   };
+}
+
+function aboutProjectPanel() {
+  return supportPanel('YTArk on GitHub', 'https://github.com/2archiver/YTArk')();
 }
 
 
@@ -796,7 +794,7 @@ export function buildSettingsTree() {
             type: 'toggle',
             key: 'fasterStartup',
             title: 'Faster startup (Experimental)',
-            description: 'Reduces optional startup delays where supported. Results may vary by device.',
+            description: 'Applies on the next app start. Checks YTArk controls sooner; slow readiness returns to normal pacing.',
             icon: 'SPEED',
           },
     ],
@@ -805,7 +803,7 @@ export function buildSettingsTree() {
       id: 'updates',
       type: 'action',
       title: 'YTArk Updates',
-      description: 'Check, automatically download and install compatible updates',
+      description: 'Check for updates and manage automatic checks and downloads',
       icon: 'SYSTEM_UPDATE',
       command: [custom('YTARK_NATIVE_UPDATES_OPEN', {})],
     },
@@ -826,18 +824,26 @@ export function buildSettingsTree() {
         {
           id: 'about.buildInfo',
           type: 'panel',
-          title: tx('ytark.about.buildDetailsTitle', 'Build details'),
-          description: tx('ytark.about.buildDetailsSubtitle', 'versionName · versionCode · userscript · Android base'),
+          title: tx('ytark.about.buildDetailsTitle', 'Technical details'),
+          description: tx('ytark.about.buildDetailsSubtitle', 'Version code, engine and frontend identifiers'),
           icon: 'INFO',
           panel: aboutBuildInfoPanel,
         },
         {
           id: 'about.notices',
           type: 'panel',
-          title: tx('ytark.about.noticesTitle', 'Third-party notices and licences'),
-          description: tx('ytark.about.noticesSubtitle', 'Attribution and licence texts that ship with YTArk'),
+          title: tx('ytark.about.noticesTitle', 'Credits & licenses'),
+          description: tx('ytark.about.noticesSubtitle', 'Project attribution and bundled licence notices'),
           icon: 'LIST',
           panel: aboutNoticesPanel,
+        },
+        {
+          id: 'about.project',
+          type: 'panel',
+          title: tx('ytark.about.projectLink', 'Project link'),
+          description: tx('ytark.about.projectLinkSubtitle', 'YTArk on GitHub'),
+          icon: 'OPEN_IN_NEW',
+          panel: aboutProjectPanel,
         },
       ],
     },

@@ -11,6 +11,31 @@ import android.provider.Settings
 import java.io.File
 import java.io.IOException
 
+/** Version-aware authorization check and Android-owned route for unknown app installs. */
+internal object InstallAuthorizationAccess {
+    fun granted(context: Context): Boolean? = try {
+        when (InstallPermissionEntryPolicy.routeForApi(Build.VERSION.SDK_INT)) {
+            InstallPermissionEntryPolicy.ROUTE_PACKAGE_SOURCE -> context.packageManager.canRequestPackageInstalls()
+            InstallPermissionEntryPolicy.ROUTE_SECURITY_SETTINGS -> {
+                @Suppress("DEPRECATION")
+                Settings.Secure.getInt(context.contentResolver, Settings.Secure.INSTALL_NON_MARKET_APPS, 0) != 0
+            }
+            else -> null
+        }
+    } catch (_: Exception) {
+        null
+    }
+
+    fun settingsIntent(context: Context): Intent? = when (InstallPermissionEntryPolicy.routeForApi(Build.VERSION.SDK_INT)) {
+        InstallPermissionEntryPolicy.ROUTE_PACKAGE_SOURCE -> Intent(
+            Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+            Uri.parse("package:${context.packageName}"),
+        )
+        InstallPermissionEntryPolicy.ROUTE_SECURITY_SETTINGS -> Intent(Settings.ACTION_SECURITY_SETTINGS)
+        else -> null
+    }
+}
+
 /** Session install when storage allows a second copy; otherwise a granted content URI.
  * The system installer UI is Android's, not a separate YTArk app. file:// is never used.
  * Activity return and STATUS_SUCCESS are not treated as an installed version until
@@ -18,7 +43,7 @@ import java.io.IOException
  */
 class InstallCoordinator(private val activity: UpdateActivity, private val updates: UpdateCoordinator) {
     private var flow = false
-    fun permissionGranted() = Build.VERSION.SDK_INT < 26 || activity.packageManager.canRequestPackageInstalls()
+    fun permissionGranted() = InstallAuthorizationAccess.granted(activity) == true
     fun install(returning: Boolean = false) {
         if (flow || !activity.visible) return
         if (returning && !permissionGranted()) { updates.clearPermissionRequest(); return }
@@ -29,14 +54,19 @@ class InstallCoordinator(private val activity: UpdateActivity, private val updat
         }
     }
     private fun openPermission(c: Candidate, file: File) {
-        if (Build.VERSION.SDK_INT < 26) { handoff(c, file); return }
         updates.markExternal(UpdatePhase.AwaitingPermission, c, file) {
             try {
                 if (!activity.visible) { updates.clearPermissionRequest(); return@markExternal }
-                activity.startActivityForResult(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${activity.packageName}")), PERMISSION)
-                if (activity.visible) updates.externalReturned("Install permission required. This TV did not open the install-unknown-apps screen. Enable it for YTArk in Android Settings, then select Install update.")
+                val intent = InstallAuthorizationAccess.settingsIntent(activity)
+                if (intent == null) {
+                    updates.externalReturned("Android does not provide a supported install-authorization screen on this version. Check this TV's Security settings, then select Install update.")
+                    return@markExternal
+                }
+                // A successful start returns before onPause; do not mistake that
+                // for a settings-screen failure or clear the candidate-bound request.
+                activity.startActivityForResult(intent, PERMISSION)
             } catch (_: Exception) {
-                updates.externalReturned("Install permission required. This TV has no install-unknown-apps screen. Enable it for YTArk in Android Settings, then select Install update.")
+                updates.externalReturned("This TV could not open the install-authorization screen. Allow installs for YTArk in Android Settings, then select Install update.")
             } finally {
                 // Leave the phase at AwaitingPermission, but allow resume to continue exactly once.
                 flow = false

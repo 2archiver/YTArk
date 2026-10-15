@@ -85,6 +85,41 @@ describe('structural detection and idempotent insertion', () => {
       'What\'s new is not duplicated on the YouTube Settings page: it lives in YTArk Updates');
   });
 
+  it('renames only the identified English Premium action and preserves its real route', () => {
+    const response = settingsResponse();
+    const row = cat(response, 'SETTING_CAT_PURCHASES').items[0];
+    const renderer = row.settingActionRenderer;
+    renderer.summary = runs('Purchase YouTube Premium to unlock benefits');
+    renderer.actionLabel = runs('Get YouTube Premium');
+    renderer.accessibility = { accessibilityData: { label: 'Get YouTube Premium' } };
+    const endpoint = JSON.stringify(renderer.serviceEndpoint);
+
+    assert.equal(PatchSettings(response), true);
+    assert.equal(layout.textOf(renderer.title), 'YouTube Premium');
+    assert.equal(layout.textOf(renderer.actionLabel), 'YouTube Premium', 'the accessible action label matches the visible title');
+    assert.equal(renderer.accessibility.accessibilityData.label, 'YouTube Premium');
+    assert.equal(Object.hasOwn(renderer, 'summary'), false, 'purchase-oriented subtitle is removed');
+    assert.equal(JSON.stringify(renderer.serviceEndpoint), endpoint, 'the genuine YouTube destination is untouched');
+    assert.equal(renderer.itemId, 'PREMIUM_LANDING_PAGE', 'the stable row identity is retained');
+    assert.equal(PatchSettings(response), false, 'the patch is idempotent on a reused response');
+
+    const rerendered = settingsResponse();
+    assert.equal(PatchSettings(rerendered), true);
+    assert.equal(layout.textOf(cat(rerendered, 'SETTING_CAT_PURCHASES').items[0].settingActionRenderer.title), 'YouTube Premium');
+  });
+
+  it('does not replace a translated Premium label with English', () => {
+    const response = settingsResponse();
+    const row = cat(response, 'SETTING_CAT_PURCHASES').items[0].settingActionRenderer;
+    row.title = runs('Obtenir YouTube Premium');
+    row.actionLabel = runs('Obtenir YouTube Premium');
+    row.summary = runs('Abonnez-vous');
+    PatchSettings(response);
+    assert.equal(layout.textOf(row.title), 'Obtenir YouTube Premium');
+    assert.equal(layout.textOf(row.actionLabel), 'Obtenir YouTube Premium');
+    assert.equal(layout.textOf(row.summary), 'Abonnez-vous');
+  });
+
   it('records the sections without any account identity', () => {
     PatchSettings(settingsResponse());
     const catalog = configRead('ytSettingsCatalog');
