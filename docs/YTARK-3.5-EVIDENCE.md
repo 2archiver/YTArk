@@ -1,6 +1,39 @@
 # YTArk 3.5 evidence report
 
-Status: **candidate work on branch `arena/3ad3b918-ytark`. Not published, not tagged, not merged.** Nothing here shows that YTArk 3.4 or 3.5 installs on a TV, that the in-app updater completes an upgrade on a device, or that DeArrow replacements are visible on a TV. Those items are marked NOT RUN below.
+Status: **CI-built ARMv7 release candidate from PR #59, head `fd4f9138b91dd12b49ecacf1b7c6c3887f7aef46`. Not published, not tagged, not merged. PR #59 remains a draft.**
+
+Nothing here shows that YTArk 3.4 or 3.5 installs on a TV, that the in-app updater completes an upgrade on a device, or that DeArrow replacements are visible on a TV. Those items are marked NOT RUN below.
+
+## 0. Candidate evidence (CI, code commit `fd4f9138`)
+
+Later commits on this branch that change only this document and the PR text do not change the tested code. The run for the final head is listed in the PR.
+
+| Item | Value |
+|---|---|
+| Candidate workflow run | https://github.com/2archiver/YTArk/actions/runs/38754400254 (`build-candidate.yml`, event `pull_request`, conclusion success) |
+| PR validation run | https://github.com/2archiver/YTArk/actions/runs/38754400236 (`ci.yml`, success) |
+| Artifact | `ytark-3.5.0-armv7-candidate-fd4f9138b91dd12b49ecacf1b7c6c3887f7aef46` (58,705,347 bytes, not expired, 30-day retention). Contents are not readable from this sandbox; the run annotations carry the values below. |
+| Source commit tested | `fd4f9138b91dd12b49ecacf1b7c6c3887f7aef46` (the PR head; the workflow asserts `git rev-parse HEAD` equals it) |
+| APK | `YTArk-v3.5.0-armv7.apk`, SHA-256 `eae8dfa3b2c7094b8df059f2cbbea7f68688993ca7b9c94ddd3c6a45a2018fe2` |
+| Package / version | `io.github.twoarchiver.ytark`, versionCode `3050000`, versionName `3.5.0` |
+| ABI | `native-code: 'armeabi-v7a'` only (32-bit ARMv7 build) |
+| Signer | SHA-256 `b9cb7e4b4d5179870e672e850f5d3661f02c248f943dbaf10cd78cd0c047eaae`, equal to the pinned `signing/YTArk-cert-sha256.txt` (checked by `check-apk`) |
+| userScript.js | SHA-256 `c01fd7366e90bc5aa5251276214d1c412b058d564d1faadd8d3a37d11dc518a1`, 800,334 bytes. Identical to a local rebuild in this sandbox. |
+| Upgrade eligibility (static) | `eligible_armv7=true` against the published v3.4.0 APK: its SHA-256, package ID, versionCode 3040000, ABI and permanent-signer checks passed, and 3050000 is higher. No install was run. |
+| DeArrow live API probe | Informational. The shipped module made 3 requests to `sponsor.ajay.app/api/branding/{prefix}` (`5f6b`, `6745`, `6401`), all HTTP 200. Prefixes matched the independent Node `crypto` reference, and no full video ID appeared in a URL. `dQw4w9WgXcQ`: 2 titles, 6 thumbnails. `jNQXAC9IVRw`: 3 titles, 3 thumbnails. `M7lc1UVf-VE`: no entry. |
+
+Signing identity: the candidate is signed with the pinned Hearth community keystore, fetched at its pinned commit and blob SHA and checked against the pinned certificate (`prepare_signing_key.sh`). No Actions secrets were passed. This is the same identity `release/signing.properties` declares for releases. That keystore is public by design of the repository, so the signature shows the pinned identity, not a secret. Whether the production secrets hold a different private key was not checked here (the sandbox cannot read them).
+
+Notes on the candidate:
+- The APK's SHA-256 changes between runs with the same APK sources because APK signatures are randomised. The userScript digest is stable across runs.
+- The APK's `SCRIPT_URL` points at `cdn.jsdelivr.net/gh/2archiver/YTArk@s34/userScript.js`. Tag `s34` is not published until a release is made, so a device running this candidate cannot load its script from that URL yet. Device testing therefore needs either the tag or a separate test build; this is a real barrier.
+- Verification run: 300/300 Node tests, 198 Python tests (1 skipped), bundle contract, workflow policy, secret scan and generated-file checks all pass on the current tree.
+
+What was fixed to reach green (root causes, not relaxed checks):
+- `ci.yml` asserted `DISPLAY_VERSION=3.4` while the metadata is 3.5. It now asserts 3.5.
+- `tools/check_no_secrets.py --history` deadlocked: it wrote every object ID to `git cat-file --batch` before reading any output. The writer now runs on a thread.
+- A new candidate-only workflow, `build-candidate.yml`, builds, signs and checks the ARMv7 APK for same-repository pull requests. It has no publish step, no `contents: write`, and no secrets. `check_workflow_policy.py` enforces those rules.
+- The settings audit's "duplicate SponsorBlock row" was an extraction artefact. The registry has one toggle.
 
 ## 1. Starting point
 
@@ -67,11 +100,11 @@ Test run: `PATH=/home/user/ytark-cache/bin:$PATH bash tools/test_android_updater
 
 NOT RUN for the updater:
 
-- Full DEX build, ARMv7 APK build, repack, zipalign, signature and ABI checks. The Android SDK (android.jar, d8, apksigner, zipalign) is not reachable from this sandbox.
-- The base APK (`cobalt-arm.apk`, v2.0.2) download. GitHub release assets redirect to a host that is unreachable here.
+- Full DEX build, ARMv7 APK build, repack, zipalign, signature and ABI checks: these now run in hosted CI (section 0), not in this sandbox. The sandbox still cannot reach the Android SDK host.
+- The base APK (`cobalt-arm.apk`, v2.0.2) download now runs on the hosted runner (`fetch_base_apks.py`, checksum verified). It is not downloadable from this sandbox.
 - Install permission grant, deny and return on a TV; cancellation; offline and timeout on a TV; a genuine upgrade test on a device or emulator. No device, emulator, KVM or adb is available.
 
-Blocker for a release candidate: **the production signing key is not verified.** `release/signing.properties` pins the community "Hearth" key (`phairplay.p12`, public material). `build-apk.yml` reads `YTARK_KEYSTORE_*` secrets. This session could not confirm which key CI uses or whether a production secret exists, and no key was created or substituted.
+Signing: the candidate uses the pinned community identity (section 0). Whether the production `YTARK_KEYSTORE_*` secrets are configured, and whether they hold the same identity, was not verified. No key was created or substituted.
 
 ## 5. Settings audit
 
@@ -119,6 +152,8 @@ The release APK, `YTArk-v<version>-armv7.apk`, is a 32-bit armeabi-v7a build rep
 
 ## 10. Validation results (this pass)
 
+Candidate CI (head `fd4f9138`): see section 0. Local results below were run on the same tree.
+
 | Check | Command | Result |
 |---|---|---|
 | JavaScript suite | `node --test tests/*.test.mjs` (TizenTube/mods) | 300 / 300 pass (270 before, +30 DeArrow); rerun after the label change: 300 / 300 |
@@ -131,12 +166,12 @@ The release APK, `YTArk-v<version>-armv7.apk`, is a 32-bit armeabi-v7a build rep
 | Updater policy suite | `tools/test_android_updater.sh` with sandbox javac | EXIT 0 |
 | Changelog and buildinfo | `build_changelog.py --check`, `build_buildinfo.py --check` | current |
 
-NOT RUN (environment): Android SDK build, ARMv7 APK build, zipalign, apksigner signature and ABI verification, aapt manifest dump, base APK checksum, emulator or device upgrade, TV focus and D-pad checks, measured startup, physical TV evidence (the maintainer supplies that; see `docs/DEVICE-ACCEPTANCE.md`).
+NOT RUN in this sandbox (run in hosted CI instead, section 0): Android SDK build, ARMv7 APK build, zipalign, apksigner and ABI verification, aapt manifest dump, base APK checksum. NOT RUN anywhere in this pass: emulator or device upgrade, TV focus and D-pad checks, measured startup, physical TV evidence (the maintainer supplies that; see `docs/DEVICE-ACCEPTANCE.md`).
 
 ## 11. Remaining work and blockers
 
-1. Production signing key: confirm availability and which key CI uses. **Blocker.** No substitute key has been created.
-2. Run the Android SDK build and the ARMv7 APK checks in an environment that has the SDK and the base APK.
+1. Production signing secrets: confirm whether they are configured and hold the pinned identity. The candidate does not depend on them.
+2. Device or emulator testing of the candidate. The candidate's script URL needs tag `s34`, or a separate test build with a reachable script, before the app can load its userscript on a TV.
 3. Device or emulator: permission flow, install, cancel, offline, upgrade with session preservation. The maintainer supplies TV evidence.
 4. DeArrow on a TV: confirm the response boundary intercepts the app's browse, search and next requests, and that title replacement is visible. Measure the budget's latency effect.
 5. Settings audit: per-row call-graph tracing for the generic rows; decide on `reloadHomeOnStartup` only after a measured startup cost.
