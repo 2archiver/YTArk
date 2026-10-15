@@ -1,13 +1,14 @@
-YTArk 3.2 — candidate, not published
+YTArk 3.3 — candidate, not published
 
-YouTube-style Updates, restored About changelog and compact release highlights.
+Recovers from GitHub rate limits, incomplete downloads and installer errors.
 
-- Matched Updates to the YouTube dark theme with compact controls and clear remote focus.
-- Restored Changelog / Version history in About YTArk.
-- Kept current-version highlights short, with release details behind an explicit action.
+- GitHub rate limits show a retry time and the saved release age.
+- Incomplete downloads stay partial, then verify before install.
+- Installer cancel, block, storage and signature errors stay distinct.
 
-The 3.1 Kotlin updater, signing identity and ARMv7 Cobalt v2.0.2 base are unchanged.
-Physical TV focus, Android installation and session-preserving upgrades remain
-unverified. The s31 userscript endpoint is not live until release publication.
+The 3.2 Updates page, signing identity and ARMv7 Cobalt v2.0.2 base are unchanged.
+Physical TV install, permission screens and session-preserving upgrades remain
+unverified. A download does not continue across process death. The s32 userscript
+endpoint is not live until release publication.
 
-<!-- Package io.github.twoarchiver.ytark; 3.2.0; versionCode 3020000; base TizenTubeCobalt v2.0.2. -->
+<!-- Package io.github.twoarchiver.ytark; 3.3.0; versionCode 3030000; base TizenTubeCobalt v2.0.2. -->

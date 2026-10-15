@@ -11,6 +11,8 @@ POLICY_SOURCES=(
   UpdateFailure.kt
   UpdateState.kt
   UpdatePresentation.kt
+  UpdateReliability.kt
+  UpdateRepository.kt
   ReleaseHighlights.generated.kt
 )
 TEST_CLASSES=(
@@ -25,6 +27,7 @@ TEST_CLASSES=(
   UpdateVersionTest
   UpdaterFailurePhasePolicyTest
   YtarkBrandingTest
+  UpdateReliabilityTest
 )
 mkdir -p "$OUT"
 sources=()

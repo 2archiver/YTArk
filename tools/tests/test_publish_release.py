@@ -735,8 +735,8 @@ class PublicationTests(PublishReleaseTestCase):
             self.run_publish(None, scenario=scenario)
         self.assertIn("asset upload refused", str(caught.exception))
         version, code = publish_release.next_patch_version(CONFIG)
-        # The next patch above the configured 3.0.0 candidate.
-        self.assertEqual((version, code), ("3.2.1", 3020100))
+        # The next patch above the configured 3.3.0 candidate.
+        self.assertEqual((version, code), ("3.3.1", 3030100))
 
     def test_repair_refuses_a_rebuild_that_disagrees_with_published_checksums(self):
         published = release_payload(

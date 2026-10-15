@@ -22,9 +22,26 @@ Conventions:
 - Capabilities inherited from TizenTube and TizenTubeCobalt are listed under
   "Upstream base and inherited capabilities", not as YTArk additions.
 
-## [3.2.0] — Unreleased
+## [3.3.0] — Unreleased
 
-> Not yet published. Planned tag `v3.2.0` · versionCode 3020000 · userscript `s31` · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.
+> Not yet published. Planned tag `v3.3.0` · versionCode 3030000 · userscript `s32` · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.
+
+Recovers from GitHub rate limits, incomplete downloads and installer errors.
+
+### Changed
+- Updates keeps the dark page and adds on-demand technical details.
+### Fixed
+- GitHub rate limits show a retry time and the saved release age.
+- Incomplete downloads stay partial, then verify before install.
+- Installer cancel, block, storage and signature errors stay distinct.
+### Known limitations
+- Physical TV install, permission screens and upgrades still need device verification.
+- A download does not continue across process death. A leftover partial can resume only when the stored ETag still matches.
+- The s32 userscript endpoint becomes live only through the existing release publication workflow.
+
+## [3.2.0] — 2026-10-14
+
+> Published 2026-10-14 17:34 UTC as [YTArk 3.2](https://github.com/2archiver/YTArk/releases/tag/v3.2.0) · tag `v3.2.0` · versionCode 3020000 · userscript `s31` · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.
 
 YouTube-style Updates, restored About changelog and compact release highlights.
 

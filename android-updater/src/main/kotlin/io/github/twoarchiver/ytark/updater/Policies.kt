@@ -106,6 +106,15 @@ object UpdateRedirectPolicy {
     private fun parse(s: String?): URI? = try { if (s == null || s.length > 8192) null else URI(s) } catch (_: Exception) { null }
     private fun secure(u: URI) = u.scheme.equals("https", true) && u.host != null && u.userInfo == null && u.port in listOf(-1,443) && u.fragment == null
     @JvmStatic fun isTrustedReleaseApiUrl(s: String?): Boolean { val u = parse(s) ?: return false; return secure(u) && u.host.equals("api.github.com", true) && u.path == "/repos/2archiver/YTArk/releases/latest" && u.query == null }
+    /** Public latest-release page. A 302 Location names the stable tag; the HTML body is never used. */
+    const val LATEST_PAGE = "https://github.com/2archiver/YTArk/releases/latest"
+    private val latestTagPath = Regex("^/2archiver/YTArk/releases/tag/(v(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*))$")
+    @JvmStatic fun isTrustedLatestReleasePage(s: String?): Boolean { val u = parse(s) ?: return false; return secure(u) && u.host.equals("github.com", true) && u.path == "/2archiver/YTArk/releases/latest" && u.query == null }
+    @JvmStatic fun latestTag(location: String?): String? {
+        val u = parse(location) ?: return null
+        if (!secure(u) || !u.host.equals("github.com", true) || u.query != null) return null
+        return latestTagPath.matchEntire(u.path ?: "")?.groupValues?.get(1)
+    }
     @JvmStatic fun isTrustedReleaseAssetUrl(s: String?): Boolean {
         val u = parse(s) ?: return false
         return secure(u) && u.host.equals("github.com", true) && u.path.matches(Regex("/2archiver/YTArk/releases/download/v(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)/(?:YTArk-v(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)-armv7\\.apk|SHA256SUMS\\.txt)"))

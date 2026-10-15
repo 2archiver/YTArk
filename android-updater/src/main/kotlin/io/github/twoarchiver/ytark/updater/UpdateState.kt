@@ -14,7 +14,15 @@ data class UpdateState(
     val lastSuccess: Long = 0,
     val hours: Int = 1,
     val verifiedPath: String? = null,
-    val pendingIdentity: String? = null
+    val pendingIdentity: String? = null,
+    val detail: String = "",
+    val retryAt: Long = 0,
+    val stale: Boolean = false,
+    val errorCategory: String = "",
+    val stage: String = "",
+    val httpStatus: Int = 0,
+    val speedBps: Long = 0,
+    val releaseTag: String = ""
 ) {
     val busy get() = phase in setOf(UpdatePhase.Checking, UpdatePhase.Downloading, UpdatePhase.Validating, UpdatePhase.AwaitingPermission, UpdatePhase.AwaitingInstaller)
 }
@@ -24,9 +32,12 @@ object ScheduleRules {
     fun due(hours: Int, now: Long, lastAttempt: Long, lastSuccess: Long, retryAt: Long): Boolean {
         if (hours == 0 || now < retryAt) return false
         // A clock moved backwards must not suppress checks indefinitely, but still respects server backoff.
-        val attempt = lastAttempt.takeIf { it <= now } ?: 0
-        val success = lastSuccess.takeIf { it <= now } ?: 0
-        return now - attempt >= 60000 && (success == 0L || now - success >= hours * HOUR)
+        // A never-confirmed check must not become due every minute: that burned the unauthenticated
+        // GitHub budget and turned a 403 into a request storm.
+        val attempt = lastAttempt.takeIf { it in 1..now } ?: 0L
+        val success = lastSuccess.takeIf { it in 1..now } ?: 0L
+        if (success == 0L) return attempt == 0L || now - attempt >= hours * HOUR
+        return now - attempt >= 60000 && now - success >= hours * HOUR
     }
 }
 /** One-shot permission continuation is bound to the exact downloaded candidate. */
