@@ -8,6 +8,8 @@ import { PatchSettings } from '../ui/customYTSettings.js';
 import { isSettingsResponse } from './ytSettingsLayout.js';
 import { filterWatermarkAnnotations } from './playerWatermark.js';
 import { t } from 'i18next';
+import { createBrandingService, createResponseBrander, installDeArrowFetchBoundary, isDeArrowThumbnailUrl } from './dearrowBranding.js';
+import { parseWithoutHooks, jsonHooksSuppressed } from '../utils/rawJson.js';
 
 function codecAvailableInCurrentBrowser(format) {
   const video = document.querySelector('video');
@@ -32,6 +34,8 @@ function codecAvailableInCurrentBrowser(format) {
 const origParse = JSON.parse;
 JSON.parse = function () {
   const r = origParse.apply(this, arguments);
+  // Responses parsed by the DeArrow boundary are processed once, by the app's own parse.
+  if (jsonHooksSuppressed()) return r;
   try {
     if (!r || typeof r !== 'object') return r;
     const adBlockEnabled = configRead('enableAdBlock');
@@ -134,7 +138,9 @@ JSON.parse = function () {
       PatchSettings(r);
     }
 
-    // DeArrow Implementation. I think this is the best way to do it. (DOM manipulation would be a pain)
+    // DeArrow titles and thumbnails are applied by the fetch response boundary
+    // (features/dearrowBranding.js) before this hook sees the response, so they
+    // are not handled here.
 
     if (r?.contents?.sectionListRenderer?.contents) {
       processShelves(r.contents.sectionListRenderer.contents);
@@ -145,7 +151,6 @@ JSON.parse = function () {
     }
 
     if (r?.continuationContents?.horizontalListContinuation?.items) {
-      deArrowify(r.continuationContents.horizontalListContinuation.items);
       hqify(r.continuationContents.horizontalListContinuation.items);
       addLongPress(r.continuationContents.horizontalListContinuation.items);
       r.continuationContents.horizontalListContinuation.items = hideVideo(r.continuationContents.horizontalListContinuation.items);
@@ -364,6 +369,23 @@ for (const key in window._yttv) {
   }
 }
 
+// DeArrow: branding is applied to browse, search and next responses before the
+// app receives them. Requests are made only while enableDeArrow is on.
+if (typeof window !== 'undefined' && typeof window.fetch === 'function') {
+  const dearrowService = createBrandingService();
+  const dearrowEnabled = () => !!configRead('enableDeArrow');
+  installDeArrowFetchBoundary(window, {
+    service: dearrowService,
+    isEnabled: dearrowEnabled,
+    brander: createResponseBrander({
+      service: dearrowService,
+      parseWithoutHooks,
+      isEnabled: dearrowEnabled,
+      thumbnailsEnabled: () => !!configRead('enableDeArrowThumbnails'),
+    }),
+  });
+}
+
 
 function processShelves(shelves, shouldAddPreviews = true) {
   for (const shelve of shelves) {
@@ -372,7 +394,6 @@ function processShelves(shelves, shouldAddPreviews = true) {
       if (configRead('disableEnlargingThumbnails')) shelve.shelfRenderer.tvhtml5Style.effects.enlarge = false;
       if (configRead('enableShrinkingThumbnails')) shelve.shelfRenderer.tvhtml5Style.effects.shrink = true;
       if (!shelve.shelfRenderer.content?.horizontalListRenderer?.items) continue;
-      deArrowify(shelve.shelfRenderer.content.horizontalListRenderer.items);
       hqify(shelve.shelfRenderer.content.horizontalListRenderer.items);
       addLongPress(shelve.shelfRenderer.content.horizontalListRenderer.items);
       if (shouldAddPreviews) {
@@ -417,54 +438,6 @@ function addPreviews(items) {
   }
 }
 
-function deArrowify(items) {
-  if (!Array.isArray(items) || !configRead('enableDeArrow')) return;
-  for (const item of items) {
-    const isLockupVideo = item?.lockupViewModel?.contentType === 'LOCKUP_CONTENT_TYPE_VIDEO';
-    if (!item?.tileRenderer && !isLockupVideo) continue;
-    const videoID = item.tileRenderer?.contentId || item.lockupViewModel?.contentId;
-    if (!videoID) continue;
-
-    fetch(`https://sponsor.ajay.app/api/branding?videoID=${encodeURIComponent(videoID)}`)
-      .then(res => {
-        if (!res.ok) throw new Error(`DeArrow request returned HTTP ${res.status}`);
-        return res.json();
-      })
-      .then(data => {
-        const titles = Array.isArray(data?.titles) ? data.titles : [];
-        const thumbnails = Array.isArray(data?.thumbnails) ? data.thumbnails : [];
-        if (titles.length) {
-          const mostVoted = titles.reduce((max, title) => max.votes > title.votes ? max : title);
-          if (mostVoted && typeof mostVoted.title === 'string') {
-            if (item.tileRenderer?.metadata?.tileMetadataRenderer?.title) {
-              item.tileRenderer.metadata.tileMetadataRenderer.title.simpleText = mostVoted.title;
-            } else if (item.lockupViewModel?.metadata?.lockupMetadataViewModel?.title) {
-              item.lockupViewModel.metadata.lockupMetadataViewModel.title.content = mostVoted.title;
-            }
-          }
-        }
-
-        if (thumbnails.length && configRead('enableDeArrowThumbnails')) {
-          const mostVotedThumbnail = thumbnails.reduce((max, thumbnail) => max.votes > thumbnail.votes ? max : thumbnail);
-          if (mostVotedThumbnail?.timestamp) {
-            const url = `https://dearrow-thumb.ajay.app/api/v1/getThumbnail?videoID=${encodeURIComponent(videoID)}&time=${encodeURIComponent(mostVotedThumbnail.timestamp)}`;
-            if (item.tileRenderer?.header?.tileHeaderRenderer?.thumbnail) {
-              item.tileRenderer.header.tileHeaderRenderer.thumbnail.thumbnails = [
-                { url, width: 1280, height: 640 }
-              ];
-            } else if (item.lockupViewModel?.contentImage?.thumbnailViewModel?.image) {
-              item.lockupViewModel.contentImage.thumbnailViewModel.image.sources = [
-                { url, width: 1280, height: 640 }
-              ];
-            }
-          }
-        }
-      })
-      .catch(() => { });
-  }
-}
-
-
 function hqify(items) {
   for (const item of items) {
     if (!item.tileRenderer && !item.lockupViewModel) continue;
@@ -473,7 +446,10 @@ function hqify(items) {
       if (!item?.tileRenderer?.onSelectCommand?.watchEndpoint?.videoId && !item?.lockupViewModel?.contentId) continue;
       if (!item?.tileRenderer?.header?.tileHeaderRenderer?.thumbnail?.thumbnails?.[0]?.url && !item?.lockupViewModel?.contentImage?.thumbnailViewModel?.image?.sources?.[0]?.url) continue;
       const videoID = item.tileRenderer ? item.tileRenderer.onSelectCommand.watchEndpoint.videoId : item.lockupViewModel.contentId;
-      const queryArgs = item.tileRenderer ? item.tileRenderer.header.tileHeaderRenderer.thumbnail.thumbnails[0].url.split('?')[1] : item.lockupViewModel.contentImage.thumbnailViewModel.image.sources[0].url.split('?')[1];
+      const currentThumbUrl = item.tileRenderer ? item.tileRenderer.header.tileHeaderRenderer.thumbnail.thumbnails[0].url : item.lockupViewModel.contentImage.thumbnailViewModel.image.sources[0].url;
+      // A DeArrow thumbnail already chosen for this tile wins over the HQ rewrite.
+      if (isDeArrowThumbnailUrl(currentThumbUrl)) continue;
+      const queryArgs = currentThumbUrl.split('?')[1];
       item.tileRenderer ? item.tileRenderer.header.tileHeaderRenderer.thumbnail.thumbnails = [
         {
           url: `https://i.ytimg.com/vi/${videoID}/sddefault.jpg${queryArgs ? `?${queryArgs}` : ''}`,
