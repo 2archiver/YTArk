@@ -192,9 +192,9 @@ describe('About YTArk', () => {
     assert.ok(build.openPopupAction.popup.overlaySectionRenderer.overlay.overlayTwoPanelRenderer
       .actionPanel.overlayPanelRenderer.content.scrollPaneRenderer, 'D-pad scrollable');
     const details = modalItems(build).map(messageText).join('\n');
-    assert.match(details, /versionName: 3\.2\.0/);
-    assert.match(details, /versionCode: 3020000/);
-    assert.match(details, /YTArk userscript: s31/);
+    assert.match(details, /versionName: 3\.3\.0/);
+    assert.match(details, /versionCode: 3030000/);
+    assert.match(details, /YTArk userscript: s32/);
     assert.match(details, /Android base: v2\.0\.2/);
 
     resolveCommand({ customAction: { action: 'YTARK_PANEL_SHOW', parameters: { id: 'about' } } });
@@ -235,16 +235,16 @@ describe('About YTArk', () => {
     await tick(20);
     resolveCommand({ customAction: { action: 'YTARK_PANEL_SHOW', parameters: { id: 'about' } } });
     const panel = lastModal(recorded, 'ytark-panel-about');
-    assert.equal(header(panel).subtitle, 'YTArk 3.2 (build metadata)', "this build's own version, labelled by source");
+    assert.equal(header(panel).subtitle, 'YTArk 3.3 (build metadata)', "this build's own version, labelled by source");
     const lines = modalItems(panel).map(messageText).filter(Boolean);
     assert.ok(lines.some(line => /packaging metadata/.test(line)), 'the source is stated');
-    const current = YTARK_CHANGELOG.entries.find(entry => entry.version === '3.2.0');
+    const current = YTARK_CHANGELOG.entries.find(entry => entry.version === '3.3.0');
     assert.ok(lines.includes(current.summary), 'About uses the shared maintained summary');
     assert.ok(current.summary.length <= 240);
     assert.ok(!lines.some(line => line.includes('Known limitations')), 'full sections stay behind an explicit action');
     await press(resolveCommand, findRow(panel, 'Changelog / Version history'));
     const picker = lastModal(recorded, 'ytark-changelog');
-    await press(resolveCommand, findRow(picker, item => rowTitle(item).startsWith('3.2 — ')));
+    await press(resolveCommand, findRow(picker, item => rowTitle(item).startsWith('3.3 — ')));
     const fullNotes = modalItems(lastModal(recorded, 'ytark-changelog-version')).map(messageText).join('\n');
     assert.match(fullNotes, /Known limitations/);
     const reread = findRow(panel, 'Read the installed version again');

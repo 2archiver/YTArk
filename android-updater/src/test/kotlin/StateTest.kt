@@ -9,6 +9,8 @@ fun main() {
     check(!ScheduleRules.due(3,2*ScheduleRules.HOUR,1,1,0))
     check(ScheduleRules.due(1,2*ScheduleRules.HOUR,1,1,0))
     check(!ScheduleRules.due(1,100000,99000,0,0))
+    check(!ScheduleRules.due(1,120000,60000,0,0)) // never-confirmed checks must not poll every minute
+    check(ScheduleRules.due(1,ScheduleRules.HOUR,0,0,0))
     check(!ScheduleRules.due(1,100000,0,0,100001))
     check(PendingInstallPolicy.mayContinue("a","a",true,true))
     check(!PendingInstallPolicy.mayContinue("a","b",true,true))
@@ -26,7 +28,9 @@ fun main() {
     check(UpdatePresentation.status(available)=="Update available")
     check(UpdatePresentation.latest(available)=="3.2.0")
     check(UpdatePresentation.status(available.copy(message="Download cancelled. Retry when ready."))=="Download cancelled. Retry when ready.")
-    check(UpdatePresentation.status(available.copy(phase=UpdatePhase.Downloading,bytes=1048576))=="Downloading · 1 / 10 MB")
+    check(UpdatePresentation.status(available.copy(phase=UpdatePhase.Downloading,bytes=1048576))=="Downloading · 1.0 / 10.0 MB")
+    check(UpdatePresentation.progress(512,0,0)=="Downloading · 512 B")
+    check(UpdatePresentation.technical(UpdateState(phase=UpdatePhase.Failed,detail="Stage: check",errorCategory="rate_limit",httpStatus=403,releaseTag="v3.3.0")).contains("HTTP status: 403"))
     for(phase in listOf(UpdatePhase.Checking,UpdatePhase.Failed,UpdatePhase.AwaitingPermission,UpdatePhase.AwaitingInstaller)) {
         check(UpdatePresentation.status(UpdateState(phase=phase,message="Guidance"))=="Guidance")
     }

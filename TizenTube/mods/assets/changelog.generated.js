@@ -4,20 +4,58 @@ export const YTARK_CHANGELOG = {
   "schema": 1,
   "source": "CHANGELOG.md",
   "summaryFallback": "No short highlights available for this version.",
-  "sourceSha256": "b6b456abf8dfabab1020e8b0ffc8fbf109efd2ee73109befb68bf9d9e303883a",
+  "sourceSha256": "1fc9448ce6ef2e8ed60833c281116fcf595967373ec0fac46f9bcb5a0dc887f2",
   "entries": [
     {
-      "version": "3.2.0",
-      "display": "3.2",
+      "version": "3.3.0",
+      "display": "3.3",
       "status": "unreleased",
       "date": null,
       "publishedAt": null,
+      "tag": "v3.3.0",
+      "versionCode": 3030000,
+      "scriptTag": "s32",
+      "title": "YTArk 3.3",
+      "releaseUrl": null,
+      "facts": "Not yet published. Planned tag v3.3.0 · versionCode 3030000 · userscript s32 · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.",
+      "summary": "Recovers from GitHub rate limits, incomplete downloads and installer errors.",
+      "sections": [
+        {
+          "heading": "Changed",
+          "items": [
+            "Updates keeps the dark page and adds on-demand technical details."
+          ]
+        },
+        {
+          "heading": "Fixed",
+          "items": [
+            "GitHub rate limits show a retry time and the saved release age.",
+            "Incomplete downloads stay partial, then verify before install.",
+            "Installer cancel, block, storage and signature errors stay distinct."
+          ]
+        },
+        {
+          "heading": "Known limitations",
+          "items": [
+            "Physical TV install, permission screens and upgrades still need device verification.",
+            "A download does not continue across process death. A leftover partial can resume only when the stored ETag still matches.",
+            "The s32 userscript endpoint becomes live only through the existing release publication workflow."
+          ]
+        }
+      ]
+    },
+    {
+      "version": "3.2.0",
+      "display": "3.2",
+      "status": "published",
+      "date": "2026-10-14",
+      "publishedAt": "2026-10-14T17:34Z",
       "tag": "v3.2.0",
       "versionCode": 3020000,
       "scriptTag": "s31",
       "title": "YTArk 3.2",
-      "releaseUrl": null,
-      "facts": "Not yet published. Planned tag v3.2.0 · versionCode 3020000 · userscript s31 · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.",
+      "releaseUrl": "https://github.com/2archiver/YTArk/releases/tag/v3.2.0",
+      "facts": "Published 2026-10-14 17:34 UTC as YTArk 3.2 · tag v3.2.0 · versionCode 3020000 · userscript s31 · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.",
       "summary": "YouTube-style Updates, restored About changelog and compact release highlights.",
       "sections": [
         {

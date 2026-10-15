@@ -28,6 +28,7 @@ class UpdateActivity : Activity() {
     private lateinit var cancelButton: Button
     private lateinit var currentNotesButton: Button
     private lateinit var candidateNotesButton: Button
+    private lateinit var detailsButton: Button
     private lateinit var installed: String
     var visible=false; private set
     private var focusId=101
@@ -70,7 +71,7 @@ class UpdateActivity : Activity() {
             dialog.show()
             styleButton(dialog.getButton(AlertDialog.BUTTON_NEGATIVE))
         }
-        primaryButton=button(103,"Download update") { if(updates.state.verifiedPath!=null) installer.install() else updates.download() }
+        primaryButton=button(103,"Download & install") { if(updates.state.verifiedPath!=null) installer.install() else updates.download() }
         progress=ProgressBar(this,null,android.R.attr.progressBarStyleHorizontal).apply {
             max=1000; progressTintList=ColorStateList.valueOf(NativeThemePolicy.primaryText())
             indeterminateTintList=ColorStateList.valueOf(NativeThemePolicy.primaryText())
@@ -91,6 +92,11 @@ class UpdateActivity : Activity() {
                 showNotes("YTArk ${c.version}",ReleaseHighlights.details(c.version) ?: UpdatePresentation.releaseDetails(c.notes),candidateNotesButton)
             }
         }
+        detailsButton=button(107,"Technical details") {
+            val body=UpdatePresentation.technical(updates.state)
+            if(body.isNotBlank()) showNotes("Technical details",body,detailsButton)
+        }
+        detailsButton.visibility=View.GONE
         val width=minOf(resources.displayMetrics.widthPixels,dp(760))
         scroll.addView(body,FrameLayout.LayoutParams(width,-2,Gravity.CENTER_HORIZONTAL)); setContentView(scroll)
     }
@@ -122,13 +128,31 @@ class UpdateActivity : Activity() {
         styleButton(dialog.getButton(AlertDialog.BUTTON_POSITIVE))
     }
     private fun dp(n: Int)=(n*resources.displayMetrics.density).toInt()
+    override fun onNewIntent(intent: Intent?) { super.onNewIntent(intent); setIntent(intent); consumeInstallStatus(intent) }
     override fun onResume() {
-        super.onResume(); visible=true; updates.observe(observer)
+        super.onResume(); visible=true; updates.observe(observer); consumeInstallStatus(intent)
+        if(updates.state.phase==UpdatePhase.AwaitingInstaller) window?.decorView?.postDelayed({ if(visible) updates.reconcileInstallerReturn() }, 1200)
         (findViewById<View>(focusId) ?: checkButton).let { if(it.isEnabled && it.visibility==View.VISIBLE) it.requestFocus() else intervalButton.requestFocus() }
     }
     override fun onPause() { visible=false; updates.remove(observer); super.onPause() }
     override fun onSaveInstanceState(out: Bundle) { out.putInt("focus",currentFocus?.id ?: focusId); super.onSaveInstanceState(out) }
     override fun onActivityResult(request: Int,result: Int,data: Intent?) { super.onActivityResult(request,result,data); installer.result(request); focusId=103 }
+    private fun consumeInstallStatus(source: Intent?) {
+        if(source?.action!=InstallStatusContract.ACTION) return
+        val status=source.getIntExtra(android.content.pm.PackageInstaller.EXTRA_STATUS, Int.MIN_VALUE)
+        if(status==Int.MIN_VALUE) return
+        val message=source.getStringExtra(android.content.pm.PackageInstaller.EXTRA_STATUS_MESSAGE)
+        source.action=null
+        if(status==android.content.pm.PackageInstaller.STATUS_PENDING_USER_ACTION) {
+            @Suppress("DEPRECATION") val confirm=source.getParcelableExtra<Intent>(Intent.EXTRA_INTENT)
+            updates.noteInstallUi()
+            if(confirm!=null && !isFinishing) {
+                try { startActivity(confirm) } catch (_: Exception) { updates.externalReturned("Android's installer could not be opened. Select Install update to retry.") }
+            } else updates.externalReturned("Android's installer did not provide a confirmation screen. Select Install update to retry.")
+            return
+        }
+        updates.onInstallStatus(status, message)
+    }
     private fun render(s: UpdateState) {
         val focused=currentFocus
         val checked=if(s.lastSuccess>0) DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT).format(Date(s.lastSuccess)) else "Not yet"
@@ -137,13 +161,22 @@ class UpdateActivity : Activity() {
         if(status.text.toString()!=statusText) status.text=statusText
         intervalButton.text="Automatically check: "+when(s.hours) { 0 -> "Never"; 3 -> "Every 3 hours"; else -> "Every 1 hour" }
         checkButton.isEnabled=!s.busy
-        primaryButton.text=if(s.verifiedPath!=null) "Install update" else "Download update"
+        checkButton.text=if(s.phase==UpdatePhase.Failed && s.candidate==null) "Retry check" else "Check for updates"
+        primaryButton.text=when {
+            s.verifiedPath!=null && s.phase==UpdatePhase.Failed -> "Retry install"
+            s.verifiedPath!=null -> "Install update"
+            s.phase==UpdatePhase.Failed && s.candidate!=null -> "Retry download"
+            else -> "Download & install"
+        }
         primaryButton.isEnabled=!s.busy && s.candidate!=null
         primaryButton.contentDescription=if(s.candidate==null) "Download update unavailable. No compatible newer release found." else primaryButton.text
         cancelButton.visibility=if(s.phase==UpdatePhase.Downloading) View.VISIBLE else View.GONE
         progress.visibility=if(s.phase in setOf(UpdatePhase.Downloading,UpdatePhase.Validating)) View.VISIBLE else View.GONE
-        progress.isIndeterminate=s.phase==UpdatePhase.Validating
+        progress.isIndeterminate=s.phase==UpdatePhase.Validating || (s.phase==UpdatePhase.Downloading && (s.candidate?.size ?: 0L)<=0L)
         progress.progress=if((s.candidate?.size ?: 0)>0) (s.bytes*1000/s.candidate!!.size).toInt() else 0
+        val details=UpdatePresentation.technical(s)
+        detailsButton.visibility=if(details.isBlank()) View.GONE else View.VISIBLE
+        detailsButton.isEnabled=details.isNotBlank()
         candidateNotes.visibility=if(s.candidate!=null) View.VISIBLE else View.GONE
         candidateNotesButton.visibility=candidateNotes.visibility
         candidateNotes.text=s.candidate?.let { "Available ${it.version}\n${ReleaseHighlights.summary(it.version)}" } ?: ""

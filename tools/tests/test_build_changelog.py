@@ -19,6 +19,7 @@ import validate_release  # noqa: E402
 
 # Every stable release published on GitHub (gh release list), newest first.
 PUBLISHED = [
+    ("3.2.0", "v3.2.0", "2026-10-14", 3020000, "s31"),
     ("3.1.0", "v3.1.0", "2026-10-14", 3010000, "s30"),
     ("3.0.0", "v3.0.0", "2026-10-14", 3000000, "s29"),
     ("2.9.0", "v2.9.0", "2026-10-14", 2090000, "s28"),

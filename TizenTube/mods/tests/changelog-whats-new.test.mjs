@@ -25,7 +25,7 @@ resolve.patchResolveCommand();
 const resolveCommand = resolve.default;
 
 const PUBLISHED_TAGS = [
-  'v3.1.0', 'v3.0.0','v2.9.0', 'v2.8.0', 'v2.7.0', 'v2.6.0', 'v2.5.0', 'v2.4.0', 'v2.3.0', 'v2.2.0', 'v2.1.2', 'v2.1.1', 'v2.1.0', 'v2.0.4-ytark.17',
+  'v3.2.0', 'v3.1.0', 'v3.0.0','v2.9.0', 'v2.8.0', 'v2.7.0', 'v2.6.0', 'v2.5.0', 'v2.4.0', 'v2.3.0', 'v2.2.0', 'v2.1.2', 'v2.1.1', 'v2.1.0', 'v2.0.4-ytark.17',
   'v2.0.4-ytark.16', 'v2.0.3-ytark.15', 'v2.0.2-personal.14'];
 
 beforeEach(() => {
@@ -46,7 +46,7 @@ describe('bundled changelog data', () => {
       return 0;
     });
     assert.deepEqual(keys, sorted, 'newest first');
-    assert.equal(entries[0].version, '3.2.0');
+    assert.equal(entries[0].version, '3.3.0');
     assert.equal(entries[0].status, 'unreleased');
     assert.equal(entries[0].date, null, 'no invented date for unpublished work');
     const published = entries.filter(entry => entry.status === 'published');
@@ -81,7 +81,7 @@ describe('in-app reader', () => {
       const expected = reader.headlineFor(entry) + (entry.version === '2.3.0' ? '  ·  Installed' : '');
       assert.equal(versionRows[i], expected);
     }
-    assert.equal(versionRows[0], '3.2 — YouTube-style Updates, restored About changelog and compact release highlights');
+    assert.equal(versionRows[0], '3.3 — Recovers from GitHub rate limits, incomplete downloads and installer errors');
     assert.equal(rowTitle(modalItems(modal)[selectedIndex(modal)]), versionRows.find(title => title.endsWith('  ·  Installed')));
     assert.match(rowSubtitle(findRow(modal, item => rowTitle(item).startsWith('2.2 — '))), /Published .*2026 · v2\.2\.0/);
     assert.match(header(modal).subtitle, /installed 2\.3\.0/);
@@ -115,13 +115,13 @@ describe('in-app reader', () => {
     // sections, because it is also the source of its own release notes.
     resolveCommand({ customAction: { action: 'YTARK_CHANGELOG_SHOW', parameters: { update: true } } });
     await press(resolveCommand, findRow(lastModal(recorded, reader.CHANGELOG_MODAL_ID),
-      item => rowTitle(item).startsWith('3.2 — ')));
+      item => rowTitle(item).startsWith('3.3 — ')));
     const current = modalItems(lastModal(recorded, reader.CHANGELOG_VERSION_MODAL_ID))
       .map(messageText).join('\n');
     // The reader paginates long sections ("Added (continued)"), so assert the
     // content is present rather than which page a bullet happens to land on.
     assert.match(current, /Changed\b/);
-    assert.match(current, /compact controls/);
+    assert.match(current, /technical details/);
     assert.match(current, /still need device verification/);
     assert.match(current, /Known limitations/);
   });
