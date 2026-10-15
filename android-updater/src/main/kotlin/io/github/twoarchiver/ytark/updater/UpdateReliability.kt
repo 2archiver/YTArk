@@ -80,11 +80,33 @@ class MappedError(
 )
 
 object UpdateTexts {
+    /**
+     * Diagnostic scrubber used for every displayed, copied or logged updater
+     * text. All credential shapes reduce to fixed placeholders BEFORE the
+     * length cap, so a secret-bearing suffix can never survive truncation:
+     *
+     *  - Authorization / Proxy-Authorization headers (with or without a scheme)
+     *  - standalone `Bearer`/`Basic` credentials
+     *  - `token=` / `password=` / `sig=` style pairs, in prose or query strings
+     *  - whole URLs, including uppercase HTTP/HTTPS schemes and signed URLs
+     *  - bare IPv4 addresses
+     *
+     * URL redaction uses the same `[redacted]` placeholder as every other
+     * secret, so consumers only need to know one convention. The output is
+     * stable under repeated sanitization.
+     */
+    private val authHeader = Regex("(?i)\\b(authorization|proxy-authorization)\\s*[:=]\\s*(?:(?:bearer|basic|token|digest|oauth|negotiate)\\s+)?[^\\s,;\\r\\n]+")
+    private val bearerCred = Regex("(?i)\\bbearer\\s+[A-Za-z0-9._~+/=-]{4,}")
+    private val secretPair = Regex("(?i)(token|authorization|password|passwd|secret|sig|signature|credential|api[_-]?key|access[_-]?key)\\s*[=:]\\s*[^\\s&\"']+")
+
     @JvmStatic fun sanitize(raw: String?): String {
         if (raw.isNullOrBlank()) return ""
-        var text = raw.replace(Regex("https?://\\S+"), "[url]")
-        text = text.replace(Regex("(?i)(token|authorization|password|secret|sig|credential)=([^\\s&]+)"), "$1=[redacted]")
-        text = text.replace(Regex("\\b\\d{1,3}(?:\\.\\d{1,3}){3}\\b"), "[ip]")
+        var text = raw
+        text = authHeader.replace(text, "$1=[redacted]")
+        text = bearerCred.replace(text, "authorization=[redacted]")
+        text = secretPair.replace(text, "$1=[redacted]")
+        text = Regex("(?i)\\bhttps?://\\S+").replace(text, "[redacted]")
+        text = Regex("\\b\\d{1,3}(?:\\.\\d{1,3}){3}\\b").replace(text, "[ip]")
         text = text.replace(Regex("[\\r\\n\\t]+"), " ").trim()
         return if (text.length <= 240) text else text.take(237) + "..."
     }
@@ -102,27 +124,75 @@ object UpdateTexts {
 }
 
 object RateLimitPolicy {
+    /**
+     * A 403 is a rate-limit signal only with real evidence: an exhausted quota
+     * (remaining 0), a Retry-After directive, or rate-limit response text.
+     * GitHub attaches X-RateLimit-Reset to ordinary responses — including
+     * permission failures — so a reset header alone never marks a limit.
+     */
     @JvmStatic fun isLimited(status: Int, remaining: String?, retryAfter: String?, reset: String?, body: String?): Boolean {
         if (status == 429) return true
         if (status != 403) return false
         if (remaining?.trim() == "0") return true
-        if (!retryAfter.isNullOrBlank() || !reset.isNullOrBlank()) return true
+        if (!retryAfter.isNullOrBlank()) return true
         val text = body?.lowercase(Locale.US) ?: ""
         return text.contains("rate limit") || text.contains("too many requests") || text.contains("secondary rate")
     }
 
-    /** Header deadline when present; otherwise a bounded wait. Never a tight loop. */
-    @JvmStatic fun retryAtMillis(status: Int, retryAfter: String?, reset: String?, remaining: String?, body: String?, now: Long): Long {
-        val limited = isLimited(status, remaining, retryAfter, reset, body)
-        val parsed = UpdateSchedulePolicy.retryDeadlineMillis(retryAfter, reset, now)
-        val hasHeader = parsed > now && (retryAfter?.trim()?.isNotEmpty() == true || reset?.trim()?.toLongOrNull() != null)
-        val chosen = when {
-            limited && hasHeader -> parsed
-            limited -> now + 15 * 60_000L
-            status in 500..599 -> now + 60_000L
-            else -> maxOf(now + 60_000L, parsed)
+    private const val MIN_RETRY_MS = 60_000L
+    private const val FALLBACK_RETRY_MS = 15 * 60_000L
+    private const val MAX_LOCAL_RETRY_MS = 24 * 60 * 60_000L
+    /** Beyond one month a "cooldown" is not a plausible GitHub deadline; treat it as malformed. */
+    private const val MAX_SERVER_COOLDOWN_MS = 30L * 24 * 60 * 60 * 1000
+
+    private fun safeAdd(a: Long, b: Long): Long = if (a > Long.MAX_VALUE - b) Long.MAX_VALUE else a + b
+
+    /** Parses one explicit server cooldown. 0 = absent, malformed or overflowing. */
+    private fun serverDeadline(header: String?, now: Long, epochSeconds: Boolean): Long {
+        val raw = header?.trim().orEmpty()
+        if (raw.isEmpty()) return 0L
+        val capped = safeAdd(now, MAX_SERVER_COOLDOWN_MS)
+        if (epochSeconds) {
+            val epoch = raw.toLongOrNull() ?: return 0L
+            if (epoch <= 0L) return 0L
+            val millis = if (epoch > Long.MAX_VALUE / 1000L) return 0L else epoch * 1000L
+            return if (millis > capped) 0L else millis
         }
-        return chosen.coerceIn(now + 60_000L, now + 24 * 60 * 60_000L)
+        raw.toLongOrNull()?.let { seconds ->
+            if (seconds < 0L) return 0L
+            val millis = if (seconds > MAX_SERVER_COOLDOWN_MS / 1000L) 0L else safeAdd(now, seconds * 1000L)
+            return millis
+        }
+        return try {
+            val parsed = SimpleDateFormat("EEE, dd MMM yyyy HH:mm:ss zzz", Locale.US).apply {
+                timeZone = TimeZone.getTimeZone("GMT")
+                isLenient = false
+            }.parse(raw)?.time ?: return 0L
+            if (parsed > capped) 0L else parsed
+        } catch (_: Exception) {
+            0L
+        }
+    }
+
+    /**
+     * When to try again. An explicit, valid server deadline (Retry-After on any
+     * status, or X-RateLimit-Reset on a classified rate limit) is honored
+     * exactly — never shortened by a local cap, so a multi-day cooldown cannot
+     * turn into a retry storm. Expired deadlines relax to a small pacing floor.
+     * Absent, malformed or overflowing values fall back to bounded local waits:
+     * 15 minutes when the response is a rate limit, one minute otherwise, and
+     * never more than 24 hours. All arithmetic saturates instead of wrapping.
+     */
+    @JvmStatic fun retryAtMillis(status: Int, retryAfter: String?, reset: String?, remaining: String?, body: String?, now: Long): Long {
+        val floor = safeAdd(now, MIN_RETRY_MS)
+        val limited = isLimited(status, remaining, retryAfter, reset, body)
+        val explicit = maxOf(
+            serverDeadline(retryAfter, now, epochSeconds = false),
+            if (limited) serverDeadline(reset, now, epochSeconds = true) else 0L
+        )
+        if (explicit > 0L) return maxOf(explicit, floor)
+        val fallback = if (limited) safeAdd(now, FALLBACK_RETRY_MS) else floor
+        return minOf(fallback, safeAdd(now, MAX_LOCAL_RETRY_MS))
     }
 
     @JvmStatic fun message(retryAt: Long, now: Long, zone: TimeZone): String {
@@ -297,7 +367,11 @@ object UpdateErrorMapper {
         }
         val lower = raw.lowercase(Locale.US)
         val category = when {
-            names.contains("SocketTimeout") || names.contains("UnknownHost") || names.contains("ConnectException") || lower.contains("timed out") || lower.contains("timeout") -> "timeout"
+            // Name-resolution and connect-refusal failures are network
+            // availability problems, not timeouts; keep them distinct so the
+            // offline guidance is reachable.
+            names.contains("UnknownHost") || names.contains("ConnectException") -> "offline"
+            names.contains("SocketTimeout") || lower.contains("timed out") || lower.contains("timeout") -> "timeout"
             lower.contains("no compatible") || lower.contains("armeabi-v7a") || lower.contains("no unique compatible") -> "no_compatible_apk"
             lower.contains("not enough storage") || lower.contains("no space") || lower.contains("enospc") -> "storage"
             lower.contains("signer is incompatible") || lower.contains("signature mismatch") || lower.contains("signatures do not match") -> "signature_mismatch"
@@ -306,12 +380,12 @@ object UpdateErrorMapper {
             lower.contains("installation cancelled") || lower.contains("install cancelled") -> "install_cancelled"
             lower.contains("download cancelled") -> "cancelled"
             lower.contains("interrupted") || lower.contains("download") && lower.contains("fail") -> "download_interrupted"
-            names.contains("UnknownHost") || names.contains("ConnectException") -> "offline"
             http != null -> "http"
             else -> "unexpected"
         }
         val message = when (category) {
-            "timeout", "offline" -> "Connection timed out. Check the network and retry."
+            "timeout" -> "Connection timed out. Check the network and retry."
+            "offline" -> "Network unavailable. Check the connection and retry."
             "no_compatible_apk" -> firstSafe(raw, "No compatible APK found. This release has no ARMv7 package for this device.")
             "storage" -> "Not enough storage. Free space and retry."
             "signature_mismatch" -> "App signature mismatch. The installed app was not removed or replaced."
@@ -335,7 +409,7 @@ object UpdateErrorMapper {
 
 object UpdateStates {
     @JvmStatic fun checking(s: UpdateState): UpdateState = s.copy(phase = UpdatePhase.Checking, message = "Checking stable ARMv7 release…", detail = "", errorCategory = "", httpStatus = 0, speedBps = 0, stale = false, bytes = 0)
-    @JvmStatic fun upToDate(s: UpdateState, version: String, now: Long): UpdateState = s.copy(phase = UpdatePhase.Idle, candidate = null, verifiedPath = null, pendingIdentity = null, lastSuccess = now, bytes = 0, stale = false, detail = "", errorCategory = "", httpStatus = 0, speedBps = 0, message = "Installed version is current. Latest compatible: $version.")
+    @JvmStatic fun upToDate(s: UpdateState, version: String, now: Long): UpdateState = s.copy(phase = UpdatePhase.Idle, candidate = null, verifiedPath = null, pendingIdentity = null, lastSuccess = now, bytes = 0, stale = false, detail = "", errorCategory = "", httpStatus = 0, speedBps = 0, latestVersion = version, message = "Installed version is current. Latest compatible: $version.")
     @JvmStatic fun available(s: UpdateState, candidate: Candidate, now: Long, verified: String?): UpdateState = s.copy(phase = UpdatePhase.Available, candidate = candidate, verifiedPath = verified, pendingIdentity = null, lastSuccess = now, bytes = 0, stale = false, detail = "", errorCategory = "", httpStatus = 0, speedBps = 0, message = "YTArk ${candidate.version} is available.")
     @JvmStatic fun staleAvailable(s: UpdateState, candidate: Candidate, retryAt: Long, message: String): UpdateState = s.copy(phase = UpdatePhase.Available, candidate = candidate, pendingIdentity = null, stale = true, retryAt = retryAt, message = message, errorCategory = "rate_limit", stage = "check", speedBps = 0)
     @JvmStatic fun downloading(s: UpdateState): UpdateState = s.copy(phase = UpdatePhase.Downloading, message = "Downloading update…", verifiedPath = null, bytes = 0, speedBps = 0, detail = "", errorCategory = "", stale = false)
@@ -348,7 +422,7 @@ object UpdateStates {
     @JvmStatic fun handedToSystem(s: UpdateState): UpdateState = s.copy(phase = UpdatePhase.AwaitingInstaller, pendingIdentity = null, message = "Handed to Android's installer. Installation is not confirmed yet.")
     @JvmStatic fun permissionDenied(s: UpdateState): UpdateState = s.copy(phase = if (s.verifiedPath != null) UpdatePhase.Ready else UpdatePhase.Available, pendingIdentity = null, message = "Install permission required. Enable Allow from this source for YTArk, then select Install update.", errorCategory = "permission", stage = "install")
     @JvmStatic fun installUnconfirmed(s: UpdateState): UpdateState = s.copy(phase = if (s.verifiedPath != null) UpdatePhase.Ready else UpdatePhase.Available, pendingIdentity = null, message = "Installation was not confirmed. Select Install update to retry; the downloaded APK is kept.")
-    @JvmStatic fun installed(s: UpdateState): UpdateState = s.copy(phase = UpdatePhase.Idle, candidate = null, verifiedPath = null, pendingIdentity = null, bytes = 0, stale = false, detail = "", errorCategory = "", message = "Update installed. Your application data was not cleared.")
+    @JvmStatic fun installed(s: UpdateState): UpdateState = s.copy(phase = UpdatePhase.Idle, candidate = null, verifiedPath = null, pendingIdentity = null, bytes = 0, stale = false, detail = "", errorCategory = "", latestVersion = "", message = "Update installed. Your application data was not cleared.")
 }
 
 /** Explicit edges used by the coordinator. Same-state progress is always allowed. */

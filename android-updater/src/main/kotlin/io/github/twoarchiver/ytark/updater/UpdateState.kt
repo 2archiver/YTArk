@@ -22,7 +22,9 @@ data class UpdateState(
     val stage: String = "",
     val httpStatus: Int = 0,
     val speedBps: Long = 0,
-    val releaseTag: String = ""
+    val releaseTag: String = "",
+    /** Machine-readable latest compatible version; presentation never parses status text. */
+    val latestVersion: String = ""
 ) {
     val busy get() = phase in setOf(UpdatePhase.Checking, UpdatePhase.Downloading, UpdatePhase.Validating, UpdatePhase.AwaitingPermission, UpdatePhase.AwaitingInstaller)
 }

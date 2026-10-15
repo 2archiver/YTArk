@@ -324,6 +324,27 @@ export function formatTimestamp(milliseconds) {
 }
 
 /**
+ * Scrub a raw error string before it is shown or copied as diagnostics. This is
+ * the userscript twin of the native UpdateTexts.sanitize: Authorization/Bearer
+ * values, token=… pairs, whole URLs (any scheme case) and bare IPv4 addresses
+ * reduce to one `[redacted]`/`[ip]` convention before the length cap, so a
+ * secret-bearing suffix can never survive truncation. Output is stable when
+ * sanitized twice.
+ */
+export function sanitizeDiagnostic(raw) {
+  if (raw == null) return '';
+  let text = String(raw);
+  if (!text.trim()) return '';
+  text = text.replace(/\b(authorization|proxy-authorization)\s*[:=]\s*(?:(?:bearer|basic|token|digest|oauth|negotiate)\s+)?[^\s,;\r\n]+/gi, '$1=[redacted]');
+  text = text.replace(/\bbearer\s+[A-Za-z0-9._~+/=-]{4,}/gi, 'authorization=[redacted]');
+  text = text.replace(/\b(token|authorization|password|passwd|secret|sig|signature|credential|api[_-]?key|access[_-]?key)\s*[=:]\s*[^\s&"']+/gi, '$1=[redacted]');
+  text = text.replace(/\bhttps?:\/\/\S+/gi, '[redacted]');
+  text = text.replace(/\b\d{1,3}(?:\.\d{1,3}){3}\b/g, '[ip]');
+  text = text.replace(/[\r\n\t]+/g, ' ').trim();
+  return text.length <= 240 ? text : `${text.slice(0, 237)}...`;
+}
+
+/**
  * Actions the current state allows. Keeping this table next to the state
  * machine prevents inert buttons and double submissions.
  */

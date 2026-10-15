@@ -23,12 +23,18 @@ fun main() {
     check(UpdatePresentation.status(current)=="Up to date")
     check(UpdatePresentation.latest(current)=="3.1.0") // Do not invent 3.2 as latest when running a candidate.
     check(UpdatePresentation.latest(UpdateState())=="Not available")
+    // Structured fields carry the latest version; status text is never parsed to learn it.
+    val structured = UpdateStates.upToDate(UpdateState(), "3.3.0", 5L)
+    check(structured.latestVersion=="3.3.0")
+    check(UpdatePresentation.latest(structured)=="3.3.0")
+    check(UpdatePresentation.status(structured)=="Up to date")
+    check(UpdateStates.installed(structured).latestVersion=="")
     val candidate = Candidate("v3.2.0",3020000,"asset","url",10485760,"digest","# Very long notes " + "detail ".repeat(1000))
     val available = UpdateState(UpdatePhase.Available,candidate,"YTArk 3.2.0 is available.")
     check(UpdatePresentation.status(available)=="Update available")
     check(UpdatePresentation.latest(available)=="3.2.0")
     check(UpdatePresentation.status(available.copy(message="Download cancelled. Retry when ready."))=="Download cancelled. Retry when ready.")
-    check(UpdatePresentation.status(available.copy(phase=UpdatePhase.Downloading,bytes=1048576))=="Downloading · 1.0 / 10.0 MB")
+    check(UpdatePresentation.status(available.copy(phase=UpdatePhase.Downloading,bytes=1048576))=="Downloading · 1.0 MB / 10.0 MB")
     check(UpdatePresentation.progress(512,0,0)=="Downloading · 512 B")
     check(UpdatePresentation.technical(UpdateState(phase=UpdatePhase.Failed,detail="Stage: check",errorCategory="rate_limit",httpStatus=403,releaseTag="v3.3.0")).contains("HTTP status: 403"))
     for(phase in listOf(UpdatePhase.Checking,UpdatePhase.Failed,UpdatePhase.AwaitingPermission,UpdatePhase.AwaitingInstaller)) {
