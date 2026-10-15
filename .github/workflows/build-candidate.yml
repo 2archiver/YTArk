@@ -280,6 +280,14 @@ jobs:
             echo "- Playback of the candidate's bundled script: the script URL points at tag ${SCRIPT_TAG}, which does not exist until a release publishes it (NOT RUN)."
           } > "$report"
           cat "$report" >> "$GITHUB_STEP_SUMMARY"
+          # Annotations stay readable through the API even when artefacts and
+          # logs are unavailable, so the key evidence is surfaced here as well.
+          apk_sha="$(sha256sum "$apk" | cut -d' ' -f1)"
+          package_line="$("$aapt" dump badging "$apk" | sed -n "s/^package: name='\([^']*\)' versionCode='\([^']*\)' versionName='\([^']*\)'.*/\1 versionCode=\2 versionName=\3/p" | head -1)"
+          native_line="$("$aapt" dump badging "$apk" | sed -n "s/^native-code: //p" | head -1)"
+          signer_sha="$("$apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1)"
+          echo "::notice title=YTArk ARMv7 candidate evidence::source=${CANDIDATE_SOURCE_SHA} file=${APK_ARMV7} sha256=${apk_sha} ${package_line} native=${native_line} signer_sha256=${signer_sha}"
+          echo "::notice title=YTArk ARMv7 userScript evidence::userScript.js sha256=$(sha256sum release-assets/userScript.js | cut -d' ' -f1) size=$(wc -c < release-assets/userScript.js)"
 
       - name: Record the candidate manifest
         run: |
@@ -298,7 +306,6 @@ jobs:
           name: ytark-3.5.0-armv7-candidate-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             release-assets/*
-            update-smoke/*.apk
             update-smoke/eligibility.properties
             candidate-manifest.json
           if-no-files-found: error
