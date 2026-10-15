@@ -61,4 +61,4 @@ is authoritative. No runtime dangerous-permission prompt is used.
 
 ## Verification boundary
 
-See `docs/YTARK-3.1-ACCEPTANCE.md` for the earlier acceptance boundary. Compilation/policy/DEX verification is not proof of Android system UI, Cobalt runtime, TV focus or login-preserving upgrades. The candidate's `s33` userscript endpoint becomes available only after authorized publication; neither script tags nor releases are published by branch CI.
+See `docs/YTARK-3.1-ACCEPTANCE.md` for the earlier acceptance boundary. Compilation/policy/DEX verification is not proof of Android system UI, Cobalt runtime, TV focus or login-preserving upgrades. The candidate's `s34` userscript endpoint becomes available only after authorized publication; neither script tags nor releases are published by branch CI.

@@ -22,9 +22,33 @@ Conventions:
 - Capabilities inherited from TizenTube and TizenTubeCobalt are listed under
   "Upstream base and inherited capabilities", not as YTArk additions.
 
-## [3.4.0] — Unreleased
+## [3.5.0] — Unreleased
 
-> Not yet published. Planned tag `v3.4.0` · versionCode 3040000 · userscript `s33` · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.
+> Not yet published. Planned tag `v3.5.0` · versionCode 3050000 · userscript `s34` · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.
+
+Privacy-corrected DeArrow lookups, applied before the page renders.
+
+### Changed
+- DeArrow title lookups use the hash-prefix endpoint; the full video ID is no longer sent.
+- DeArrow uses the first trusted, non-original title and thumbnail, never a runner-up.
+- DeArrow applies before browse, search and next results render; lookups are cached.
+- High-quality thumbnails keep a DeArrow thumbnail chosen for the same tile.
+- Thumbnail replacement sends the video ID to dearrow-thumb.ajay.app (see PRIVACY.md).
+### Fixed
+- Turning DeArrow off stops new lookups and discards results still in flight.
+### Known limitations
+- DeArrow changes have unit coverage only; the visible replacement on a TV is not yet device-verified.
+- Thumbnail replacement sends the video ID to `dearrow-thumb.ajay.app`; title lookups do not.
+- The in-app updater's install path and the ARMv7 runtime still need device testing; see the 3.5 evidence report.
+- Userscript `s34` becomes live only through the existing release publication workflow.
+### Validation
+- JavaScript: `node --test` over the TizenTube mods suite, including the DeArrow boundary tests.
+- Java and Kotlin updater policy suite with the sandbox JDK substitute (CI uses JDK 17).
+- ARMv7 APK build, signature, alignment and manifest checks: NOT RUN in this environment.
+
+## [3.4.0] — 2026-10-15
+
+> Published 2026-10-15 08:34 UTC as [YTArk 3.4](https://github.com/2archiver/YTArk/releases/tag/v3.4.0) · tag `v3.4.0` · versionCode 3040000 · userscript `s33` · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.
 
 Cleaner About and settings, permission-ready Updates, and clearer release checks.
 
@@ -40,7 +64,7 @@ Cleaner About and settings, permission-ready Updates, and clearer release checks
 ### Known limitations
 - TV permission screens, startup speed, session-preserving upgrades and ARMv7 runtime still need device testing.
 - A download does not continue across process death; a partial resumes only when its stored ETag still matches.
-- The s33 userscript endpoint becomes live only through the existing release publication workflow.
+- Userscript `s33` is the published script tag.
 
 ## [3.3.0] — 2026-10-15
 

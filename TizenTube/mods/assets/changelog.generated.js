@@ -4,20 +4,69 @@ export const YTARK_CHANGELOG = {
   "schema": 1,
   "source": "CHANGELOG.md",
   "summaryFallback": "No short highlights available for this version.",
-  "sourceSha256": "9a39eab5af4e2b1c44905c7818e2d0f8745e341232193ee6948980f8aad3c655",
+  "sourceSha256": "1fdd1450abae541dce506b04c9d1b38a05ad977aad8228b9d2a56877aa94d17f",
   "entries": [
     {
-      "version": "3.4.0",
-      "display": "3.4",
+      "version": "3.5.0",
+      "display": "3.5",
       "status": "unreleased",
       "date": null,
       "publishedAt": null,
+      "tag": "v3.5.0",
+      "versionCode": 3050000,
+      "scriptTag": "s34",
+      "title": "YTArk 3.5",
+      "releaseUrl": null,
+      "facts": "Not yet published. Planned tag v3.5.0 · versionCode 3050000 · userscript s34 · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.",
+      "summary": "Privacy-corrected DeArrow lookups, applied before the page renders.",
+      "sections": [
+        {
+          "heading": "Changed",
+          "items": [
+            "DeArrow title lookups use the hash-prefix endpoint; the full video ID is no longer sent.",
+            "DeArrow uses the first trusted, non-original title and thumbnail, never a runner-up.",
+            "DeArrow applies before browse, search and next results render; lookups are cached.",
+            "High-quality thumbnails keep a DeArrow thumbnail chosen for the same tile.",
+            "Thumbnail replacement sends the video ID to dearrow-thumb.ajay.app (see PRIVACY.md)."
+          ]
+        },
+        {
+          "heading": "Fixed",
+          "items": [
+            "Turning DeArrow off stops new lookups and discards results still in flight."
+          ]
+        },
+        {
+          "heading": "Known limitations",
+          "items": [
+            "DeArrow changes have unit coverage only; the visible replacement on a TV is not yet device-verified.",
+            "Thumbnail replacement sends the video ID to dearrow-thumb.ajay.app; title lookups do not.",
+            "The in-app updater's install path and the ARMv7 runtime still need device testing; see the 3.5 evidence report.",
+            "Userscript s34 becomes live only through the existing release publication workflow."
+          ]
+        },
+        {
+          "heading": "Validation",
+          "items": [
+            "JavaScript: node --test over the TizenTube mods suite, including the DeArrow boundary tests.",
+            "Java and Kotlin updater policy suite with the sandbox JDK substitute (CI uses JDK 17).",
+            "ARMv7 APK build, signature, alignment and manifest checks: NOT RUN in this environment."
+          ]
+        }
+      ]
+    },
+    {
+      "version": "3.4.0",
+      "display": "3.4",
+      "status": "published",
+      "date": "2026-10-15",
+      "publishedAt": "2026-10-15T08:34Z",
       "tag": "v3.4.0",
       "versionCode": 3040000,
       "scriptTag": "s33",
       "title": "YTArk 3.4",
-      "releaseUrl": null,
-      "facts": "Not yet published. Planned tag v3.4.0 · versionCode 3040000 · userscript s33 · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.",
+      "releaseUrl": "https://github.com/2archiver/YTArk/releases/tag/v3.4.0",
+      "facts": "Published 2026-10-15 08:34 UTC as YTArk 3.4 · tag v3.4.0 · versionCode 3040000 · userscript s33 · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.",
       "summary": "Cleaner About and settings, permission-ready Updates, and clearer release checks.",
       "sections": [
         {
@@ -50,7 +99,7 @@ export const YTARK_CHANGELOG = {
           "items": [
             "TV permission screens, startup speed, session-preserving upgrades and ARMv7 runtime still need device testing.",
             "A download does not continue across process death; a partial resumes only when its stored ETag still matches.",
-            "The s33 userscript endpoint becomes live only through the existing release publication workflow."
+            "Userscript s33 is the published script tag."
           ]
         }
       ]
