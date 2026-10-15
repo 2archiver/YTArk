@@ -236,6 +236,23 @@ jobs:
           cp "release-assets/$APK_ARMV7" update-smoke/current-ytark-armv7.apk
           cat update-smoke/eligibility.properties
 
+      - name: DeArrow live API probe (informational; not a release gate)
+        # Exercises the shipped branding module against the real service. It
+        # cannot change the candidate, so a failure here is reported as a
+        # warning instead of blocking the artefact.
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          node tools/dearrow_live_probe.mjs > "$RUNNER_TEMP/dearrow-probe.txt" 2>&1
+          rc=$?
+          summary="$(tr '\n' ' ' < "$RUNNER_TEMP/dearrow-probe.txt" | cut -c1-900)"
+          if [ "$rc" -eq 0 ]; then
+            echo "::notice title=DeArrow live API probe::exit=0 ${summary}"
+          else
+            echo "::warning title=DeArrow live API probe::exit=${rc} ${summary}"
+          fi
+          exit "$rc"
+
       - name: Write the candidate verification report
         run: |
           set -euo pipefail
@@ -287,6 +304,7 @@ jobs:
           native_line="$("$aapt" dump badging "$apk" | sed -n "s/^native-code: //p" | head -1)"
           signer_sha="$("$apksigner" verify --print-certs "$apk" | sed -n 's/^Signer #1 certificate SHA-256 digest: //p' | head -1)"
           echo "::notice title=YTArk ARMv7 candidate evidence::source=${CANDIDATE_SOURCE_SHA} file=${APK_ARMV7} sha256=${apk_sha} ${package_line} native=${native_line} signer_sha256=${signer_sha}"
+          echo "::notice title=YTArk ARMv7 upgrade eligibility (static, previous published APK)::$(tr '\n' ' ' < update-smoke/eligibility.properties)"
           echo "::notice title=YTArk ARMv7 userScript evidence::userScript.js sha256=$(sha256sum release-assets/userScript.js | cut -d' ' -f1) size=$(wc -c < release-assets/userScript.js)"
 
       - name: Record the candidate manifest
