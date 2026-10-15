@@ -149,7 +149,7 @@ public final class UpdateReliabilityTest {
             new UpdateRepository(forbiddenProbe).discover(false, 1, now + 2 * ScheduleRules.HOUR, 0L, cache);
             throw new AssertionError("an ordinary forbidden probe must not switch endpoints");
         } catch (HttpFailure expected) {
-            assertEquals(403, expected.status, "403 is preserved from the shared GitHub host");
+            assertEquals(403, expected.getStatus(), "403 is preserved from the shared GitHub host");
             assertEquals(0, forbiddenProbe.metas, "no endpoint switch after a forbidden response");
         }
         FakeSource offlineProbe = new FakeSource();
