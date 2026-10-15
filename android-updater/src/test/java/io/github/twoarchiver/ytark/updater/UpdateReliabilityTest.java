@@ -137,7 +137,7 @@ public final class UpdateReliabilityTest {
         rejects(() -> ReleaseMetadataParser.parse(releaseJson("3.3.0", 3030000L, HASH, 10, false).replace("YTArk-v3.3.0-armv7.apk", "YTArk-v3.3.0-arm64.apk"), null), "No compatible APK found");
         String doubled = releaseJson("3.3.0", 3030000L, HASH, 10, false).replace("\"assets\":[", "\"assets\":[{\"name\":\"YTArk-v3.3.0-armv7.apk\",\"browser_download_url\":\"https://github.com/2archiver/YTArk/releases/download/v3.3.0/YTArk-v3.3.0-armv7.apk\",\"size\":10,\"digest\":\"sha256:" + HASH + "\"},");
         rejects(() -> ReleaseMetadataParser.parse(doubled, null), "more than one");
-        rejects(() -> ReleaseMetadataParser.parse(releaseJson("3.3.0", 3030000L, HASH, 10, false).replace("\"prerelease\": false", "\"prerelease\": true"), null), "published stable");
+        rejects(() -> ReleaseMetadataParser.parse(releaseJson("3.3.0", 3030000L, HASH, 10, false).replace("\"prerelease\":false", "\"prerelease\":true"), null), "published stable");
         rejects(() -> ReleaseMetadataParser.parse(releaseJson("3.3.0", 3010000L, HASH, 10, false), null), "versionCode");
         rejects(() -> ReleaseMetadataParser.parse(releaseJson("3.3.0", 3030000L, OTHER, 10, true), HASH + "  YTArk-v3.3.0-armv7.apk\n"), "disagree");
     }
