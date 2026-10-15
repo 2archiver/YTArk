@@ -8,7 +8,7 @@ YTArk is an independent, open-source YouTube TV client built upon TizenTubeCobal
 
 Designed for remote-controlled devices, YTArk aims to preserve the simplicity of the original YouTube TV experience while providing greater control over how the application looks and behaves.
 
-Download Latest Release | Source Code | Report an Issue | Support Development
+
 
 ⸻
 
