@@ -246,14 +246,7 @@ Support is optional and does not provide paid YouTube features or preferential a
 
 ⸻
 
-Project Links
 
-Resource	Link
-Source Repository	GitHub
-APK Downloads	Releases
-Development History	Changelog
-Bug Reports	Issues
-Support	Ko-fi
 
 Disclaimer
 
