@@ -89,7 +89,7 @@ Status: **generated from source for every registry control, with traced rows for
 3. **Misleading subtitle label corrected in English.** `enableShowOtherLanguages` adds translation targets to the auto-translate menu, not hidden caption tracks. The English label changed in 3.5. Other locales are stale until they are re-translated.
 4. **Colour controls are hidden from the settings screen.** `focusContainerColor` and `routeColor` have no registry row. They are written only from the red-button panel, and the settings screen reads them back as text. The text points users at that panel.
 5. **Schema 5 was undocumented.** The `config.js` header history stopped at 4. It now describes 5 and states that the release that introduced it is not recorded in this checkout.
-6. **Who's Watching on exit defaults off.** With the default, the exit request is answered with `EXIT_APP`, which skips the menu. This is a behaviour change for users who expect the menu, so it is documented, not altered.
+6. **Who's Watching on exit defaults off.** With the default, the exit request is answered with `EXIT_APP`, which skips the menu. Whether this default changed in 3.5 is not recorded in this checkout, so it is documented, not altered. Device behaviour NOT RUN.
 7. **DeArrow thumbnail disclosure.** `enableDeArrowThumbnails` sends the full video ID to `dearrow-thumb.ajay.app`. The title path no longer does. PRIVACY.md is corrected.
 8. **Duplicate SponsorBlock row.** The same key appears in two places in the registry. Both write the same value. Not consolidated in this pass.
 
