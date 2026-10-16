@@ -4,7 +4,7 @@ export const YTARK_CHANGELOG = {
   "schema": 1,
   "source": "CHANGELOG.md",
   "summaryFallback": "No short highlights available for this version.",
-  "sourceSha256": "9bf238eba5f1c12d9d6b85c6c56ff3cf5ff86498836f22b69917fb85d76426bc",
+  "sourceSha256": "4cdc077c3d6eab5ee7c2fd5781c7488c059160319979bd7cf48dcb98f259092f",
   "entries": [
     {
       "version": "3.5.1",
@@ -18,20 +18,20 @@ export const YTARK_CHANGELOG = {
       "title": "YTArk 3.5.1",
       "releaseUrl": null,
       "facts": "Not yet published. Planned tag v3.5.1 · versionCode 3050100 · userscript s35 · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.",
-      "summary": "Honest install-authorization reporting, and a faster startup path that keeps its guarantees.",
+      "summary": "Honest install-authorization reporting and a faster startup path.",
       "sections": [
         {
           "heading": "Fixed",
           "items": [
             "Updates explains why Android cannot keep the install authorization.",
-            "Updates no longer presents TV Settings as a fix when the installed build or the TV profile cannot hold the authorization, and the retry stays on screen."
+            "Updates stops offering TV Settings when the installed build or the TV profile cannot hold the authorization."
           ]
         },
         {
           "heading": "Changed",
           "items": [
             "Faster startup defers optional work on one bounded schedule and falls back once.",
-            "Updates keeps authorization, download and installation as separate states; an installer opening is never reported as an installed update."
+            "Updates keeps authorization, download and installation apart; an installer opening is never reported as an installed update."
           ]
         },
         {

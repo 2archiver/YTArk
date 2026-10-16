@@ -26,14 +26,14 @@ Conventions:
 
 > Not yet published. Planned tag `v3.5.1` · versionCode 3050100 · userscript `s35` · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.
 
-Honest install-authorization reporting, and a faster startup path that keeps its guarantees.
+Honest install-authorization reporting and a faster startup path.
 
 ### Fixed
 - Updates explains why Android cannot keep the install authorization.
-- Updates no longer presents TV Settings as a fix when the installed build or the TV profile cannot hold the authorization, and the retry stays on screen.
+- Updates stops offering TV Settings when the installed build or the TV profile cannot hold the authorization.
 ### Changed
 - Faster startup defers optional work on one bounded schedule and falls back once.
-- Updates keeps authorization, download and installation as separate states; an installer opening is never reported as an installed update.
+- Updates keeps authorization, download and installation apart; an installer opening is never reported as an installed update.
 ### Added
 - The release build refuses a candidate Android could never authorize.
 - Updates reports what Android answers for this build: the declared install permission, the target SDK, the system install app-op the TV Settings switch writes, and any profile restriction.
