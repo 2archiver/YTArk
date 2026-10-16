@@ -1,3 +1,6 @@
+// Load the opt-in recorder before the remaining feature modules. It performs no
+// diagnostics work while its persisted preference is OFF.
+import "./features/browserDiagnostics.js";
 import initPatches from "./features/standaloneUserscript.js";
 if (window.location.hostname === 'localhost') {
     initPatches();

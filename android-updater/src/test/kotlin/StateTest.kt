@@ -17,6 +17,129 @@ fun main() {
     check(!PendingInstallPolicy.mayContinue("a","a",false,true))
     check(!PendingInstallPolicy.mayContinue("a","a",true,false))
     check(!PendingInstallPolicy.mayContinue(null,"a",true,true))
+    check(PendingInstallPolicy.mayQueueContinuation("a","a",UpdatePhase.AwaitingPermission,workerBusy=true))
+    check(PendingInstallPolicy.mayQueueContinuation("a","a",UpdatePhase.Validating,workerBusy=true))
+    check(!PendingInstallPolicy.mayQueueContinuation("a","b",UpdatePhase.AwaitingPermission,workerBusy=true))
+    check(!PendingInstallPolicy.mayQueueContinuation(null,"a",UpdatePhase.AwaitingPermission,workerBusy=false))
+    check(!PendingInstallPolicy.mayQueueContinuation("a","a",UpdatePhase.Ready,workerBusy=false))
+
+    // Permission Settings route ownership survives lifecycle/process restoration.
+    val detours=PermissionDetourCoordinator()
+    val entryStart=detours.beginEntry()
+    check(entryStart.kind==PermissionDetourStartKind.STARTED)
+    val entryRoute=entryStart.route!!
+    check(detours.beginEntry().kind==PermissionDetourStartKind.ALREADY_ACTIVE)
+    check(detours.markLaunched(entryRoute.requestId))
+    check(!detours.observeReturn(entryRoute.requestId)) // resume without an observed departure is not a return
+    val installIdentity="v3.6.0:"+"a".repeat(64)
+    val joined=detours.beginInstall(installIdentity)
+    check(joined.kind==PermissionDetourStartKind.JOINED && joined.route?.requestId==entryRoute.requestId)
+    check(joined.route?.owner==PermissionDetourOwner.ENTRY)
+    check(detours.current?.candidateIdentity==installIdentity)
+    check(detours.beginInstall("different-candidate").kind==PermissionDetourStartKind.BLOCKED)
+    check(detours.markDeparted())
+    val departedRevision=detours.snapshot().revision
+    check(detours.markDeparted())
+    check(detours.snapshot().revision==departedRevision) // duplicate pauses do not advance route state
+    check(detours.observeReturn(entryRoute.requestId))
+    check(!detours.observeReturn(entryRoute.requestId,fromActivityResult=true))
+    check(detours.canContinue(installIdentity,true,true))
+    check(!detours.canContinue("other",true,true))
+    check(!detours.canContinue(installIdentity,false,true))
+    check(!detours.canContinue(installIdentity,true,false))
+    val savedDetour=detours.snapshot()
+    check(savedDetour.revision>0L)
+    val staleBundle=savedDetour.copy(current=null,revision=savedDetour.revision-1L)
+    val newerBundle=savedDetour.copy(revision=savedDetour.revision+1L)
+    check(PermissionDetourSnapshot.mostRecent(savedDetour,staleBundle)==savedDetour)
+    check(PermissionDetourSnapshot.mostRecent(savedDetour,newerBundle)==newerBundle)
+    val restoredDetour=PermissionDetourCoordinator(savedDetour)
+    check(restoredDetour.current==detours.current)
+    check(restoredDetour.canContinue(installIdentity,true,true))
+    check(restoredDetour.acceptContinuation(entryRoute.requestId,installIdentity))
+    check(!restoredDetour.acceptContinuation(entryRoute.requestId,installIdentity))
+    check(restoredDetour.complete(entryRoute.requestId))
+    check(restoredDetour.current==null)
+
+    val resultRoute=PermissionDetourCoordinator()
+    val installStart=resultRoute.beginInstall(installIdentity)
+    check(installStart.kind==PermissionDetourStartKind.STARTED)
+    val installRoute=installStart.route!!
+    check(resultRoute.beginInstall(installIdentity).kind==PermissionDetourStartKind.ALREADY_ACTIVE)
+    check(resultRoute.markLaunched(installRoute.requestId))
+    check(resultRoute.observeReturn(installRoute.requestId,fromActivityResult=true)) // result proves a return without pause
+    check(resultRoute.current?.departed==true && resultRoute.current?.returned==true)
+    check(resultRoute.detachCandidate(installRoute.requestId,installIdentity))
+    check(resultRoute.current==null) // standalone install routes are discarded when cancelled
+    val returnedAfterRecreation=PermissionDetourCoordinator(PermissionDetourSnapshot(
+        2L, PermissionDetour(1L,PermissionDetourOwner.INSTALL,installIdentity),4L,
+    ))
+    check(returnedAfterRecreation.observeReturn(1L,fromActivityResult=true))
+    check(returnedAfterRecreation.current?.launched==true && returnedAfterRecreation.current?.departed==true)
+    check(returnedAfterRecreation.current?.returned==true)
+
+    val failedEntry=PermissionDetourCoordinator()
+    val failedStart=failedEntry.beginEntry().route!!
+    check(failedEntry.markLaunchFailed(failedStart.requestId))
+    check(failedEntry.current==null)
+    check(!failedEntry.markLaunched(failedStart.requestId))
+    val nextEntry=failedEntry.beginEntry().route!!
+    check(nextEntry.requestId>failedStart.requestId)
+    check(failedEntry.markLaunched(nextEntry.requestId))
+    check(!failedEntry.observeReturn(nextEntry.requestId))
+    check(failedEntry.markDeparted())
+    check(failedEntry.observeReturn(nextEntry.requestId))
+    check(!failedEntry.acceptContinuation(nextEntry.requestId,null))
+    check(failedEntry.complete(nextEntry.requestId))
+
+    val rejectedInstall=PermissionDetourCoordinator()
+    val rejectedIdentity="v3.6.0:"+"b".repeat(64)
+    val rejectedRoute=rejectedInstall.beginInstall(rejectedIdentity).route!!
+    check(rejectedInstall.markLaunchFailed(rejectedRoute.requestId))
+    check(rejectedInstall.current==null)
+    check(rejectedInstall.beginInstall(rejectedIdentity).kind==PermissionDetourStartKind.STARTED)
+
+    val sharedEntry=PermissionDetourCoordinator()
+    val shared=sharedEntry.beginEntry().route!!
+    sharedEntry.markLaunched(shared.requestId)
+    val candidateToDetach="candidate-a"
+    sharedEntry.beginInstall(candidateToDetach)
+    check(sharedEntry.detachCandidate(shared.requestId,candidateToDetach))
+    check(sharedEntry.current?.owner==PermissionDetourOwner.ENTRY && sharedEntry.current?.candidateIdentity==null)
+
+    // Native measurements are allowlisted, bounded, local and clock-domain honest.
+    check(NativeDiagnosticsPolicy.cleanEvent(0,"native_bootstrap_ready")!=null)
+    check(NativeDiagnosticsPolicy.cleanEvent(0,"native_first_activity_resumed")!=null)
+    check(NativeDiagnosticsPolicy.cleanEvent(0,"check_completed",25,"candidate")!=null)
+    check(NativeDiagnosticsPolicy.cleanEvent(0,"raw_url_https_example_com") == null)
+    check(NativeDiagnosticsPolicy.cleanEvent(0,"check_completed",25,"https://example.invalid") == null)
+    val boundedEvent=NativeDiagnosticsPolicy.cleanEvent(Long.MAX_VALUE,"check_completed",Long.MAX_VALUE,"candidate")!!
+    check(boundedEvent.elapsedOffsetMs==NativeDiagnosticsPolicy.MAX_OFFSET_MS)
+    check(boundedEvent.durationMs==NativeDiagnosticsPolicy.MAX_DURATION_MS)
+    var nativeSamples=listOf<NativeDiagnosticSession>()
+    for(sample in 1L..12L) {
+        repeat(45) { index ->
+            nativeSamples=NativeDiagnosticsPolicy.append(nativeSamples,sample,index.toLong(),"check_completed",index.toLong(),"candidate")
+        }
+    }
+    check(nativeSamples.size<=NativeDiagnosticsPolicy.MAX_SESSIONS)
+    check(nativeSamples.sumOf { it.events.size }<=NativeDiagnosticsPolicy.MAX_TOTAL_EVENTS)
+    check(nativeSamples.all { it.events.size<=NativeDiagnosticsPolicy.MAX_EVENTS_PER_SESSION })
+    val encodedNative=NativeDiagnosticsPolicy.serialize(nativeSamples)
+    check(encodedNative.length<=NativeDiagnosticsPolicy.MAX_SERIALIZED_CHARS)
+    val decodedNative=NativeDiagnosticsPolicy.deserialize(encodedNative)
+    check(decodedNative==nativeSamples)
+    check(!encodedNative.contains("http") && !encodedNative.contains("package:"))
+    val nativeReport=NativeDiagnosticsPolicy.report(NativeDiagnosticsSnapshot(false,nativeSamples))
+    check(nativeReport.contains("Collection: Off"))
+    check(nativeReport.contains("native bootstrap/first-activity milestones"))
+    check(nativeReport.contains("not reconstructed; enable before the next launch"))
+    check(nativeReport.contains("elapsedRealtime"))
+    check(nativeReport.contains("Browser measurements are separate"))
+    check(nativeReport.contains("no comparison with browser clocks"))
+    check(nativeReport.contains("fixed granted/denied/unknown outcome"))
+    check(nativeReport.contains("never as raw system settings"))
+    check(NativeDiagnosticsPolicy.report(NativeDiagnosticsSnapshot(false,emptyList())).contains("No native updater diagnostic events"))
     check(UpdateState(phase=UpdatePhase.AwaitingInstaller).busy)
     check(!UpdateState(phase=UpdatePhase.Ready).busy)
     val current = UpdateState(message="Installed version is current. Latest compatible: 3.1.0.",lastSuccess=1)

@@ -34,6 +34,7 @@ class UpdateCoordinator private constructor(context: Context) {
     @Volatile private var currentAttempt = 0
     @Volatile var lastInstallStatusAt = 0L; private set
     init {
+        AndroidDiagnostics.initialize(app)
         worker.execute {
             try {
                 files = DownloadController(app, validator)
@@ -160,7 +161,29 @@ class UpdateCoordinator private constructor(context: Context) {
         p.edit().putLong("v31_attempt", now).commit()
         set(UpdateStates.checking(state))
         validator.requireDevice()
-        val discovery = UpdateRepository(http).discover(!automatic, state.hours, now, rateUntil, store.loadCache())
+        var checkStarted: Long? = null
+        val discovery = try {
+            checkStarted = AndroidDiagnostics.begin("check_started")
+            val found = UpdateRepository(http).discover(!automatic, state.hours, now, rateUntil, store.loadCache())
+            val outcome = when (found) {
+                is Discovery.RateLimited -> if (found.cache == null) "rate_limited" else "stale"
+                is Discovery.UseCache -> when {
+                    found.stale -> "stale"
+                    found.cache.code > validator.code(validator.installed()) -> "candidate"
+                    else -> "no_update"
+                }
+                is Discovery.Fresh -> if (found.candidate.code > validator.code(validator.installed())) "candidate" else "no_update"
+            }
+            AndroidDiagnostics.finish(checkStarted, "check_completed", outcome)
+            found
+        } catch (error: Throwable) {
+            AndroidDiagnostics.finish(checkStarted, "check_completed", when {
+                cancelled.get() -> "cancelled"
+                error is HttpFailure && error.category == "rate_limit" -> "rate_limited"
+                else -> "error"
+            })
+            throw error
+        }
         if (!attempts.accept(attempt)) return
         if (automatic && stopAutomatic) throw IOException("Automatic check paused by Android. It will retry later.")
         when (discovery) {
@@ -212,14 +235,22 @@ class UpdateCoordinator private constructor(context: Context) {
         val attempt = attempts.next()
         currentAttempt = attempt
         automaticTransfer = automatic
+        val diagnosticStart = AndroidDiagnostics.begin("download_started")
+        var diagnosticOutcome = "completed"
         set(UpdateStates.downloading(state))
         try {
             val file = files.download(c, cancelled, { bytes, speed ->
                 if (attempts.accept(attempt)) set(UpdateStates.progress(state, bytes, speed), false)
             }, { if (attempts.accept(attempt)) set(UpdateStates.verifying(state)) })
-            if (!attempts.accept(attempt)) return
+            if (!attempts.accept(attempt)) { diagnosticOutcome = "cancelled"; return }
             set(UpdateStates.ready(state, file.path))
-        } finally { automaticTransfer = false }
+        } catch (error: Throwable) {
+            diagnosticOutcome = if (cancelled.get()) "cancelled" else "error"
+            throw error
+        } finally {
+            AndroidDiagnostics.finish(diagnosticStart, "download_completed", diagnosticOutcome)
+            automaticTransfer = false
+        }
     }
     fun cancel() {
         if (state.phase !in setOf(UpdatePhase.Downloading, UpdatePhase.Validating)) return
@@ -242,19 +273,64 @@ class UpdateCoordinator private constructor(context: Context) {
         if (h == 0) stopAutomaticWork()
         worker.execute { try { set(state.copy(hours = h)); UpdateSchedule.replace(app, h) } catch (e: Throwable) { handleFailure(e) } }
     }
-    fun prepareInstall(returning: Boolean, result: (Candidate?, File?) -> Unit) {
-        if (!returning && state.busy) { result(null, null); return }
-        if (!submit {
-            if (state.busy && !(returning && state.phase == UpdatePhase.AwaitingPermission)) { main.post { result(null, null) }; return@submit }
-            val c = state.candidate
-            val pending = state.pendingIdentity
-            if (c == null || (returning && pending != c.identity)) { main.post { result(null, null) }; return@submit }
-            set(state.copy(phase = UpdatePhase.Validating, pendingIdentity = null, message = "Revalidating APK before install…"))
-            val file = files.file(c)
-            validator.validate(file, c)
-            set(UpdateStates.ready(state, file.path))
-            main.post { result(c, file) }
-        }) result(null, null)
+    /**
+     * Queue the final APK revalidation. Permission-return work may arrive while
+     * restore or another serialized coordinator task is still busy; it is
+     * accepted only for the exact pending candidate and rechecked on the
+     * worker before any installer handoff. `true` means the queue accepted it,
+     * not that validation or installation succeeded.
+     */
+    fun prepareInstall(
+        returning: Boolean,
+        expectedIdentity: String? = null,
+        result: (Candidate?, File?) -> Unit,
+    ): Boolean {
+        val observed = state
+        if (returning) {
+            if (expectedIdentity == null || observed.pendingIdentity != expectedIdentity
+                || !PendingInstallPolicy.mayQueueContinuation(
+                    observed.pendingIdentity, observed.candidate?.identity, observed.phase, occupied.get(),
+                )) return false
+        } else if (observed.busy || observed.phase !in setOf(UpdatePhase.Ready, UpdatePhase.Failed)
+            || observed.candidate == null || observed.verifiedPath == null) return false
+        return try {
+            worker.execute {
+                try {
+                    val current = state
+                    val candidate = current.candidate
+                    val stillMatches = candidate != null && if (returning) {
+                        current.phase == UpdatePhase.AwaitingPermission
+                            && current.pendingIdentity == expectedIdentity
+                            && candidate.identity == expectedIdentity
+                    } else {
+                        !current.busy && current.phase in setOf(UpdatePhase.Ready, UpdatePhase.Failed)
+                            && current.verifiedPath != null && candidate.identity == observed.candidate?.identity
+                    }
+                    if (!stillMatches || candidate == null) {
+                        main.post { result(null, null) }
+                        return@execute
+                    }
+                    set(current.copy(phase = UpdatePhase.Validating, pendingIdentity = null, message = "Revalidating APK before install…"))
+                    val file = files.file(candidate)
+                    val validationStart = AndroidDiagnostics.begin("apk_validation_started")
+                    try {
+                        validator.validate(file, candidate)
+                    } catch (error: Throwable) {
+                        AndroidDiagnostics.finish(validationStart, "apk_validation_completed", "invalid")
+                        throw error
+                    }
+                    AndroidDiagnostics.finish(validationStart, "apk_validation_completed", "validated")
+                    set(UpdateStates.ready(state, file.path))
+                    main.post { result(candidate, file) }
+                } catch (error: Throwable) {
+                    handleFailure(error, "install")
+                    main.post { result(null, null) }
+                }
+            }
+            true
+        } catch (_: java.util.concurrent.RejectedExecutionException) {
+            false
+        }
     }
     fun markExternal(phase: UpdatePhase, candidate: Candidate, file: File, done: () -> Unit) {
         worker.execute {
@@ -267,13 +343,34 @@ class UpdateCoordinator private constructor(context: Context) {
             } catch (e: Throwable) { handleFailure(e, "install") }
         }
     }
-    fun externalReturned(message: String) { submit { recover(); if (state.candidate != null) set(state.copy(phase = if (state.verifiedPath != null) UpdatePhase.Ready else UpdatePhase.Available, pendingIdentity = null, message = message)) } }
-    fun clearPermissionRequest() { submit { set(UpdateStates.permissionDenied(state)) } }
+    fun externalReturned(message: String) {
+        enqueue {
+            recover()
+            if (state.candidate != null) set(state.copy(phase = if (state.verifiedPath != null) UpdatePhase.Ready else UpdatePhase.Available, pendingIdentity = null, message = message))
+        }
+    }
+    fun clearPermissionRequest(expectedIdentity: String? = null) {
+        enqueue {
+            val current = state
+            if (expectedIdentity != null && current.pendingIdentity != expectedIdentity) return@enqueue
+            if (current.phase !in setOf(UpdatePhase.AwaitingPermission, UpdatePhase.Validating)) return@enqueue
+            if (current.phase == UpdatePhase.Validating && current.pendingIdentity == null) return@enqueue
+            set(UpdateStates.permissionDenied(current))
+        }
+    }
     fun noteInstallUi() { lastInstallStatusAt = System.currentTimeMillis() }
     fun onInstallStatus(status: Int, rawMessage: String?) {
         lastInstallStatusAt = System.currentTimeMillis()
         enqueue {
             val kind = InstallerStatusPolicy.kind(status, rawMessage)
+            AndroidDiagnostics.record("installer_status", when (kind) {
+                "success" -> "success"
+                "user_action" -> "user_action"
+                "cancelled" -> "cancelled"
+                "signature" -> "signature"
+                "invalid" -> "invalid"
+                else -> "error"
+            })
             if (kind == "user_action") return@enqueue
             if (kind == "success") {
                 val target = state.candidate?.code ?: 0L

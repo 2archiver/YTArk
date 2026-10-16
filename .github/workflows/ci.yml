@@ -115,12 +115,12 @@ jobs:
           python3 tools/check_no_secrets.py --history
           python3 tools/check_workflow_policy.py
           python3 tools/validate_release.py emit-env --file "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'VERSION_NAME=3.5.2' "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'DISPLAY_VERSION=3.5.2' "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'VERSION_CODE=3050200' "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'VERSION_TAG=v3.5.2' "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'SCRIPT_TAG=s36' "$RUNNER_TEMP/ytark-release.env"
-          grep -Fx 'APK_ARMV7=YTArk-v3.5.2-armv7.apk' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'VERSION_NAME=3.6.0' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'DISPLAY_VERSION=3.6' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'VERSION_CODE=3060000' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'VERSION_TAG=v3.6.0' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'SCRIPT_TAG=s37' "$RUNNER_TEMP/ytark-release.env"
+          grep -Fx 'APK_ARMV7=YTArk-v3.6.0-armv7.apk' "$RUNNER_TEMP/ytark-release.env"
           # ARMv7 is the only published architecture; an ARM64 asset name must
           # not exist anywhere in the release environment or the active pipeline.
           if grep -q 'ARM64' "$RUNNER_TEMP/ytark-release.env"; then

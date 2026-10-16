@@ -100,6 +100,20 @@ jobs:
           print("Artefacts:", ", ".join(str(n) for n in names))
           PY
 
+      - name: Require successful CI for the exact candidate source commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_SHA: ${{ inputs.expected_head_sha }}
+        run: |
+          set -euo pipefail
+          python3 tools/require_source_ci.py \
+            --head-sha "$EXPECTED_SHA" \
+            --repository "$GITHUB_REPOSITORY" \
+            --branch main \
+            --timeout-seconds 120 \
+            --poll-seconds 10 \
+            --summary-file "$GITHUB_STEP_SUMMARY"
+
   publish-release:
     name: Publish, resume or repair the stable release
     runs-on: ubuntu-latest

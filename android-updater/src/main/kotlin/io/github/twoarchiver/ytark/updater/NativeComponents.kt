@@ -25,22 +25,20 @@ import java.lang.ref.WeakReference
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * One-shot native launch marks for startup measurement, on the monotonic
- * `elapsedRealtime` clock. The JavaScript side keeps its own marks on its own
- * monotonic clock; the two timelines are never subtracted from each other
- * without an explicit calibration, they are only read side by side in logcat.
+ * One-shot native bootstrap marks for opt-in, app-private diagnostics. Unlike
+ * the historical logcat marks, these events are captured only while native
+ * diagnostics are enabled and contain no activity name or device details.
  */
 object StartupTimeline {
-    private const val TAG = "YTArkStartup"
     private val processMarked = AtomicBoolean(false)
     private val resumeMarked = AtomicBoolean(false)
     fun processStart() {
         if (!processMarked.compareAndSet(false, true)) return
-        android.util.Log.i(TAG, "native-mark process-start elapsedRealtimeMillis=" + android.os.SystemClock.elapsedRealtime())
+        AndroidDiagnostics.record("native_bootstrap_ready")
     }
-    fun firstActivityResumed(a: Activity) {
+    fun firstActivityResumed() {
         if (!resumeMarked.compareAndSet(false, true)) return
-        android.util.Log.i(TAG, "native-mark first-activity-resumed " + a.javaClass.name + " elapsedRealtimeMillis=" + android.os.SystemClock.elapsedRealtime())
+        AndroidDiagnostics.record("native_first_activity_resumed")
     }
 }
 
@@ -102,16 +100,16 @@ abstract class ReadOnlyProvider : ContentProvider() {
 class UpdateBootstrapProvider : ReadOnlyProvider() {
     override fun onCreate(): Boolean {
         val app=context?.applicationContext as? Application ?: return false
-        // Provider creation is the earliest code this package runs in a fresh
-        // process; mark it once for startup measurement. No network work here.
-        StartupTimeline.processStart()
+        // Initialize the default-off recorder before the earliest native mark.
         // Creation queues only local reconciliation; no startup release/changelog fetch.
+        AndroidDiagnostics.initialize(app)
+        StartupTimeline.processStart()
         val coordinator=UpdateCoordinator.get(app)
         app.registerActivityLifecycleCallbacks(object: Application.ActivityLifecycleCallbacks {
             private val handler=Handler(Looper.getMainLooper())
             private var overdue: Runnable?=null
             override fun onActivityResumed(a: Activity) {
-                StartupTimeline.firstActivityResumed(a)
+                StartupTimeline.firstActivityResumed()
                 NativeUpdatesBridge.resumed(a)
                 if(a !is UpdateActivity) {
                     overdue?.let { handler.removeCallbacks(it) }

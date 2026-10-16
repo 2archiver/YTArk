@@ -10,7 +10,9 @@ Trust boundary (never relaxed):
 - Every action is pinned to a full 40-character commit SHA (or is a local
   composite action), so no workflow can float to unpinned third-party code.
 - Publication happens only for 2archiver/YTArk, only from a job whose `if`
-  proves it, and only after the build/validation job of the same run succeeded.
+  proves it, and only after successful exact-source CI and the package build.
+- The exact commit being released must have a successful `ci.yml` run on main;
+  PR results for another ref or a different commit are not interchangeable.
 - Signing secrets may only be read by the trusted main-branch build job.
 
 Release pipeline (2.2 onward):
@@ -199,6 +201,10 @@ def check_publication_job(name: str, workflow: str, block: str, failures: list[s
             failures.append(f"{workflow}:{name}: the publish job must only run on refs/heads/main")
         if "needs.release-guard.result == 'success'" not in condition:
             failures.append(f"{workflow}:{name}: the publish job must require a successful release guard")
+        if "needs.source-validation.result == 'success'" not in condition:
+            failures.append(f"{workflow}:{name}: publication must require successful exact-source CI")
+        if "source-validation" not in job_needs(block):
+            failures.append(f"{workflow}:{name}: publication must depend on the exact-source CI job")
         for job in BUILD_JOB_NAMES:
             if f"needs.{job}.result != 'failure'" not in condition:
                 missing_needs.add(f"{job} != failure")
@@ -239,6 +245,31 @@ def check(path: Path, failures: list[str]) -> None:
         failures.append(f"{name}: release publication must never be cancelled mid-upload")
 
     check_script_paths(path, failures)
+
+    if name == "build-apk.yml":
+        source_job = blocks.get("source-validation", "")
+        if not source_job:
+            failures.append("build-apk.yml: missing the exact-source CI prerequisite job")
+        else:
+            source_condition = job_condition(source_job)
+            if f"github.repository == '{TRUSTED_REPOSITORY}'" not in source_condition:
+                failures.append("build-apk.yml: exact-source CI must be limited to the trusted repository")
+            if "github.ref == 'refs/heads/main'" not in source_condition:
+                failures.append("build-apk.yml: exact-source CI must validate the main release ref")
+            if "actions: read" not in re.sub(r"\s+", " ", source_job):
+                failures.append("build-apk.yml: exact-source CI needs actions: read to inspect CI runs")
+            if "tools/require_source_ci.py" not in source_job:
+                failures.append("build-apk.yml: source-validation must call the exact-SHA CI checker")
+        for build_name in BUILD_JOB_NAMES:
+            build_block = blocks.get(build_name, "")
+            if "source-validation" not in job_needs(build_block):
+                failures.append(f"build-apk.yml:{build_name}: the candidate build must depend on exact-source CI")
+            if "needs.source-validation.result == 'success'" not in job_condition(build_block):
+                failures.append(f"build-apk.yml:{build_name}: failed exact-source CI must block the candidate build")
+    elif name == "publish-release.yml":
+        verify_job = blocks.get("verify-candidate", "")
+        if "tools/require_source_ci.py" not in verify_job:
+            failures.append("publish-release.yml: recovery must independently require exact-source CI")
 
     for job_name, block in sorted(blocks.items()):
         flat = re.sub(r"\s+", " ", block)

@@ -45,6 +45,17 @@ object ScheduleRules {
 /** One-shot permission continuation is bound to the exact downloaded candidate. */
 object PendingInstallPolicy {
     /**
+     * A returned permission continuation may be queued behind serialized work
+     * (including startup restore) only while the exact pending candidate is
+     * still represented. AwaitingPermission is UI-busy by design; that is not
+     * a reason to reject its one-shot continuation.
+     */
+    @JvmOverloads
+    @Suppress("UNUSED_PARAMETER")
+    fun mayQueueContinuation(pending: String?, candidate: String?, phase: UpdatePhase, workerBusy: Boolean = false): Boolean =
+        pending != null && pending == candidate && phase in setOf(UpdatePhase.AwaitingPermission, UpdatePhase.Validating)
+
+    /**
      * Continuation requires a genuine external return: the activity must have
      * actually departed for the system screen (`departed`). A state update
      * while the page is still visible is not proof that Settings returned, and

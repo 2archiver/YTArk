@@ -45,7 +45,7 @@ test('an explicit startup destination keeps priority over the soft reload', () =
   assert.equal(h.nav.tryRun(), true);
   assert.deepEqual(h.commands, [{ browseEndpoint: { browseId: 'FEsubscriptions' } }]);
   assert.equal(h.nav.dispatched, 'explicit-destination');
-  assert.deepEqual(h.marks, [['startup-navigation', 'explicit-destination']],
+  assert.deepEqual(h.marks, [['startup-navigation-dispatched', 'explicit-destination']],
     'the measurement mark records which command was issued');
 });
 
@@ -60,6 +60,40 @@ test('a malformed stored destination falls back to the soft reload', () => {
   const h = harness({ destination: '{"browseEndpoint":', resolver: true });
   assert.equal(h.nav.tryRun(), true);
   assert.deepEqual(h.commands, [{ signalAction: { signal: 'SOFT_RELOAD_PAGE' } }]);
+});
+
+test('an ambiguous resolver rejection is recorded as failed and never retried', () => {
+  let calls = 0;
+  const marks = [];
+  const warnings = [];
+  const nav = createStartupNavigation({
+    configRead: key => key === 'reloadHomeOnStartup' ? true : null,
+    hasResolver: () => true,
+    resolveCommand: () => { calls += 1; throw new Error('after side effect'); },
+    mark: (...mark) => marks.push(mark),
+    warn: () => { warnings.push('warned'); },
+  });
+  assert.equal(nav.tryRun(), true);
+  assert.equal(nav.status, 'failed');
+  assert.equal(nav.errorCategory, 'dispatch-threw');
+  assert.equal(nav.tryRun(), true);
+  assert.equal(calls, 1);
+  assert.deepEqual(marks, [['startup-navigation-failed', 'failed']]);
+  assert.equal(warnings.length, 1);
+});
+
+test('a resolver that is present but rejects a command is not reported as dispatched', () => {
+  const marks = [];
+  const nav = createStartupNavigation({
+    configRead: key => key === 'reloadHomeOnStartup' ? true : null,
+    hasResolver: () => true,
+    resolveCommand: () => false,
+    mark: (...mark) => marks.push(mark),
+  });
+  assert.equal(nav.tryRun(), true);
+  assert.equal(nav.status, 'failed');
+  assert.equal(nav.dispatched, null);
+  assert.deepEqual(marks, [['startup-navigation-failed', 'failed']]);
 });
 
 test('destination parsing keeps objects and refuses arrays, scalars and malformed JSON', () => {

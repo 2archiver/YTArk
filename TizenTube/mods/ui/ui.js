@@ -1,8 +1,9 @@
 /*global navigate*/
 import '../spatial-navigation-polyfill.js';
 import { startReadiness } from '../features/startupReadiness.js';
-import { startupTiming, attachStartupProbes } from '../features/startupTiming.js';
+import { browserDiagnostics, remoteKeyCategory } from '../features/browserDiagnostics.js';
 import { createStartupNavigation } from '../features/startupNavigation.js';
+import { createStartupGuideRefresh } from '../features/startupGuideRefresh.js';
 import css from './ui.css';
 import { configRead, configWrite, configWriteMany, configChangeEmitter } from '../config.js';
 import updateStyle from './theme.js';
@@ -14,10 +15,9 @@ import { pipToFullscreen } from '../features/pictureInPicture.js';
 import getCommandExecutor from './customCommandExecution.js';
 import { t } from 'i18next';
 
-// Monotonic mark for the moment this script starts evaluating. Every later
-// mark is relative to the same clock; the native process-start mark lives in
-// logcat (tag YTArkStartup) and is never subtracted from these values.
-startupTiming.mark('script-eval');
+// This mark is exactly where ui.js begins evaluating, after its static imports;
+// it is not a process-start or Android-launch timestamp. Recording is opt-in.
+browserDiagnostics.record('ui-module-evaluated', 'observed', 'proxy');
 
 /** True when the app exposes a command resolver instance to patch and call. */
 function hasCommandResolver() {
@@ -31,83 +31,92 @@ function hasCommandResolver() {
   }
 }
 
-// Initialize the remote settings controls when the TV DOM exists; requiring a
-// video element here would make settings unavailable on a quiet home screen.
+// Initialize controls when the TV DOM exists; a quiet Home need not contain a
+// video element. Startup diagnostics never participate in readiness decisions.
 let controlsInitialized = false;
-let resolverPatched = false;
+let resolverObserved = false;
+let resolverPatchAttempted = false;
 let startupStorage;
 try { startupStorage = window.localStorage; } catch (_) { /* normal startup */ }
-// Startup navigation waits for the command resolver instead of dispatching
-// into an absent window._yttv, where resolveCommand() silently drops it.
-const startupNavigation = createStartupNavigation({
-  configRead,
-  resolveCommand,
-  hasResolver: hasCommandResolver,
-  mark: (name, detail) => startupTiming.mark(name, detail),
-  warn: (error) => console.warn('[YTArk] Ignoring an invalid startup destination:', error),
-});
-startReadiness({
-  enabled: configRead('fasterStartup') === true,
-  storage: startupStorage,
-  onGiveUp: () => {
-    if (!startupNavigation.done) {
-      console.warn('[YTArk] Startup navigation never ran: the TV command resolver did not become available within the readiness window.');
-      startupTiming.mark('startup-navigation-given-up');
-    }
-  },
-  tick: () => {
-  if (!controlsInitialized && document.body) {
-    startupTiming.mark('dom-body');
-    try {
-      execute_once_dom_loaded();
-      controlsInitialized = true;
-      startupTiming.mark('controls-ready');
-    } catch (error) {
-      console.warn('[YTArk] TV controls are waiting for the app DOM:', error);
-    }
-  }
 
-  if (!resolverPatched && hasCommandResolver()) {
-    patchResolveCommand();
-    resolverPatched = true;
-    startupTiming.mark('resolver-ready');
-  }
-
-  // The guide refresh belongs to the same resolver-ready moment: before it,
-  // getCommandExecutor() finds nothing and the refresh is silently lost.
-  if (resolverPatched && !startupSteps.guideReload) {
-    startupSteps.guideReload = true;
-    try {
-      const commandExecutor = getCommandExecutor();
-      if (commandExecutor) {
-        commandExecutor.executeFunction(new commandExecutor.commandFunction('reloadGuideAction'));
-      }
-    } catch (error) {
-      console.warn('[YTArk] The guide refresh could not run:', error);
-    }
-  }
-
-  if (controlsInitialized) startupNavigation.tryRun();
-
-  return controlsInitialized && resolverPatched && startupNavigation.done;
-  },
-});
-
-let keyTimeout = null;
-
-// Start-up work is split into idempotent steps so that a failure part-way
-// through (and the retry that follows) can never inject styles, panels, key
-// handlers, probes or the guide refresh twice. Startup navigation lives in
-// features/startupNavigation.js because it must wait for the command resolver.
 const startupSteps = {
   css: false,
   panel: false,
   listeners: false,
-  probes: false,
-  guideReload: false,
   theme: false,
   longPress: false,
 };
+
+const diagnosticMark = (event, outcome = 'observed') => browserDiagnostics.record(event, outcome, 'observed');
+// Navigation waits for the resolver. The guide refresh has its own dependency
+// check for both executor and command constructor and is bounded independently
+// of the controls/navigation effects.
+const startupNavigation = createStartupNavigation({
+  configRead,
+  resolveCommand,
+  hasResolver: hasCommandResolver,
+  mark: (event, outcome) => {
+    if (event === 'startup-navigation-dispatched') browserDiagnostics.recordNavigation(outcome);
+    else if (event === 'startup-navigation-failed') diagnosticMark(event, 'failed');
+  },
+  warn: () => console.warn('[YTArk] Startup navigation configuration or dispatch failed.'),
+});
+const startupGuideRefresh = createStartupGuideRefresh({
+  getExecutor: getCommandExecutor,
+  mark: diagnosticMark,
+  warn: () => console.warn('[YTArk] The optional guide refresh failed; startup navigation and controls remain available.'),
+});
+
+startReadiness({
+  enabled: configRead('fasterStartup') === true,
+  storage: startupStorage,
+  onInterrupted: () => diagnosticMark('startup-readiness-interrupted', 'interrupted'),
+  onReady: () => diagnosticMark('startup-readiness-complete', 'complete'),
+  onGiveUp: () => {
+    if (!startupNavigation.done) {
+      startupNavigation.timeOut();
+      diagnosticMark('startup-navigation-failed', 'failed');
+      console.warn('[YTArk] Startup navigation was unavailable within the bounded readiness window.');
+    }
+    if (!startupGuideRefresh.done) startupGuideRefresh.timeOut();
+    diagnosticMark('startup-readiness-timeout', 'timeout');
+  },
+  tick: () => {
+    if (!controlsInitialized && document.body) {
+      diagnosticMark('dom-body-available');
+      try {
+        execute_once_dom_loaded();
+        controlsInitialized = true;
+        diagnosticMark('controls-ready');
+      } catch (_) {
+        console.warn('[YTArk] TV controls are waiting for the app DOM.');
+      }
+    }
+
+    if (!resolverObserved && hasCommandResolver()) {
+      resolverObserved = true;
+      diagnosticMark('resolver-ready');
+    }
+    if (resolverObserved && !resolverPatchAttempted) {
+      // A patch attempt may have partially wrapped a resolver before throwing;
+      // never repeat it and risk duplicate handlers/effects.
+      resolverPatchAttempted = true;
+      try { patchResolveCommand(); }
+      catch (_) { console.warn('[YTArk] The TV command resolver could not be patched.'); }
+    }
+
+    // Guide refresh needs getCommandExecutor()'s executor AND constructor. A
+    // missing dependency stays pending; a late arrival can be used by a later
+    // readiness tick. Invocation failure is terminal to avoid duplicate effects.
+    startupGuideRefresh.tryDispatch();
+    if (controlsInitialized) startupNavigation.tryRun();
+
+    return controlsInitialized && resolverObserved && resolverPatchAttempted
+      && startupNavigation.done && startupGuideRefresh.done;
+  },
+});
+
+let keyTimeout = null;
 
 // One notice per session when settings cannot be saved (no toast spam).
 configChangeEmitter.addEventListener('configPersistError', () => {
@@ -279,7 +288,7 @@ function execute_once_dom_loaded() {
       || target.getAttribute?.('contenteditable') === 'true';
   };
 
-  const eventHandler = (evt) => {
+  const handleEvent = (evt) => {
     // Only act on keydown. keypress/keyup used to open duplicate settings on
     // remotes that synthesize a full key event sequence.
     if (evt.type !== 'keydown') return true;
@@ -348,20 +357,18 @@ function execute_once_dom_loaded() {
     return true;
   };
 
+  const eventHandler = (evt) => {
+    const category = evt && evt.type === 'keydown' ? remoteKeyCategory(evt) : null;
+    const sample = browserDiagnostics.beginRemoteHandler(category);
+    try { return handleEvent(evt); }
+    finally { browserDiagnostics.endRemoteHandler(sample); }
+  };
+
   if (!startupSteps.listeners) {
     document.addEventListener('keydown', eventHandler, true);
     document.addEventListener('keyup', (evt) => handledRemoteKeys.delete(evt.keyCode), true);
     startupSteps.listeners = true;
   }
-  if (!startupSteps.probes) {
-    startupSteps.probes = true;
-    // Measurement only: first remote key and first playback after startup.
-    attachStartupProbes(startupTiming, document);
-  }
-
-  // Startup navigation and the guide refresh are NOT dispatched here: both
-  // depend on the app's command resolver, and resolveCommand()/the command
-  // executor silently do nothing while window._yttv is still empty. The
-  // readiness loop runs them once, at the resolver-ready moment
-  // (features/startupNavigation.js and startupSteps.guideReload above).
+  // Startup navigation and optional guide refresh are dispatched by the
+  // bounded readiness loop after their distinct dependencies are observable.
 }

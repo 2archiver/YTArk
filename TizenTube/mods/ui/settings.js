@@ -8,7 +8,8 @@
  */
 
 import { configRead } from '../config.js';
-import { showModal, buttonItem, overlayPanelItemListRenderer, overlayMessageRenderer } from './ytUI.js';
+import { showModal, buttonItem, overlayPanelItemListRenderer, overlayMessageRenderer, scrollPaneRenderer } from './ytUI.js';
+import { browserDiagnostics, browserDiagnosticSnapshot } from '../features/browserDiagnostics.js';
 import { t } from 'i18next';
 import resolveCommand from '../resolveCommand.js';
 import {
@@ -236,6 +237,85 @@ export function showPanel(id, options = {}) {
     `ytark-panel-${node.id}`,
     !!options.update,
     { onDismiss: parent ? [deferred('YTARK_MENU_SHOW', { menuId: parent.id, focusId: node.id, update: true })] : undefined },
+  );
+}
+
+function diagnosticsRow(id, title, subtitle, action, parameters = {}) {
+  const row = buttonItem({ title, subtitle }, { icon: 'DESCRIPTION' }, [custom(action, parameters)]);
+  row.compactLinkRenderer.itemId = `ytark-diagnostics-${id}`;
+  return row;
+}
+
+function returnToDiagnosticsCommands() {
+  return [deferred('YTARK_PANEL_SHOW', { id: 'about.diagnostics', update: true })];
+}
+
+/** Readable, scrollable browser-only report. No file, clipboard, URL or native bridge is assumed. */
+export function showBrowserDiagnosticsReport(sessionIndex = null) {
+  const snapshot = browserDiagnosticSnapshot();
+  let session = null;
+  if (Number.isInteger(sessionIndex) && sessionIndex >= 0 && sessionIndex < snapshot.sessions.length) {
+    session = snapshot.sessions[sessionIndex];
+  }
+  const report = browserDiagnostics.report(session);
+  const content = scrollPaneRenderer(report.split('\n').map((line) => overlayMessageRenderer(line || ' ')));
+  return showModal(
+    { title: 'Browser diagnostics report', subtitle: 'On-device text · browser scope only' },
+    content,
+    'ytark-browser-diagnostics-report',
+    false,
+    { onDismiss: returnToDiagnosticsCommands() },
+  );
+}
+
+export function showBrowserDiagnosticSessions() {
+  const snapshot = browserDiagnosticSnapshot();
+  const rows = snapshot.sessions.map((session, index) => diagnosticsRow(
+    `session-${index}`,
+    `Sample ${snapshot.sessions.length - index} · ${session.capture === 'launch' ? 'launch capture' : 'partial'}`,
+    `${session.status} · ${session.events.length} event(s) · ${session.clockDomain} clock`,
+    'YTARK_DIAGNOSTICS_REPORT', { index },
+  ));
+  if (!rows.length) rows.push(overlayMessageRenderer(
+    snapshot.storageState === 'future-schema'
+      ? 'Saved browser diagnostics use a newer schema and cannot be displayed.'
+      : snapshot.storageState === 'corrupt' || snapshot.storageState === 'oversized'
+        ? 'Saved browser diagnostics are unreadable or exceed the supported size. Clear diagnostic data to remove them.'
+        : snapshot.storageState === 'unavailable'
+          ? 'Local browser diagnostic storage is unavailable.'
+          : 'No browser diagnostic sessions are available yet.',
+  ));
+  const back = buttonItem({ title: 'Back to Diagnostics', subtitle: 'Return to the scope controls' }, { icon: 'ARROW_BACK' },
+    [POPUP_BACK, deferred('YTARK_PANEL_SHOW', { id: 'about.diagnostics', update: true })]);
+  back.compactLinkRenderer.itemId = 'ytark-diagnostics-sessions-back';
+  rows.push(back);
+  return showModal(
+    { title: 'Recent browser sessions', subtitle: 'Separate local samples; no cross-session timing arithmetic' },
+    overlayPanelItemListRenderer(rows, 0),
+    'ytark-browser-diagnostics-sessions',
+    false,
+    { onDismiss: returnToDiagnosticsCommands() },
+  );
+}
+
+export function showBrowserDiagnosticsClearConfirm() {
+  const rows = [
+    overlayMessageRenderer('Clear only YTArk browser diagnostic reports and their active browser sample. Settings, cookies, accounts, playback state, app cache, downloads and native updater reports are not changed.'),
+    (() => {
+      const row = buttonItem({ title: 'Clear browser diagnostic data', subtitle: 'This cannot be undone.' }, { icon: 'DELETE' },
+        [POPUP_BACK, deferred('YTARK_DIAGNOSTICS_CLEAR')]);
+      row.compactLinkRenderer.itemId = 'ytark-diagnostics-clear-confirm';
+      return row;
+    })(),
+    buttonItem({ title: 'Cancel', subtitle: 'Keep the saved browser reports' }, { icon: 'CLOSE' },
+      [POPUP_BACK, deferred('YTARK_PANEL_SHOW', { id: 'about.diagnostics', update: true })]),
+  ];
+  return showModal(
+    { title: 'Clear browser diagnostics?', subtitle: 'Android reports are cleared separately in Updates > Diagnostics' },
+    overlayPanelItemListRenderer(rows, 2),
+    'ytark-browser-diagnostics-clear-confirm',
+    false,
+    { onDismiss: returnToDiagnosticsCommands() },
   );
 }
 
