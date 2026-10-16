@@ -142,12 +142,18 @@ class UpdateActivity : Activity() {
     private fun renderInstallPermissionState(message: String? = null) {
         val granted = InstallAuthorizationAccess.granted(this)
         val allowed = granted == true
+        val diagnose = InstallAuthorizationAccess.diagnose(this)
+        val canHold = InstallAuthorizationAccess.canHoldAuthorization(this)
         installPermissionInfo.text = message ?: when {
             permissionRouteInFlight -> "Android install settings are open. Choose Allow for YTArk or press Back. Nothing is downloaded or installed by this request."
             allowed -> "Install authorization is available for YTArk. Opening Updates never starts a download or install."
+            // The installed build's own configuration decides this: Android
+            // refuses a package that targets below API 26 or does not request
+            // the permission, and no settings screen can change that.
+            !canHold -> InstallCapabilityPolicy.explanation(diagnose)
             granted == false && android.os.Build.VERSION.SDK_INT in 24..25 -> "Android's legacy install-from-unknown-sources setting is off. Checks and release notes remain available."
-            granted == false -> "Android requires YTArk's install authorization before a verified update can be handed to its installer. Nothing is downloaded or installed by this request."
-            else -> "YTArk could not verify install authorization. Checks and release notes remain available; use Allow installs to open Android Settings."
+            granted == false -> InstallCapabilityPolicy.explanation(diagnose) + InstallAuthorizationAccess.appOpNote(this)
+            else -> InstallCapabilityPolicy.explanation(diagnose)
         }
         allowInstallsButton.visibility = if (allowed) View.GONE else View.VISIBLE
         allowInstallsButton.isEnabled = !permissionRouteInFlight
@@ -159,9 +165,13 @@ class UpdateActivity : Activity() {
         if (!freshEntryPending) return
         freshEntryPending = false
         val granted = InstallAuthorizationAccess.granted(this)
-        val shouldRequest = InstallPermissionEntryPolicy.shouldRequestOnEntry(
-            true, granted, permissionEntryAttempted, permissionRouteInFlight,
-        )
+        // A fresh entry asks once, but only when Android could actually hold the
+        // authorization for this installed build. Sending the user to a switch
+        // that falls back by itself is not a request, it is a loop.
+        val shouldRequest = InstallAuthorizationAccess.canHoldAuthorization(this) &&
+            InstallPermissionEntryPolicy.shouldRequestOnEntry(
+                true, granted, permissionEntryAttempted, permissionRouteInFlight,
+            )
         // Mark this page-entry session before posting work. Recreation, focus,
         // repaint and later onResume calls must never start a second route.
         permissionEntryAttempted = true
@@ -193,20 +203,29 @@ class UpdateActivity : Activity() {
             checkButton.requestFocus()
             return
         }
-        val route = InstallAuthorizationAccess.settingsIntent(this)
-        if (route == null) {
-            renderInstallPermissionState("This Android version has no supported install-authorization screen. Check the TV's Security settings; update checks and release notes remain available.")
+        if (!InstallAuthorizationAccess.canHoldAuthorization(this)) {
+            // Answer the actual question instead of reopening the screen that
+            // cannot keep the switch on.
+            renderInstallPermissionState(
+                InstallCapabilityPolicy.explanation(InstallAuthorizationAccess.diagnose(this)),
+            )
             allowInstallsButton.isEnabled = true
             return
         }
         permissionRouteInFlight = true
         renderInstallPermissionState()
-        try {
-            startActivityForResult(route, ENTRY_PERMISSION)
-        } catch (_: Exception) {
-            permissionRouteInFlight = false
-            renderInstallPermissionState("Android could not open the install-authorization screen. Check this TV's Security settings, then select Allow installs to retry.")
-            allowInstallsButton.isEnabled = true
+        when (InstallAuthorizationAccess.openSettings(this, ENTRY_PERMISSION)) {
+            null -> Unit
+            InstallAuthorizationAccess.OPEN_UNAVAILABLE -> {
+                permissionRouteInFlight = false
+                renderInstallPermissionState("This Android version has no supported install-authorization screen. Check this TV's Security settings; update checks and release notes remain available.")
+                allowInstallsButton.isEnabled = true
+            }
+            else -> {
+                permissionRouteInFlight = false
+                renderInstallPermissionState("Android could not open the install-authorization screen. Check this TV's Security settings, then select Allow installs to retry.")
+                allowInstallsButton.isEnabled = true
+            }
         }
     }
 
@@ -215,10 +234,12 @@ class UpdateActivity : Activity() {
         if (!permissionRouteInFlight) return
         permissionRouteInFlight = false
         val granted = InstallAuthorizationAccess.granted(this)
-        renderInstallPermissionState(when (granted) {
-            true -> "Install authorization is now allowed for YTArk. This does not start a download or installation."
-            false -> "Install authorization is still off. You can check for updates and read notes; select Allow installs to try again."
-            null -> "YTArk could not verify install authorization after returning. Checks and release notes remain available; select Allow installs to retry."
+        val canHold = InstallAuthorizationAccess.canHoldAuthorization(this)
+        renderInstallPermissionState(when {
+            granted == true -> "Install authorization is now allowed for YTArk. This does not start a download or installation."
+            !canHold -> InstallCapabilityPolicy.explanation(InstallAuthorizationAccess.diagnose(this))
+            granted == false -> "Install authorization is still off. You can check for updates and read notes; select Allow installs to try again."
+            else -> "YTArk could not verify install authorization after returning. Checks and release notes remain available; select Allow installs to retry."
         })
         focusId = if (granted == true) 101 else 108
         window?.decorView?.post {

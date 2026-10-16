@@ -40,6 +40,36 @@ fun main() {
     for(phase in listOf(UpdatePhase.Checking,UpdatePhase.Failed,UpdatePhase.AwaitingPermission,UpdatePhase.AwaitingInstaller)) {
         check(UpdatePresentation.status(UpdateState(phase=phase,message="Guidance"))=="Guidance")
     }
+    // Install authorization: the honest reason Android gives, never a made-up one.
+    check(InstallCapabilityPolicy.state(34,true,true)==InstallCapabilityPolicy.STATE_GRANTED)
+    check(InstallCapabilityPolicy.state(34,true,false)==InstallCapabilityPolicy.STATE_NOT_AUTHORIZED)
+    check(InstallCapabilityPolicy.state(22,true,false)==InstallCapabilityPolicy.STATE_TARGET_TOO_OLD)
+    check(InstallCapabilityPolicy.state(25,true,true)==InstallCapabilityPolicy.STATE_TARGET_TOO_OLD)
+    check(InstallCapabilityPolicy.state(26,true,true)==InstallCapabilityPolicy.STATE_GRANTED)
+    check(InstallCapabilityPolicy.state(34,false,false)==InstallCapabilityPolicy.STATE_PERMISSION_NOT_DECLARED)
+    check(InstallCapabilityPolicy.state(null,true,true)==InstallCapabilityPolicy.STATE_UNREADABLE)
+    check(InstallCapabilityPolicy.state(34,null,true)==InstallCapabilityPolicy.STATE_UNREADABLE)
+    check(InstallCapabilityPolicy.state(0,true,true)==InstallCapabilityPolicy.STATE_UNREADABLE)
+    check(InstallCapabilityPolicy.canHoldAuthorization(34,true))
+    check(!InstallCapabilityPolicy.canHoldAuthorization(22,true))
+    check(!InstallCapabilityPolicy.canHoldAuthorization(34,false))
+    check(!InstallCapabilityPolicy.canHoldAuthorization(null,true))
+    check(!InstallCapabilityPolicy.canHoldAuthorization(34,null))
+    for(state in listOf(InstallCapabilityPolicy.STATE_GRANTED,InstallCapabilityPolicy.STATE_TARGET_TOO_OLD,
+                        InstallCapabilityPolicy.STATE_PERMISSION_NOT_DECLARED,InstallCapabilityPolicy.STATE_NOT_AUTHORIZED,
+                        InstallCapabilityPolicy.STATE_UNREADABLE,"something-else")) {
+        check(InstallCapabilityPolicy.explanation(state).isNotBlank())
+    }
+    // The reason that a settings screen cannot repair is stated as such, and the
+    // unknown state never accuses the device or the profile.
+    check(InstallCapabilityPolicy.explanation(InstallCapabilityPolicy.STATE_TARGET_TOO_OLD).contains("below 8"))
+    check(!InstallCapabilityPolicy.explanation(InstallCapabilityPolicy.STATE_TARGET_TOO_OLD).contains("device policy"))
+    check(InstallCapabilityPolicy.explanation(InstallCapabilityPolicy.STATE_PERMISSION_NOT_DECLARED).contains("REQUEST_INSTALL_PACKAGES"))
+    check(!InstallCapabilityPolicy.explanation(InstallCapabilityPolicy.STATE_NOT_AUTHORIZED).contains("administrator"))
+    check(InstallCapabilityPolicy.settingsRoute(34,true)==InstallCapabilityPolicy.ROUTE_PACKAGE)
+    check(InstallCapabilityPolicy.settingsRoute(34,false)==InstallCapabilityPolicy.ROUTE_LIST)
+    check(InstallCapabilityPolicy.settingsRoute(25,true)==InstallPermissionEntryPolicy.ROUTE_SECURITY_SETTINGS)
+    check(InstallCapabilityPolicy.settingsRoute(23,true)==InstallPermissionEntryPolicy.ROUTE_SECURITY_SETTINGS)
     check(ReleaseHighlights.summary("3.2.0").length<=240)
     check(ReleaseHighlights.summary("v3.2.0")==ReleaseHighlights.summary("3.2.0"))
     check(ReleaseHighlights.summary("99.0.0")==ReleaseHighlights.FALLBACK)
