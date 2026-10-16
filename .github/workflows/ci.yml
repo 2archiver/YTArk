@@ -217,9 +217,12 @@ jobs:
           ANDROID_HOME: /usr/local/lib/android/sdk
           BUILD_TOOLS: "34.0.0"
         run: |
-          aapt="$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt"
-          test -x "$aapt"
           set -euo pipefail
+          aapt="$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt"
+          # Resolve aapt before anything else: build-tools are not on PATH here,
+          # so a bare `aapt` would fail as "command not found" (exit 127) with no
+          # hint about what is actually wrong.
+          test -x "$aapt" || { echo "::error title=Android build tools::aapt is missing: $aapt"; exit 1; }
           # The Settings "install unknown apps" switch can only stay on for a
           # package that Android 8+ will authorize. PackageManagerService
           # answers that question from the *packaged* manifest: the package must
@@ -236,7 +239,7 @@ jobs:
 
           base_json="$(python3 tools/apk_manifest.py inspect --apk base/cobalt-arm.apk --json)"
           base_target="$(printf '%s' "$base_json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_sdk"])')"
-          base_aapt_target="$(aapt dump badging base/cobalt-arm.apk | sed -n "s/^targetSdkVersion:'\([0-9]*\)'$/\1/p")"
+          base_aapt_target="$("$aapt" dump badging base/cobalt-arm.apk | sed -n "s/^targetSdkVersion:'\([0-9]*\)'$/\1/p")"
           test "$base_target" = "$base_aapt_target"
           base_facts="$(printf '%s' "$base_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("package=%s versionCode=%s minSdk=%s targetSdk=%s" % (d["package"], d["version_code"], d["min_sdk"], d["target_sdk"]))')"
           echo "Pinned ARMv7 Cobalt base: $base_facts (aapt agrees)" | tee -a "$GITHUB_STEP_SUMMARY"
@@ -244,7 +247,7 @@ jobs:
 
           candidate_json="$(python3 tools/apk_manifest.py inspect --apk work/ci-unsigned.apk --json)"
           candidate_target="$(printf '%s' "$candidate_json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_sdk"])')"
-          candidate_aapt_target="$(aapt dump badging work/ci-unsigned.apk | sed -n "s/^targetSdkVersion:'\([0-9]*\)'$/\1/p")"
+          candidate_aapt_target="$("$aapt" dump badging work/ci-unsigned.apk | sed -n "s/^targetSdkVersion:'\([0-9]*\)'$/\1/p")"
           test "$candidate_target" = "$candidate_aapt_target"
           candidate_facts="$(printf '%s' "$candidate_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); c=d["install_capability"]; print("package=%s versionCode=%s minSdk=%s targetSdk=%s installCapability=%s%s" % (d["package"], d["version_code"], d["min_sdk"], d["target_sdk"], "yes" if c["can_be_granted"] else "no", "(" + ",".join(c["reasons"]) + ")" if c["reasons"] else ""))')"
           echo "Repacked candidate: $candidate_facts (aapt agrees)" | tee -a "$GITHUB_STEP_SUMMARY"

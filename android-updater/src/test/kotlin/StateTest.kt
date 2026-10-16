@@ -70,6 +70,10 @@ fun main() {
     check(InstallCapabilityPolicy.settingsRoute(34,false)==InstallCapabilityPolicy.ROUTE_LIST)
     check(InstallCapabilityPolicy.settingsRoute(25,true)==InstallPermissionEntryPolicy.ROUTE_SECURITY_SETTINGS)
     check(InstallCapabilityPolicy.settingsRoute(23,true)==InstallPermissionEntryPolicy.ROUTE_SECURITY_SETTINGS)
+    // The AppOp name the TV's switch writes is @hide in the public SDK, so the
+    // build pins the documented string; a typo here would silently read nothing.
+    check(InstallCapabilityPolicy.INSTALL_APP_OP=="android:request_install_packages")
+    check(InstallCapabilityPolicy.INSTALL_APP_OP.startsWith("android:"))
     check(ReleaseHighlights.summary("3.2.0").length<=240)
     check(ReleaseHighlights.summary("v3.2.0")==ReleaseHighlights.summary("3.2.0"))
     check(ReleaseHighlights.summary("99.0.0")==ReleaseHighlights.FALLBACK)

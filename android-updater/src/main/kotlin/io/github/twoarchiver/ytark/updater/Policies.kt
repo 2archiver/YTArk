@@ -62,6 +62,16 @@ object InstallPermissionEntryPolicy {
 object InstallCapabilityPolicy {
     const val MIN_TARGET_SDK = 26
     const val REQUEST_INSTALL_PACKAGES = "android.permission.REQUEST_INSTALL_PACKAGES"
+    /**
+     * The internal AppOp name the TV's "install unknown apps" switch writes.
+     *
+     * The public SDK's field for this op is `@hide @SystemApi`, so it is absent
+     * from the `android.jar` a normal build compiles against: reading it is a
+     * compile error that only the full-sources CI build sees. The documented
+     * internal string is pinned here instead, and the host-JVM tests keep it
+     * pinned so a typo cannot silently read nothing.
+     */
+    const val INSTALL_APP_OP = "android:request_install_packages"
     const val STATE_GRANTED = "granted"
     const val STATE_TARGET_TOO_OLD = "target-too-old"
     const val STATE_PERMISSION_NOT_DECLARED = "permission-not-declared"

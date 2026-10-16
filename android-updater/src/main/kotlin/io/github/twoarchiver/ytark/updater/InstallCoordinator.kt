@@ -65,10 +65,10 @@ internal object InstallAuthorizationAccess {
         if (ops == null) null else {
             val uid = context.applicationInfo.uid
             if (Build.VERSION.SDK_INT >= 29) {
-                ops.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_REQUEST_INSTALL_PACKAGES, uid, context.packageName)
+                ops.unsafeCheckOpNoThrow(InstallCapabilityPolicy.INSTALL_APP_OP, uid, context.packageName)
             } else {
                 @Suppress("DEPRECATION")
-                ops.checkOpNoThrow(AppOpsManager.OPSTR_REQUEST_INSTALL_PACKAGES, uid, context.packageName)
+                ops.checkOpNoThrow(InstallCapabilityPolicy.INSTALL_APP_OP, uid, context.packageName)
             }
         }
     } catch (_: Exception) {
