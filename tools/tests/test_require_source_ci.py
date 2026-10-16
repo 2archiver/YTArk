@@ -108,6 +108,21 @@ class RequireSourceCiTests(unittest.TestCase):
                         timeout_seconds=120,
                     )
 
+    def test_newer_active_run_times_out_instead_of_accepting_older_success(self):
+        clock = Clock()
+        older_success = run(id=8122, run_number=70)
+        newer_active = run(id=8124, run_number=72, status="queued", conclusion=None)
+        with self.assertRaisesRegex(require_source_ci.SourceValidationError, "still in progress"):
+            require_source_ci.require_source_ci(
+                SHA,
+                api=lambda *_: {"workflow_runs": [older_success, newer_active]},
+                monotonic=clock.monotonic,
+                sleep=clock.sleep,
+                timeout_seconds=2,
+                poll_seconds=1,
+            )
+        self.assertEqual(clock.value, 2.0)
+
     def test_completed_failure_fails_closed_without_waiting(self):
         with self.assertRaisesRegex(require_source_ci.SourceValidationError, "without success"):
             require_source_ci.require_source_ci(
