@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import io
+import shutil
+import tempfile
 import json
 import os
 import subprocess
@@ -14,6 +17,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
 
+import apk_manifest
 import build_changelog
 import fetch_base_apks
 import prepare_update_smoke
@@ -510,6 +514,122 @@ arm64-v8a (a 64-bit-only system) cannot install this release.
             prepare_update_smoke.official_asset_url(
                 "v2.0.3-ytark.15", name, "https://github.com.evil.example/" + name
             )
+
+
+
+
+def _packaged_apk(node: apk_manifest.NodeSpec, directory: str) -> str:
+    """Write a real APK-like zip whose manifest is the encoded node tree."""
+    payload = io.BytesIO()
+    with zipfile.ZipFile(payload, "w") as archive:
+        archive.writestr("AndroidManifest.xml", apk_manifest.encode_axml(node))
+        archive.writestr("classes.dex", b"dex\n035\x00")
+    path = os.path.join(directory, "candidate.apk")
+    with open(path, "wb") as handle:
+        handle.write(payload.getvalue())
+    return path
+
+
+def _release_manifest(directory: str, *, target_sdk: int = 34,
+                      install_permission=None, extra_permission_attributes=(),
+                      exported_updates_screen: bool = False) -> str:
+    config = validate_release.load_config()
+    package = validate_release.APP_ID
+    permissions = [apk_manifest.REQUEST_INSTALL_PACKAGES,
+                   apk_manifest.RECEIVE_BOOT_COMPLETED] \
+        if install_permission is None else install_permission
+    updater = "io.github.twoarchiver.ytark.updater"
+    node = apk_manifest.NodeSpec("manifest", (
+        apk_manifest.attr("package", package, android=False),
+        apk_manifest.attr("versionCode", int(config["VERSION_CODE"])),
+        apk_manifest.attr("versionName", config["VERSION_NAME"]),
+    ), (
+        apk_manifest.NodeSpec("uses-sdk", (
+            apk_manifest.attr("minSdkVersion", 24),
+            apk_manifest.attr("targetSdkVersion", target_sdk))),
+        *[apk_manifest.NodeSpec("uses-permission", tuple(
+            [apk_manifest.attr("name", permission)] + list(attributes)))
+          for permission, attributes in (
+              [(permissions[0], extra_permission_attributes)] + [(p, ()) for p in permissions[1:]])
+          ],
+        apk_manifest.NodeSpec("uses-permission", (
+            apk_manifest.attr("name", apk_manifest.RECEIVE_BOOT_COMPLETED),)),
+        apk_manifest.NodeSpec("application", (), (
+            apk_manifest.NodeSpec("activity", (
+                apk_manifest.attr("name", f"{updater}.UpdateActivity"),
+                apk_manifest.attr("exported", exported_updates_screen))),
+            apk_manifest.NodeSpec("service", (
+                apk_manifest.attr("name", f"{updater}.UpdateCheckJobService"),
+                apk_manifest.attr("exported", False),
+                apk_manifest.attr("permission", apk_manifest.BIND_JOB_SERVICE))),
+            apk_manifest.NodeSpec("provider", (
+                apk_manifest.attr("name", f"{updater}.UpdateBootstrapProvider"),
+                apk_manifest.attr("authorities", f"{package}.ytarkupdater"),
+                apk_manifest.attr("exported", False))),
+            apk_manifest.NodeSpec("provider", (
+                apk_manifest.attr("name", f"{updater}.PendingUpdateProvider"),
+                apk_manifest.attr("authorities", f"{package}.ytarkupdater.files"),
+                apk_manifest.attr("exported", False),
+                apk_manifest.attr("grantUriPermissions", True)), (
+                apk_manifest.NodeSpec("grant-uri-permission", (
+                    apk_manifest.attr("path", "/update.apk"),)),)),
+        )),
+    ))
+    return _packaged_apk(node, directory)
+
+
+class PackagedManifestContractTests(unittest.TestCase):
+    """The compiled manifest, not the source, decides install authorization."""
+
+    def setUp(self):
+        self.directory = tempfile.mkdtemp(prefix="ytark-packaged-")
+        self.addCleanup(lambda: shutil.rmtree(self.directory, ignore_errors=True))
+
+    def test_a_compatible_package_passes(self):
+        facts = validate_release.validate_packaged_manifest(
+            _release_manifest(self.directory))
+        self.assertEqual(facts.package, validate_release.APP_ID)
+        self.assertTrue(facts.install_capability()["can_be_granted"])
+
+    def test_a_pre_android_8_target_is_rejected(self):
+        path = _release_manifest(self.directory, target_sdk=25)
+        with self.assertRaisesRegex(ValueError, "below the API 26"):
+            validate_release.validate_packaged_manifest(path)
+
+    def test_a_missing_declaration_is_rejected(self):
+        # REQUEST_INSTALL_PACKAGES replaced by an unrelated permission.
+        path = _release_manifest(
+            self.directory,
+            install_permission=["android.permission.INTERNET",
+                                apk_manifest.RECEIVE_BOOT_COMPLETED])
+        with self.assertRaisesRegex(ValueError, "request-install-packages-not-declared"):
+            validate_release.validate_packaged_manifest(path)
+
+    def test_an_sdk_capped_declaration_is_rejected(self):
+        path = _release_manifest(
+            self.directory,
+            extra_permission_attributes=(apk_manifest.attr("maxSdkVersion", 22),))
+        with self.assertRaisesRegex(ValueError, "maxSdkVersion=22"):
+            validate_release.validate_packaged_manifest(path)
+
+    def test_a_public_updates_screen_is_rejected(self):
+        path = _release_manifest(self.directory, exported_updates_screen=True)
+        with self.assertRaisesRegex(ValueError, "non-exported"):
+            validate_release.validate_packaged_manifest(path)
+
+    def test_the_audit_reports_an_unusable_package_without_raising(self):
+        path = _release_manifest(self.directory, target_sdk=22)
+        result = validate_release.audit_packaged_manifest(path)
+        self.assertFalse(result["capability"]["can_be_granted"])
+        with self.assertRaises(ValueError):
+            validate_release.audit_packaged_manifest(path, require_capability=True)
+
+    def test_the_audit_rejects_a_package_that_is_not_ytark(self):
+        path = str(Path(__file__).resolve().parent / "data" / "apk" / "AndroidManifest_ShortName.apk")
+        with self.assertRaisesRegex(ValueError, "Expected package"):
+            validate_release.audit_packaged_manifest(path, expect_package=validate_release.APP_ID)
+        result = validate_release.audit_packaged_manifest(path)
+        self.assertEqual(result["facts"].target_sdk, 14)
 
 
 if __name__ == "__main__":

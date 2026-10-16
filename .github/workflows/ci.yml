@@ -188,6 +188,86 @@ jobs:
           set -euo pipefail
           PYTHONPATH=tools python3 -u -c 'from dex_contract import verify_apk_dex; verify_apk_dex("work/ci-unsigned.apk")' 2>&1 | tee "$RUNNER_TEMP/dex-contract.log"
 
+      - name: Verify the packaged manifest and install authorization
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ANDROID_HOME: /usr/local/lib/android/sdk
+          BUILD_TOOLS: "34.0.0"
+        run: |
+          aapt="$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt"
+          test -x "$aapt"
+          set -euo pipefail
+          # The Settings "install unknown apps" switch can only stay on for a
+          # package that Android 8+ will authorize. PackageManagerService
+          # answers that question from the *packaged* manifest: the package must
+          # target API 26 or newer and declare REQUEST_INSTALL_PACKAGES. A
+          # source-level grep cannot see either, and the standalone updater
+          # manifest is not the host APK's manifest, so the compiled bytes of
+          # this candidate are parsed here, before anything is signed.
+          #
+          # tools/apk_manifest.py reads the binary manifest itself, so the same
+          # check runs in the unit suite with no SDK at all. Here aapt stays the
+          # reference reader as well: both must agree about identity and target
+          # SDK, so a bug in either reader is caught instead of shipped.
+          echo "### Packaged manifest and install authorization" >> "$GITHUB_STEP_SUMMARY"
+
+          base_json="$(python3 tools/apk_manifest.py inspect --apk base/cobalt-arm.apk --json)"
+          base_target="$(printf '%s' "$base_json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_sdk"])')"
+          base_aapt_target="$(aapt dump badging base/cobalt-arm.apk | sed -n "s/^targetSdkVersion:'\([0-9]*\)'$/\1/p")"
+          test "$base_target" = "$base_aapt_target"
+          base_facts="$(printf '%s' "$base_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); print("package=%s versionCode=%s minSdk=%s targetSdk=%s" % (d["package"], d["version_code"], d["min_sdk"], d["target_sdk"]))')"
+          echo "Pinned ARMv7 Cobalt base: $base_facts (aapt agrees)" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "::notice title=YTArk pinned base manifest::source=reisxd/TizenTubeCobalt@$BASE_TAG $base_facts"
+
+          candidate_json="$(python3 tools/apk_manifest.py inspect --apk work/ci-unsigned.apk --json)"
+          candidate_target="$(printf '%s' "$candidate_json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["target_sdk"])')"
+          candidate_aapt_target="$(aapt dump badging work/ci-unsigned.apk | sed -n "s/^targetSdkVersion:'\([0-9]*\)'$/\1/p")"
+          test "$candidate_target" = "$candidate_aapt_target"
+          candidate_facts="$(printf '%s' "$candidate_json" | python3 -c 'import json,sys; d=json.load(sys.stdin); c=d["install_capability"]; print("package=%s versionCode=%s minSdk=%s targetSdk=%s installCapability=%s%s" % (d["package"], d["version_code"], d["min_sdk"], d["target_sdk"], "yes" if c["can_be_granted"] else "no", "(" + ",".join(c["reasons"]) + ")" if c["reasons"] else ""))')"
+          echo "Repacked candidate: $candidate_facts (aapt agrees)" | tee -a "$GITHUB_STEP_SUMMARY"
+          echo "::notice title=YTArk candidate manifest::file=work/ci-unsigned.apk $candidate_facts"
+
+          # Fail closed on wrong identity, a target below API 26, a missing or
+          # SDK-capped permission, a public Updates screen, an obsolete launcher
+          # proxy or provider authorities that do not match the package.
+          python3 tools/apk_manifest.py check \
+            --apk work/ci-unsigned.apk --package "$APP_ID" \
+            --version-code "$VERSION_CODE" --version-name "$VERSION_NAME" \
+            2>&1 | tee -a "$GITHUB_STEP_SUMMARY" \
+            || { echo "::error title=Packaged manifest contract::The repacked APK does not satisfy the YTArk install-authorization contract"; exit 1; }
+          python3 tools/validate_release.py audit-apk \
+            --apk work/ci-unsigned.apk --expect-package "$APP_ID" --require-capability
+
+          # Audit the artefact users actually have. This is informational for a
+          # pull request (the previous release is immutable), but it tells the
+          # maintainer immediately whether the shipped package can be granted
+          # install authorization at all, and it is the reference for whether an
+          # in-place upgrade from it can be authorized on the device.
+          published=""
+          mkdir -p "$RUNNER_TEMP/ytark-published"
+          # Read-only: the latest release metadata, then the asset URL it names.
+          # ci.yml never publishes, tags or edits a release.
+          if gh api "repos/$GITHUB_REPOSITORY/releases/latest" \
+               > "$RUNNER_TEMP/ytark-published/latest-release.json" 2>/dev/null; then
+            published_url="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1], encoding="utf-8")); print(next((a["browser_download_url"] for a in d.get("assets", []) if a["name"].endswith("-armv7.apk")), ""))' "$RUNNER_TEMP/ytark-published/latest-release.json")"
+            if [ -n "$published_url" ]; then
+              curl -fsSL --retry 3 "$published_url" -o "$RUNNER_TEMP/ytark-published/published-armv7.apk"
+              published="$RUNNER_TEMP/ytark-published/published-armv7.apk"
+            fi
+          fi
+          if [ -n "$published" ]; then
+            published_facts="$(python3 tools/apk_manifest.py inspect --apk "$published" --json | python3 -c 'import json,sys; d=json.load(sys.stdin); c=d["install_capability"]; print("package=%s versionCode=%s minSdk=%s targetSdk=%s installCapability=%s%s" % (d["package"], d["version_code"], d["min_sdk"], d["target_sdk"], "yes" if c["can_be_granted"] else "no", "(" + ",".join(c["reasons"]) + ")" if c["reasons"] else ""))')"
+            echo "Latest published APK: $published_facts" | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "::notice title=YTArk published APK manifest::file=$(basename "$published") $published_facts"
+            if ! python3 tools/validate_release.py audit-apk --apk "$published" \
+                 --expect-package "$APP_ID" --require-capability >/dev/null 2>&1; then
+              echo "::warning title=Published APK install authorization::${published_facts} — Android cannot grant this package install authorization (third-party in-place updates from it cannot be authorized); users of this build need the corrected APK"
+            fi
+          else
+            echo "The latest published ARMv7 APK could not be downloaded; its manifest was not audited here." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=Published APK not audited::download of the latest release asset failed in this run"
+          fi
+
       - name: Surface repack integration diagnostics
         if: failure()
         run: python3 tools/ci_diagnostics.py "$RUNNER_TEMP/repack.log" "$RUNNER_TEMP/dex-contract.log"

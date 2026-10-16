@@ -623,6 +623,77 @@ def validate_updater_launcher(tree: str) -> None:
 
 MIN_TARGET_SDK_FOR_REQUEST_INSTALL_PACKAGES = 26
 
+def packaged_manifest_expectation(config: dict | None = None):
+    """The manifest contract every published YTArk package must satisfy."""
+    import apk_manifest
+    config = config or load_config()
+    return apk_manifest.Expectation(
+        package=APP_ID,
+        version_code=int(config["VERSION_CODE"]),
+        version_name=config["VERSION_NAME"],
+    )
+
+
+def validate_packaged_manifest(path: str, config: dict | None = None):
+    """Inspect the compiled manifest inside a packaged APK without the SDK.
+
+    ``aapt`` remains the reference tool above, but a release must not depend on
+    a single reader for the capability that decides whether Android can ever
+    grant the in-app updater install authorization. This reads the binary
+    manifest itself and fails closed on:
+
+    * a package id, versionCode or versionName that differs from release metadata;
+    * a target SDK below API 26, where Android refuses the authorization outright;
+    * an absent or SDK-capped ``REQUEST_INSTALL_PACKAGES`` declaration;
+    * an updater screen that is not private, or an obsolete launcher proxy;
+    * provider authorities that do not match the package that hosts them.
+    """
+    import apk_manifest
+    facts = apk_manifest.inspect_apk(path)
+    problems = apk_manifest.check_facts(facts, packaged_manifest_expectation(config))
+    capability = facts.install_capability()
+    if problems:
+        raise ValueError(
+            "Packaged AndroidManifest.xml does not satisfy the YTArk contract: "
+            + "; ".join(problems))
+    print(
+        f"Verified packaged manifest: {facts.package} {facts.version_name} "
+        f"({facts.version_code}), target SDK {facts.target_sdk}, install "
+        f"authorization can be granted (target >= "
+        f"{apk_manifest.MIN_TARGET_SDK_FOR_INSTALL_CAPABILITY})"
+    )
+    return facts
+
+
+def audit_packaged_manifest(path: str, expect_package: str | None = None,
+                            require_capability: bool = False) -> dict:
+    """Report a packaged manifest's install capability, for any APK.
+
+    Used on the published artefact, not only on freshly built bytes: a package
+    that Android will never authorize (a pre-API-26 target, a missing or capped
+    declaration) is a finding in its own right, whether or not it was built
+    here.
+    """
+    import apk_manifest
+    facts = apk_manifest.inspect_apk(path)
+    capability = facts.install_capability()
+    if expect_package and facts.package != expect_package:
+        raise ValueError(
+            f"Expected package {expect_package}, found {facts.package} in {path}")
+    verdict = (
+        f"package {facts.package} {facts.version_name} ({facts.version_code}), "
+        f"min SDK {facts.min_sdk}, target SDK {facts.target_sdk}, install capability "
+        f"{'grantable' if capability['can_be_granted'] else 'NOT grantable'}"
+        + (f" ({', '.join(capability['reasons'])})" if capability["reasons"] else "")
+    )
+    print(f"Audited {path}: {verdict}")
+    if require_capability and not capability["can_be_granted"]:
+        raise ValueError(
+            "Android cannot grant this package the install-unknown-apps "
+            f"capability: {verdict}")
+    return {"facts": facts, "capability": capability}
+
+
 
 def validate_install_unknown_sources_target_sdk(badging: str) -> int:
     """API 26+ per-source authorization requires a target SDK of at least 26."""
@@ -717,6 +788,16 @@ def validate_apk(path: str, architecture: str, expected_cert_file: str,
         from dex_contract import verify_apk_dex
         verify_apk_dex(apk)
 
+
+    facts = validate_packaged_manifest(str(apk), config)
+    # Two independent readers must agree about the applied identity and target
+    # SDK; a disagreement means one of them is looking at the wrong bytes.
+    if facts.package != APP_ID or facts.version_code != int(config["VERSION_CODE"]):
+        raise ValueError("aapt and the manifest reader disagree about package identity")
+    if facts.target_sdk != target_sdk:
+        raise ValueError(
+            f"aapt reports target SDK {target_sdk} but the packaged manifest "
+            f"declares {facts.target_sdk}")
 
     validate_compiled_manifest(apk, aapt)
     manifest = run([aapt, "dump", "xmltree", str(apk), "AndroidManifest.xml"])
@@ -921,6 +1002,13 @@ def main() -> None:
     apk_parser.add_argument("--aapt", default="aapt")
     apk_parser.add_argument("--apksigner", default="apksigner")
 
+    audit_parser = commands.add_parser("audit-apk")
+    audit_parser.add_argument("--apk", required=True)
+    audit_parser.add_argument("--expect-package")
+    audit_parser.add_argument(
+        "--require-capability", action="store_true",
+        help="fail when Android could never grant install authorization")
+
     checksum_parser = commands.add_parser("check-checksums")
     checksum_parser.add_argument("--checksums", required=True)
     checksum_parser.add_argument("--armv7", required=True)
@@ -943,6 +1031,9 @@ def main() -> None:
             check_version(args.latest_json, args.releases_json)
         elif args.command == "check-apk":
             validate_apk(args.apk, args.architecture, args.cert_file, args.aapt, args.apksigner)
+        elif args.command == "audit-apk":
+            audit_packaged_manifest(args.apk, args.expect_package,
+                                   args.require_capability)
         elif args.command == "check-checksums":
             check_checksums(args.checksums, args.armv7, args.user_script)
         elif args.command == "check-base-checksums":
