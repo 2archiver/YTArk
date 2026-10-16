@@ -1,10 +1,6 @@
 # YTArk 3.7.0 candidate evidence report
 
-Status: **review candidate on `arena/df3b8e45-ytark`; not merged, tagged, or
-published.** The base is the current `v3.6.0` source. GitHub reports the stable
-`v3.6.0` release published at `2026-10-16T14:57:10Z`; a live release-list and
-remote-tag check found no `v3.7.0` release/tag or `s38` tag. No tag was created
-or moved for this candidate. Physical-TV checks are **NOT RUN**.
+Status: **review candidate in [PR #64](https://github.com/2archiver/YTArk/pull/64) from `arena/df3b8e45-ytark`; not merged, tagged, or published.** The base is the current `v3.6.0` source. GitHub reports the stable `v3.6.0` release published at `2026-10-16T14:57:10Z`; a live release-list and remote-tag check found no `v3.7.0` release/tag or `s38` tag. No tag was created or moved for this candidate. Physical-TV checks are **NOT RUN**.
 
 ## 1. Source findings, root cause, and uncertainty
 
@@ -138,12 +134,15 @@ latest-release route currently resolves to published `v3.6.0`.
   metadata: `3.7.0 (3070000)` exceeds the published `3.6.0 (3060000)` release.
 - `python3 tools/apk_manifest.py --self-test`, generated changelog/build-info
   checks, `bash -n tools/*.sh`, and `git diff --check`: passed.
-- The native runner was previously attempted with
+- The local native runner was attempted with
   `bash tools/test_android_updater.sh /tmp/ytark-updater-tests` and stopped at
-  `java: command not found`. Kotlin/Java updater tests are **NOT RUN**; the
-  Python runner-wiring/static checks are not a substitute for them.
-- Hosted PR CI and candidate-artifact workflow results are not represented as
-  local test results. See the PR checks for hosted results after they run.
+  `java: command not found`; native tests were not run locally. In hosted PR
+  run `38962454954` (head `0b1610484ae8d0cc5298f9ce05e032c77bcaeb2c`), Java 17
+  compilation and the Kotlin updater production-contract tests passed. The
+  hosted candidate build, package validation, and upload of a workflow artifact
+  (not a GitHub release) also passed. Source-validation run `38962454953` passed.
+  The first hosted attempt exposed a Kotlin test-assertion syntax error; follow-up
+  commit `0b16104` corrected it. Current PR checks are listed on [PR #64](https://github.com/2archiver/YTArk/pull/64).
 
 ## 5. Physical-device checklist — every item **NOT RUN**
 
