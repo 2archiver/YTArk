@@ -4,7 +4,7 @@ export const YTARK_CHANGELOG = {
   "schema": 1,
   "source": "CHANGELOG.md",
   "summaryFallback": "No short highlights available for this version.",
-  "sourceSha256": "4cdc077c3d6eab5ee7c2fd5781c7488c059160319979bd7cf48dcb98f259092f",
+  "sourceSha256": "88d73be9b44bd16ac9004759ed89320a0e29c66783f4bad1ba6cd58f6f72bb57",
   "entries": [
     {
       "version": "3.5.1",
@@ -18,7 +18,7 @@ export const YTARK_CHANGELOG = {
       "title": "YTArk 3.5.1",
       "releaseUrl": null,
       "facts": "Not yet published. Planned tag v3.5.1 · versionCode 3050100 · userscript s35 · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.",
-      "summary": "Honest install-authorization reporting and a faster startup path.",
+      "summary": "Honest install-authorization reporting, and an experimental faster startup.",
       "sections": [
         {
           "heading": "Fixed",
@@ -30,7 +30,7 @@ export const YTARK_CHANGELOG = {
         {
           "heading": "Changed",
           "items": [
-            "Faster startup defers optional work on one bounded schedule and falls back once.",
+            "Experimental faster startup shortens the optional readiness polling delay, with one timer and one fallback.",
             "Updates keeps authorization, download and installation apart; an installer opening is never reported as an installed update."
           ]
         },
