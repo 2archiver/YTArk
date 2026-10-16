@@ -17,6 +17,7 @@ POLICY_SOURCES=(
 )
 TEST_CLASSES=(
   InstallGateTest
+  InstallCapabilityPolicyTest
   InstallPermissionEntryTest
   InstallerResultPolicyTest
   NativeRoutePolicyTest

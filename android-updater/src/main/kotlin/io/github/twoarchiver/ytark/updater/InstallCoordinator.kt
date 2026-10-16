@@ -77,10 +77,15 @@ internal object InstallAuthorizationAccess {
 
     /** The reason code the Updates screen explains, so it can never guess. */
     fun diagnose(context: Context): String = InstallCapabilityPolicy.state(
+        Build.VERSION.SDK_INT,
         targetSdk(context),
         declaresInstallPermission(context),
         granted(context),
     )
+
+    /** Platform-appropriate explanation for the screen; never hand-assembled at call sites. */
+    fun explanation(context: Context): String =
+        InstallCapabilityPolicy.explanation(diagnose(context), Build.VERSION.SDK_INT)
 
     /** Factual app-op note for the screen. Diagnostics only, never a grant decision. */
     fun appOpNote(context: Context): String = when (appOpMode(context)) {
@@ -93,7 +98,9 @@ internal object InstallAuthorizationAccess {
     }
 
     fun canHoldAuthorization(context: Context): Boolean =
-        InstallCapabilityPolicy.canHoldAuthorization(targetSdk(context), declaresInstallPermission(context))
+        InstallCapabilityPolicy.canHoldAuthorization(
+            Build.VERSION.SDK_INT, targetSdk(context), declaresInstallPermission(context),
+        )
 
     /**
      * Android's own screens, most specific first. The package input of
@@ -117,29 +124,31 @@ internal object InstallAuthorizationAccess {
     fun settingsIntent(context: Context): Intent? = settingsIntents(context).firstOrNull()
 
     /**
-     * Starts the first screen the platform actually resolves. Returns `null` when
-     * one was opened, else a code for "nothing resolved" or "the platform refused".
+     * Launches the first screen the platform actually opens, and classifies the
+     * real launch outcomes. Resolution is deliberately *not* a precheck:
+     * package-visibility filtering on modern Android can make
+     * `resolveActivity` answer `null` for a screen that launches normally, so
+     * filtering on it would block usable routes. Returns `null` when a screen
+     * was opened, else `OPEN_UNAVAILABLE` (nothing to launch) or
+     * `OPEN_BLOCKED` (the platform refused).
      */
     fun openSettings(activity: Activity, requestCode: Int): String? {
-        val available = settingsIntents(activity).filter { resolvable(activity, it) }
-        if (available.isEmpty()) return OPEN_UNAVAILABLE
-        for (intent in available) {
+        val attempts = mutableListOf<String>()
+        for (intent in settingsIntents(activity)) {
             try {
                 activity.startActivityForResult(intent, requestCode)
+                attempts.add(InstallPermissionEntryPolicy.LAUNCH_OK)
                 return null
             } catch (_: SecurityException) {
-                continue
+                attempts.add(InstallPermissionEntryPolicy.LAUNCH_BLOCKED)
             } catch (_: Exception) {
-                continue
+                attempts.add(InstallPermissionEntryPolicy.LAUNCH_NOT_FOUND)
             }
         }
-        return OPEN_BLOCKED
-    }
-
-    private fun resolvable(context: Context, intent: Intent): Boolean = try {
-        intent.resolveActivity(context.packageManager) != null
-    } catch (_: Exception) {
-        false
+        return when (InstallPermissionEntryPolicy.openOutcome(attempts)) {
+            InstallPermissionEntryPolicy.OUTCOME_BLOCKED -> OPEN_BLOCKED
+            else -> OPEN_UNAVAILABLE
+        }
     }
 }
 
@@ -169,9 +178,14 @@ class InstallCoordinator(private val activity: UpdateActivity, private val updat
                 // honest reason and the manual upgrade path instead of a screen
                 // that cannot keep the switch on.
                 if (!InstallAuthorizationAccess.canHoldAuthorization(activity)) {
-                    updates.externalReturned(InstallCapabilityPolicy.explanation(InstallAuthorizationAccess.diagnose(activity)) + " Select Install update to retry once an allowed installer replaced this build.")
+                    updates.externalReturned(InstallAuthorizationAccess.explanation(activity) + " Select Install update to retry once an allowed installer replaced this build.")
                     return@markExternal
                 }
+                // The Updates entry route already owns a live system-screen
+                // detour: opening a second one would stack Settings screens and
+                // race their returns. Its return path re-reads the grant, and
+                // resumed() continues this pending install from there.
+                if (activity.permissionRouteInFlight) return@markExternal
                 when (InstallAuthorizationAccess.openSettings(activity, PERMISSION)) {
                     null -> Unit
                     InstallAuthorizationAccess.OPEN_UNAVAILABLE -> updates.externalReturned("Android has no install-authorization screen on this device. Check this TV's Security settings, then select Install update.")
@@ -227,10 +241,18 @@ class InstallCoordinator(private val activity: UpdateActivity, private val updat
         if (request == INSTALLER) updates.externalReturned("Installation was not confirmed. Select Install update to retry; the downloaded APK is kept.")
     }
     fun resumed(s: UpdateState) {
-        // Denial clears the pending request once. It does not reopen Settings by itself.
+        // Denial clears the pending request once, and continuation installs
+        // once — but only after the page genuinely departed for the system
+        // screen and came back. A state update while the activity is still
+        // visible is not an external return; acting on it would clear (or
+        // even continue) a pending install the user never left for.
         if (s.phase == UpdatePhase.AwaitingPermission && s.pendingIdentity != null && !flow) {
-            if (PendingInstallPolicy.mayContinue(s.pendingIdentity, s.candidate?.identity, permissionGranted(), activity.visible)) install(true)
-            else updates.clearPermissionRequest()
+            val departed = activity.departedForExternal
+            if (!departed) return
+            val granted = permissionGranted()
+            activity.departedForExternal = false
+            if (PendingInstallPolicy.mayContinue(s.pendingIdentity, s.candidate?.identity, granted, activity.visible, departed)) install(true)
+            else if (PendingInstallPolicy.shouldClear(s.pendingIdentity, s.candidate?.identity, granted, activity.visible, departed)) updates.clearPermissionRequest()
         }
     }
     fun stateChanged(s: UpdateState) { if (s.phase == UpdatePhase.Failed) flow = false; resumed(s) }

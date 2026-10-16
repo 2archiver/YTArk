@@ -74,6 +74,38 @@ fun main() {
     // build pins the documented string; a typo here would silently read nothing.
     check(InstallCapabilityPolicy.INSTALL_APP_OP=="android:request_install_packages")
     check(InstallCapabilityPolicy.INSTALL_APP_OP.startsWith("android:"))
+    // API 24–25 use the legacy global unknown-sources setting. The modern
+    // per-source prerequisites (target 26+, declared permission) belong to the
+    // Android 8+ route and must not classify or disable the legacy flow.
+    check(InstallCapabilityPolicy.state(24,36,true,false)==InstallCapabilityPolicy.STATE_NOT_AUTHORIZED)
+    check(InstallCapabilityPolicy.state(25,22,false,false)==InstallCapabilityPolicy.STATE_NOT_AUTHORIZED)
+    check(InstallCapabilityPolicy.state(24,36,true,true)==InstallCapabilityPolicy.STATE_GRANTED)
+    check(InstallCapabilityPolicy.state(25,36,true,null)==InstallCapabilityPolicy.STATE_UNREADABLE)
+    check(InstallCapabilityPolicy.state(23,36,true,true)==InstallCapabilityPolicy.STATE_UNREADABLE)
+    check(InstallCapabilityPolicy.state(26,25,true,false)==InstallCapabilityPolicy.STATE_TARGET_TOO_OLD)
+    check(InstallCapabilityPolicy.canHoldAuthorization(24,null,null))
+    check(InstallCapabilityPolicy.canHoldAuthorization(25,22,false))
+    check(!InstallCapabilityPolicy.canHoldAuthorization(23,36,true))
+    check(!InstallCapabilityPolicy.canHoldAuthorization(26,25,true))
+    check(!InstallCapabilityPolicy.canHoldAuthorization(34,36,false))
+    // The legacy explanation names the global setting, never the per-app switch.
+    check(InstallCapabilityPolicy.explanation(InstallCapabilityPolicy.STATE_NOT_AUTHORIZED,24).contains("global"))
+    check(!InstallCapabilityPolicy.explanation(InstallCapabilityPolicy.STATE_NOT_AUTHORIZED,24).contains("per-package system value"))
+    check(InstallCapabilityPolicy.explanation(InstallCapabilityPolicy.STATE_NOT_AUTHORIZED,34).contains("per-package system value"))
+    check(InstallCapabilityPolicy.explanation(InstallCapabilityPolicy.STATE_GRANTED,24)==InstallCapabilityPolicy.explanation(InstallCapabilityPolicy.STATE_GRANTED))
+    // Launch classification: resolution is not a precheck; only real attempts count.
+    check(InstallPermissionEntryPolicy.openOutcome(listOf(InstallPermissionEntryPolicy.LAUNCH_OK))==null)
+    check(InstallPermissionEntryPolicy.openOutcome(listOf(InstallPermissionEntryPolicy.LAUNCH_NOT_FOUND,InstallPermissionEntryPolicy.LAUNCH_BLOCKED))==InstallPermissionEntryPolicy.OUTCOME_BLOCKED)
+    check(InstallPermissionEntryPolicy.openOutcome(listOf(InstallPermissionEntryPolicy.LAUNCH_NOT_FOUND))==InstallPermissionEntryPolicy.OUTCOME_UNAVAILABLE)
+    check(InstallPermissionEntryPolicy.openOutcome(emptyList())==InstallPermissionEntryPolicy.OUTCOME_UNAVAILABLE)
+    check(InstallPermissionEntryPolicy.openOutcome(null)==InstallPermissionEntryPolicy.OUTCOME_UNAVAILABLE)
+    // A pending install continues or clears only after a genuine external return.
+    check(!PendingInstallPolicy.mayContinue("a","a",true,true,false))
+    check(!PendingInstallPolicy.shouldClear("a","a",false,true,false))
+    check(PendingInstallPolicy.shouldClear("a","a",false,true,true))
+    check(PendingInstallPolicy.shouldClear("a","b",true,true,true))
+    check(!PendingInstallPolicy.shouldClear(null,"a",true,true,true))
+    check(PendingInstallPolicy.mayContinue("a","a",true,true,true))
     check(ReleaseHighlights.summary("3.2.0").length<=240)
     check(ReleaseHighlights.summary("v3.2.0")==ReleaseHighlights.summary("3.2.0"))
     check(ReleaseHighlights.summary("99.0.0")==ReleaseHighlights.FALLBACK)
@@ -82,5 +114,5 @@ fun main() {
     check(UpdatePresentation.releaseDetails("# Notes\n- **Clear** <b>text</b> &amp; [link](https://example.com)<!--hidden-->")=="Notes\n• Clear text & link")
     check(UpdatePresentation.releaseDetails("")=="No release notes provided.")
     println("Kotlin presentation/highlights tests passed.")
-    println("Kotlin state/scheduling/permission identity tests passed (17 assertions).")
+    println("Kotlin state/scheduling/permission identity/capability tests passed.")
 }

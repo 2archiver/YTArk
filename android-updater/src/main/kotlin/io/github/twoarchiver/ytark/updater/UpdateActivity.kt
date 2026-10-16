@@ -36,7 +36,15 @@ class UpdateActivity : Activity() {
     private var focusId=101
     private var freshEntryPending=false
     private var permissionEntryAttempted=false
-    private var permissionRouteInFlight=false
+    internal var permissionRouteInFlight=false; private set
+    /**
+     * True once the page has genuinely departed for an external system screen
+     * (permission Settings or the installer) while a route was pending. A
+     * repaint, focus change or state notification while still visible never
+     * sets it; returning consumers clear it. Survives recreation via the
+     * saved instance state.
+     */
+    internal var departedForExternal=false
     private val observer: (UpdateState)->Unit = { s -> render(s); installer.stateChanged(s) }
     override fun onCreate(saved: Bundle?) {
         setTheme(android.R.style.Theme_Material_NoActionBar)
@@ -46,6 +54,7 @@ class UpdateActivity : Activity() {
         focusId=saved?.getInt("focus",101) ?: 101
         permissionEntryAttempted=saved?.getBoolean("permission_entry_attempted",false) ?: false
         permissionRouteInFlight=saved?.getBoolean("permission_route_in_flight",false) ?: false
+        departedForExternal=saved?.getBoolean("departed_for_external",false) ?: false
         freshEntryPending=saved?.getBoolean("fresh_entry_pending",saved==null) ?: (saved==null)
         val scroll=ScrollView(this).apply { isFillViewport=true; setBackgroundColor(NativeThemePolicy.background()) }
         val body=LinearLayout(this).apply { orientation=LinearLayout.VERTICAL; setPadding(dp(32),dp(24),dp(32),dp(24)) }
@@ -147,17 +156,30 @@ class UpdateActivity : Activity() {
         installPermissionInfo.text = message ?: when {
             permissionRouteInFlight -> "Android install settings are open. Choose Allow for YTArk or press Back. Nothing is downloaded or installed by this request."
             allowed -> "Install authorization is available for YTArk. Opening Updates never starts a download or install."
-            // The installed build's own configuration decides this: Android
-            // refuses a package that targets below API 26 or does not request
-            // the permission, and no settings screen can change that.
-            !canHold -> InstallCapabilityPolicy.explanation(diagnose)
-            granted == false && android.os.Build.VERSION.SDK_INT in 24..25 -> "Android's legacy install-from-unknown-sources setting is off. Checks and release notes remain available."
-            granted == false -> InstallCapabilityPolicy.explanation(diagnose) + InstallAuthorizationAccess.appOpNote(this)
-            else -> InstallCapabilityPolicy.explanation(diagnose)
+            // The installed build's own configuration decides this on Android
+            // 8+: Android refuses a package that targets below API 26 or does
+            // not request the permission, and no settings screen can change
+            // that. On API 24–25 the legacy global setting applies instead,
+            // and the platform-appropriate explanation says so.
+            !canHold -> InstallAuthorizationAccess.explanation(this)
+            else -> InstallCapabilityPolicy.explanation(diagnose, android.os.Build.VERSION.SDK_INT) +
+                if (granted == false) InstallAuthorizationAccess.appOpNote(this) else ""
         }
         allowInstallsButton.visibility = if (allowed) View.GONE else View.VISIBLE
         allowInstallsButton.isEnabled = !permissionRouteInFlight
         allowInstallsButton.contentDescription = if (allowed) "Install authorization already allowed for YTArk" else "Allow YTArk to request Android's install-unknown-apps authorization"
+        // When the Allow button disappears on a grant, keep the remote on an
+        // enabled, visible action instead of letting focus fall nowhere.
+        if (allowed && currentFocus === allowInstallsButton) requestFallbackFocus()
+    }
+
+    /** First enabled, visible action in remote order; the interval row is always usable. */
+    private fun requestFallbackFocus() {
+        val target = listOf(checkButton, primaryButton, cancelButton, detailsButton, currentNotesButton, candidateNotesButton, intervalButton)
+            .firstOrNull { it.isEnabled && it.visibility == View.VISIBLE }
+            ?: intervalButton
+        focusId = target.id
+        target.requestFocus()
     }
 
     /** One automatic authorization route for a deliberate fresh page entry only. */
@@ -169,6 +191,7 @@ class UpdateActivity : Activity() {
         // authorization for this installed build. Sending the user to a switch
         // that falls back by itself is not a request, it is a loop.
         val shouldRequest = InstallAuthorizationAccess.canHoldAuthorization(this) &&
+            !installerRouteOwnsSettings() &&
             InstallPermissionEntryPolicy.shouldRequestOnEntry(
                 true, granted, permissionEntryAttempted, permissionRouteInFlight,
             )
@@ -181,9 +204,17 @@ class UpdateActivity : Activity() {
         }
         renderInstallPermissionState()
         window?.decorView?.post {
-            if (visible && !isFinishing) launchInstallAuthorizationSettings()
+            if (visible && !isFinishing && !installerRouteOwnsSettings()) launchInstallAuthorizationSettings()
         }
     }
+
+    /**
+     * True while a download/install flow owns the system-screen detour. The
+     * entry route and the install route must never launch Settings at the same
+     * time: two stacked screens race their returns and can double-install.
+     */
+    private fun installerRouteOwnsSettings(): Boolean =
+        updates.state.phase == UpdatePhase.AwaitingPermission || updates.state.phase == UpdatePhase.AwaitingInstaller
 
     private fun allowInstallAuthorization() {
         val granted = InstallAuthorizationAccess.granted(this) == true
@@ -206,10 +237,14 @@ class UpdateActivity : Activity() {
         if (!InstallAuthorizationAccess.canHoldAuthorization(this)) {
             // Answer the actual question instead of reopening the screen that
             // cannot keep the switch on.
-            renderInstallPermissionState(
-                InstallCapabilityPolicy.explanation(InstallAuthorizationAccess.diagnose(this)),
-            )
+            renderInstallPermissionState(InstallAuthorizationAccess.explanation(this))
             allowInstallsButton.isEnabled = true
+            return
+        }
+        if (installerRouteOwnsSettings()) {
+            // The install flow already has a live permission detour; its return
+            // path re-reads the grant. Do not stack a second Settings screen.
+            renderInstallPermissionState()
             return
         }
         permissionRouteInFlight = true
@@ -233,11 +268,17 @@ class UpdateActivity : Activity() {
     private fun finishEntryPermissionReturn() {
         if (!permissionRouteInFlight) return
         permissionRouteInFlight = false
+        // departedForExternal is deliberately NOT cleared here: when an install
+        // route is also pending (phase AwaitingPermission), its continuation in
+        // onResume depends on the same genuine-return evidence, and it consumes
+        // and resets the flag itself.
         val granted = InstallAuthorizationAccess.granted(this)
         val canHold = InstallAuthorizationAccess.canHoldAuthorization(this)
         renderInstallPermissionState(when {
             granted == true -> "Install authorization is now allowed for YTArk. This does not start a download or installation."
-            !canHold -> InstallCapabilityPolicy.explanation(InstallAuthorizationAccess.diagnose(this))
+            !canHold -> InstallAuthorizationAccess.explanation(this)
+            granted == false && android.os.Build.VERSION.SDK_INT in 24..25 ->
+                InstallCapabilityPolicy.explanation(InstallAuthorizationAccess.diagnose(this), android.os.Build.VERSION.SDK_INT) + " Select Allow installs to try again."
             granted == false -> "Install authorization is still off. You can check for updates and read notes; select Allow installs to try again."
             else -> "YTArk could not verify install authorization after returning. Checks and release notes remain available; select Allow installs to retry."
         })
@@ -262,25 +303,39 @@ class UpdateActivity : Activity() {
     }
     override fun onResume() {
         super.onResume(); visible=true; updates.observe(observer); consumeInstallStatus(intent)
-        if (permissionRouteInFlight) finishEntryPermissionReturn()
+        // Only a genuine return completes the entry route: the page must have
+        // actually departed for the system screen since the route started. An
+        // onResume without a departure (repaint, recreation while still on
+        // this page) leaves the in-flight route untouched.
+        if (permissionRouteInFlight && departedForExternal) finishEntryPermissionReturn()
         beginFreshPageEntry()
         renderInstallPermissionState()
         if(updates.state.phase==UpdatePhase.AwaitingInstaller) window?.decorView?.postDelayed({ if(visible) updates.reconcileInstallerReturn() }, 1200)
-        (findViewById<View>(focusId) ?: checkButton).let { if(it.isEnabled && it.visibility==View.VISIBLE) it.requestFocus() else checkButton.requestFocus() }
+        (findViewById<View>(focusId) ?: checkButton).let { if(it.isEnabled && it.visibility==View.VISIBLE) it.requestFocus() else requestFallbackFocus() }
     }
-    override fun onPause() { visible=false; updates.remove(observer); super.onPause() }
+    override fun onPause() {
+        // Leaving the page while a system-screen detour is pending is the
+        // departure evidence both permission routes require before they may
+        // treat the next resume as an external return.
+        if (permissionRouteInFlight || updates.state.phase in setOf(UpdatePhase.AwaitingPermission, UpdatePhase.AwaitingInstaller)) departedForExternal = true
+        visible=false; updates.remove(observer); super.onPause()
+    }
     override fun onSaveInstanceState(out: Bundle) {
         out.putInt("focus",currentFocus?.id ?: focusId)
         out.putBoolean("fresh_entry_pending",freshEntryPending)
         out.putBoolean("permission_entry_attempted",permissionEntryAttempted)
         out.putBoolean("permission_route_in_flight",permissionRouteInFlight)
+        out.putBoolean("departed_for_external",departedForExternal)
         super.onSaveInstanceState(out)
     }
     override fun onActivityResult(request: Int,result: Int,data: Intent?) {
         super.onActivityResult(request,result,data)
         when (request) {
-            ENTRY_PERMISSION -> finishEntryPermissionReturn()
+            // An ActivityResult for a system-screen detour is itself proof the
+            // page departed and returned, even across process death.
+            ENTRY_PERMISSION -> { departedForExternal = true; finishEntryPermissionReturn() }
             InstallCoordinator.PERMISSION, InstallCoordinator.INSTALLER -> {
+                departedForExternal = true
                 installer.result(request)
                 focusId=103
             }
@@ -308,6 +363,11 @@ class UpdateActivity : Activity() {
         summary.text="Installed: $installed   •   Latest compatible: ${UpdatePresentation.latest(s)}\nLast successful check: $checked"
         val statusText=UpdatePresentation.status(s)
         if(status.text.toString()!=statusText) status.text=statusText
+        // Download progress repaints the status line every tick; announcing
+        // each byte count would flood screen-reader users. Phase-level
+        // messages stay polite announcements.
+        val liveRegion=if(s.phase==UpdatePhase.Downloading) View.ACCESSIBILITY_LIVE_REGION_NONE else View.ACCESSIBILITY_LIVE_REGION_POLITE
+        if(status.accessibilityLiveRegion!=liveRegion) status.accessibilityLiveRegion=liveRegion
         intervalButton.text="Automatically check: "+when(s.hours) { 0 -> "Never"; 3 -> "Every 3 hours"; else -> "Every 1 hour" }
         checkButton.isEnabled=!s.busy
         checkButton.text=if(s.phase==UpdatePhase.Failed && (s.candidate==null || s.stage=="check")) "Retry check" else "Check for updates"
@@ -333,9 +393,8 @@ class UpdateActivity : Activity() {
         // Ordinary progress renders leave the same view and focus untouched.
         if(focused!=null && (!focused.isEnabled || focused.visibility!=View.VISIBLE)) {
             when {
-                focused===cancelButton && primaryButton.isEnabled -> primaryButton.requestFocus()
-                focused===allowInstallsButton -> checkButton.requestFocus()
-                else -> intervalButton.requestFocus()
+                focused===cancelButton && primaryButton.isEnabled -> { focusId=primaryButton.id; primaryButton.requestFocus() }
+                else -> requestFallbackFocus()
             }
         }
     }

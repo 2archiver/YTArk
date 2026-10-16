@@ -42,8 +42,8 @@ APK = DATA / "apk"
 
 PACKAGE = "io.github.twoarchiver.ytark"
 UPDATER = "io.github.twoarchiver.ytark.updater"
-VERSION_CODE = 3050100
-VERSION_NAME = "3.5.1"
+VERSION_CODE = 3050200
+VERSION_NAME = "3.5.2"
 
 
 def manifest(**overrides) -> NodeSpec:

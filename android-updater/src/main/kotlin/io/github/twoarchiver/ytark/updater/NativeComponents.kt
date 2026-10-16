@@ -24,6 +24,26 @@ import java.io.FileNotFoundException
 import java.lang.ref.WeakReference
 import java.util.concurrent.atomic.AtomicBoolean
 
+/**
+ * One-shot native launch marks for startup measurement, on the monotonic
+ * `elapsedRealtime` clock. The JavaScript side keeps its own marks on its own
+ * monotonic clock; the two timelines are never subtracted from each other
+ * without an explicit calibration, they are only read side by side in logcat.
+ */
+object StartupTimeline {
+    private const val TAG = "YTArkStartup"
+    private val processMarked = AtomicBoolean(false)
+    private val resumeMarked = AtomicBoolean(false)
+    fun processStart() {
+        if (!processMarked.compareAndSet(false, true)) return
+        android.util.Log.i(TAG, "native-mark process-start elapsedRealtimeMillis=" + android.os.SystemClock.elapsedRealtime())
+    }
+    fun firstActivityResumed(a: Activity) {
+        if (!resumeMarked.compareAndSet(false, true)) return
+        android.util.Log.i(TAG, "native-mark first-activity-resumed " + a.javaClass.name + " elapsedRealtimeMillis=" + android.os.SystemClock.elapsedRealtime())
+    }
+}
+
 /** JNI invokes the original protected Java method; the repacker replaces ONLY its body with
  * this static call. It opens a screen, never takes a URL/package/path or triggers an install.
  * The legacy arbitrary-URL installer is removed at that boundary. No socket or exported route.
@@ -82,12 +102,16 @@ abstract class ReadOnlyProvider : ContentProvider() {
 class UpdateBootstrapProvider : ReadOnlyProvider() {
     override fun onCreate(): Boolean {
         val app=context?.applicationContext as? Application ?: return false
+        // Provider creation is the earliest code this package runs in a fresh
+        // process; mark it once for startup measurement. No network work here.
+        StartupTimeline.processStart()
         // Creation queues only local reconciliation; no startup release/changelog fetch.
         val coordinator=UpdateCoordinator.get(app)
         app.registerActivityLifecycleCallbacks(object: Application.ActivityLifecycleCallbacks {
             private val handler=Handler(Looper.getMainLooper())
             private var overdue: Runnable?=null
             override fun onActivityResumed(a: Activity) {
+                StartupTimeline.firstActivityResumed(a)
                 NativeUpdatesBridge.resumed(a)
                 if(a !is UpdateActivity) {
                     overdue?.let { handler.removeCallbacks(it) }

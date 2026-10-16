@@ -1,6 +1,8 @@
 /*global navigate*/
 import '../spatial-navigation-polyfill.js';
 import { startReadiness } from '../features/startupReadiness.js';
+import { startupTiming, attachStartupProbes } from '../features/startupTiming.js';
+import { createStartupNavigation } from '../features/startupNavigation.js';
 import css from './ui.css';
 import { configRead, configWrite, configWriteMany, configChangeEmitter } from '../config.js';
 import updateStyle from './theme.js';
@@ -12,37 +14,82 @@ import { pipToFullscreen } from '../features/pictureInPicture.js';
 import getCommandExecutor from './customCommandExecution.js';
 import { t } from 'i18next';
 
+// Monotonic mark for the moment this script starts evaluating. Every later
+// mark is relative to the same clock; the native process-start mark lives in
+// logcat (tag YTArkStartup) and is never subtracted from these values.
+startupTiming.mark('script-eval');
+
+/** True when the app exposes a command resolver instance to patch and call. */
+function hasCommandResolver() {
+  try {
+    return !!window._yttv && Object.keys(window._yttv).some((key) => {
+      const module = window._yttv[key];
+      return module && module.instance && typeof module.instance.resolveCommand === 'function';
+    });
+  } catch (_) {
+    return false;
+  }
+}
+
 // Initialize the remote settings controls when the TV DOM exists; requiring a
 // video element here would make settings unavailable on a quiet home screen.
 let controlsInitialized = false;
 let resolverPatched = false;
 let startupStorage;
 try { startupStorage = window.localStorage; } catch (_) { /* normal startup */ }
+// Startup navigation waits for the command resolver instead of dispatching
+// into an absent window._yttv, where resolveCommand() silently drops it.
+const startupNavigation = createStartupNavigation({
+  configRead,
+  resolveCommand,
+  hasResolver: hasCommandResolver,
+  mark: (name, detail) => startupTiming.mark(name, detail),
+  warn: (error) => console.warn('[YTArk] Ignoring an invalid startup destination:', error),
+});
 startReadiness({
   enabled: configRead('fasterStartup') === true,
   storage: startupStorage,
+  onGiveUp: () => {
+    if (!startupNavigation.done) {
+      console.warn('[YTArk] Startup navigation never ran: the TV command resolver did not become available within the readiness window.');
+      startupTiming.mark('startup-navigation-given-up');
+    }
+  },
   tick: () => {
   if (!controlsInitialized && document.body) {
+    startupTiming.mark('dom-body');
     try {
       execute_once_dom_loaded();
       controlsInitialized = true;
+      startupTiming.mark('controls-ready');
     } catch (error) {
       console.warn('[YTArk] TV controls are waiting for the app DOM:', error);
     }
   }
 
-  if (!resolverPatched && window._yttv) {
-    const hasResolver = Object.keys(window._yttv).some(key => {
-      const module = window._yttv[key];
-      return module && module.instance && typeof module.instance.resolveCommand === 'function';
-    });
-    if (hasResolver) {
-      patchResolveCommand();
-      resolverPatched = true;
+  if (!resolverPatched && hasCommandResolver()) {
+    patchResolveCommand();
+    resolverPatched = true;
+    startupTiming.mark('resolver-ready');
+  }
+
+  // The guide refresh belongs to the same resolver-ready moment: before it,
+  // getCommandExecutor() finds nothing and the refresh is silently lost.
+  if (resolverPatched && !startupSteps.guideReload) {
+    startupSteps.guideReload = true;
+    try {
+      const commandExecutor = getCommandExecutor();
+      if (commandExecutor) {
+        commandExecutor.executeFunction(new commandExecutor.commandFunction('reloadGuideAction'));
+      }
+    } catch (error) {
+      console.warn('[YTArk] The guide refresh could not run:', error);
     }
   }
 
-  return controlsInitialized && resolverPatched;
+  if (controlsInitialized) startupNavigation.tryRun();
+
+  return controlsInitialized && resolverPatched && startupNavigation.done;
   },
 });
 
@@ -50,12 +97,14 @@ let keyTimeout = null;
 
 // Start-up work is split into idempotent steps so that a failure part-way
 // through (and the retry that follows) can never inject styles, panels, key
-// handlers or start-up navigation twice.
+// handlers, probes or the guide refresh twice. Startup navigation lives in
+// features/startupNavigation.js because it must wait for the command resolver.
 const startupSteps = {
   css: false,
   panel: false,
   listeners: false,
-  navigation: false,
+  probes: false,
+  guideReload: false,
   theme: false,
   longPress: false,
 };
@@ -73,18 +122,6 @@ configChangeEmitter.addEventListener('configPersistError', () => {
 function saveCustomColor(key, value) {
   configWrite(key, value);
   updateStyle();
-}
-
-function startupDestination() {
-  const raw = configRead('launchToOnStartup');
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
-  } catch (error) {
-    console.warn('[YTArk] Ignoring an invalid startup destination:', error);
-    return null;
-  }
 }
 
 const keys = {
@@ -316,22 +353,15 @@ function execute_once_dom_loaded() {
     document.addEventListener('keyup', (evt) => handledRemoteKeys.delete(evt.keyCode), true);
     startupSteps.listeners = true;
   }
-  if (!startupSteps.navigation) {
-    startupSteps.navigation = true;
-    if (configRead('reloadHomeOnStartup')) {
-      const destination = startupDestination();
-      resolveCommand(destination || {
-        signalAction: {
-          signal: 'SOFT_RELOAD_PAGE'
-        }
-      });
-    }
+  if (!startupSteps.probes) {
+    startupSteps.probes = true;
+    // Measurement only: first remote key and first playback after startup.
+    attachStartupProbes(startupTiming, document);
   }
 
-  const commandExecutor = getCommandExecutor();
-  if (commandExecutor) {
-    commandExecutor.executeFunction(new commandExecutor.commandFunction('reloadGuideAction'));
-  }
-
-  // Release notes live only inside the native Updates page.
+  // Startup navigation and the guide refresh are NOT dispatched here: both
+  // depend on the app's command resolver, and resolveCommand()/the command
+  // executor silently do nothing while window._yttv is still empty. The
+  // readiness loop runs them once, at the resolver-ready moment
+  // (features/startupNavigation.js and startupSteps.guideReload above).
 }

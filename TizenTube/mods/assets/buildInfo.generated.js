@@ -8,14 +8,14 @@
 // the offline fallback and the build details.
 export const YTARK_BUILD_INFO = {
   "schema": 1,
-  "versionName": "3.5.1",
-  "displayVersion": "3.5.1",
-  "versionCode": 3050100,
-  "versionTag": "v3.5.1",
-  "scriptTag": "s35",
+  "versionName": "3.5.2",
+  "displayVersion": "3.5.2",
+  "versionCode": 3050200,
+  "versionTag": "v3.5.2",
+  "scriptTag": "s36",
   "baseTag": "v2.0.2",
   "appId": "io.github.twoarchiver.ytark",
   "appName": "YTArk",
-  "apkAsset": "YTArk-v3.5.1-armv7.apk"
+  "apkAsset": "YTArk-v3.5.2-armv7.apk"
 };
 export default YTARK_BUILD_INFO;

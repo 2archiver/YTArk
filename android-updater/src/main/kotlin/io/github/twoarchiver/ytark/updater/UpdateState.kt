@@ -44,5 +44,18 @@ object ScheduleRules {
 }
 /** One-shot permission continuation is bound to the exact downloaded candidate. */
 object PendingInstallPolicy {
-    fun mayContinue(pending: String?, candidate: String?, granted: Boolean, visible: Boolean) = pending != null && pending == candidate && granted && visible
+    /**
+     * Continuation requires a genuine external return: the activity must have
+     * actually departed for the system screen (`departed`). A state update
+     * while the page is still visible is not proof that Settings returned, and
+     * must neither continue the install nor clear the pending request.
+     */
+    @JvmOverloads
+    fun mayContinue(pending: String?, candidate: String?, granted: Boolean, visible: Boolean, departed: Boolean = true) =
+        departed && pending != null && pending == candidate && granted && visible
+
+    /** After a genuine return without continuation, the pending request is cleared exactly once. */
+    @JvmOverloads
+    fun shouldClear(pending: String?, candidate: String?, granted: Boolean, visible: Boolean, departed: Boolean = true) =
+        departed && pending != null && !mayContinue(pending, candidate, granted, visible, departed)
 }

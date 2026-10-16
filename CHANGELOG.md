@@ -22,9 +22,38 @@ Conventions:
 - Capabilities inherited from TizenTube and TizenTubeCobalt are listed under
   "Upstream base and inherited capabilities", not as YTArk additions.
 
-## [3.5.1] — Unreleased
+## [3.5.2] — Unreleased
 
-> Not yet published. Planned tag `v3.5.1` · versionCode 3050100 · userscript `s35` · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.
+> Not yet published. Planned tag `v3.5.2` · versionCode 3050200 · userscript `s36` · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.
+
+Reliable permission routes, safer startup navigation, and startup measurement.
+
+### Fixed
+- Startup navigation is no longer silently lost when the TV command resolver is not ready yet. It waits, then runs once.
+- Updates never stacks two Android settings screens. The entry and install routes take turns; neither double-launches Settings.
+- A pending install waits for a genuine return from the system screen. A visible repaint or state update is not a return.
+- Android's install-authorization screens are launched and caught: an intent-visibility precheck no longer blocks a route that actually opens.
+- Android 7 (API 24–25) reports the legacy global unknown-sources setting; the Android 8+ per-app packaging prerequisites no longer classify or disable the legacy flow.
+- Remote focus moves to an enabled, visible action when the Allow installs button disappears after a grant.
+- Download progress no longer repeats an accessibility announcement on every tick.
+- The guide refresh runs when the command resolver exists instead of being silently lost at DOM-ready.
+### Added
+- Lightweight monotonic startup marks (script start, DOM, controls, resolver, navigation, first remote key, first playback) so startup can be measured, not guessed.
+- One-shot native launch marks in logcat (tag `YTArkStartup`) on Android's monotonic clock; native and script timelines are read side by side, never subtracted without calibration.
+### Changed
+- Faster startup (Experimental) stays opt-in with the same polling cadence; when its bounded window expires without readiness, that is now reported instead of ending silently.
+### Known limitations
+- TV permission persistence, in-place upgrades and startup timing still need device testing; 3.5.1 has no TV test result either. See the 3.5.2 evidence report.
+- The startup marks enable a measured comparison; no startup speed improvement is claimed for 3.5.2 itself.
+- Userscript `s36` is the candidate script tag and becomes live only through the release publication workflow.
+### Validation
+- JavaScript: `node --test` over the TizenTube mods suite, including the startup-navigation, startup-timing and readiness give-up tests.
+- Java and Kotlin updater policy suite: API-aware capability classification, launch-outcome classification and departure-aware pending-install transitions.
+- ARMv7 APK build, signature, alignment and manifest checks run in the candidate workflow; they are not device tests.
+
+## [3.5.1] — 2026-10-16
+
+> Published 2026-10-16 05:38 UTC as [YTArk 3.5.1](https://github.com/2archiver/YTArk/releases/tag/v3.5.1) · tag `v3.5.1` · versionCode 3050100 · userscript `s35` · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.
 
 Honest install-authorization reporting, and an experimental faster startup.
 
