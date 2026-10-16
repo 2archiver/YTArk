@@ -45,6 +45,83 @@ object InstallPermissionEntryPolicy {
     }
 }
 
+/**
+ * Why Android can or cannot hold a per-app install authorization, and what the
+ * user can honestly do about it.
+ *
+ * Android answers the capability question from the *packaged* manifest, not from
+ * the settings screen: `ComputerEngine.canRequestPackageInstalls()` returns false
+ * when the installed package targets below API 26 and false (logging "Need to
+ * declare android.permission.REQUEST_INSTALL_PACKAGES to call this api") when the
+ * installed package does not request that permission. The Google TV screen writes
+ * a per-package system AppOp instead; when the TV profile or a device policy
+ * forbids unknown sources the written value does not survive, and no app can
+ * override that, so the screen must not promise that reopening Settings will
+ * change it.
+ */
+object InstallCapabilityPolicy {
+    const val MIN_TARGET_SDK = 26
+    const val REQUEST_INSTALL_PACKAGES = "android.permission.REQUEST_INSTALL_PACKAGES"
+    /**
+     * The internal AppOp name the TV's "install unknown apps" switch writes.
+     *
+     * The public SDK's field for this op is `@hide @SystemApi`, so it is absent
+     * from the `android.jar` a normal build compiles against: reading it is a
+     * compile error that only the full-sources CI build sees. The documented
+     * internal string is pinned here instead, and the host-JVM tests keep it
+     * pinned so a typo cannot silently read nothing.
+     */
+    const val INSTALL_APP_OP = "android:request_install_packages"
+    const val STATE_GRANTED = "granted"
+    const val STATE_TARGET_TOO_OLD = "target-too-old"
+    const val STATE_PERMISSION_NOT_DECLARED = "permission-not-declared"
+    const val STATE_NOT_AUTHORIZED = "not-authorized"
+    const val STATE_UNREADABLE = "unreadable"
+
+    /** Route codes for Android's own screens. The list screen omits the optional package input. */
+    const val ROUTE_PACKAGE = "package"
+    const val ROUTE_LIST = "list"
+
+    /** `null` target SDK or declaration means "could not be read", never a missing feature. */
+    @JvmStatic fun state(targetSdk: Int?, declaresPermission: Boolean?, capability: Boolean?): String = when {
+        targetSdk == null || targetSdk < 1 || declaresPermission == null -> STATE_UNREADABLE
+        targetSdk in 1 until MIN_TARGET_SDK -> STATE_TARGET_TOO_OLD
+        !declaresPermission -> STATE_PERMISSION_NOT_DECLARED
+        capability == null -> STATE_UNREADABLE
+        capability -> STATE_GRANTED
+        else -> STATE_NOT_AUTHORIZED
+    }
+
+    /** True when Android can hold the authorization for this build at all. */
+    @JvmStatic fun canHoldAuthorization(targetSdk: Int?, declaresPermission: Boolean?): Boolean =
+        targetSdk != null && declaresPermission == true && targetSdk >= MIN_TARGET_SDK
+
+    /**
+     * The honest short answer for the Updates screen. It never tells the user to
+     * reopen the same screen when Android refuses the authorization for a reason
+     * no settings screen can change, and it never blames a device policy for a
+     * missing declaration.
+     */
+    @JvmStatic fun explanation(state: String): String = when (state) {
+        STATE_GRANTED -> "Android reports install authorization for this build."
+        STATE_TARGET_TOO_OLD ->
+            "This installed build targets an Android version below 8; Android refuses per-app install authorization for such a package, so the TV switch cannot stay on. Install this or a newer YTArk APK with an installer that is already allowed."
+        STATE_PERMISSION_NOT_DECLARED ->
+            "This installed build does not request android.permission.REQUEST_INSTALL_PACKAGES, which Android requires before it will grant install authorization, so the TV switch cannot stay on. Install this or a newer YTArk APK with an installer that is already allowed."
+        STATE_NOT_AUTHORIZED ->
+            "Android has not authorized this build to install packages. The switch in the TV's Settings writes a per-package system value; if this profile or a device policy forbids unknown sources, that value does not survive and YTArk cannot override it."
+        else ->
+            "Android did not report install authorization for this build. Update checks and release notes remain available; select Allow installs to open Android's own screen."
+    }
+
+    /** Settings route for the detected API level and whether the platform resolves the package screen. */
+    @JvmStatic fun settingsRoute(api: Int, packageRouteResolvable: Boolean) = when {
+        api < 26 -> InstallPermissionEntryPolicy.ROUTE_SECURITY_SETTINGS
+        packageRouteResolvable -> ROUTE_PACKAGE
+        else -> ROUTE_LIST
+    }
+}
+
 object InstallerResultPolicy {
     enum class Outcome { CONFIRMED, CANCELLED_WITH_VERIFIED_APK, UNCONFIRMED_WITH_VERIFIED_APK, UNCONFIRMED_NO_APK }
     @JvmStatic fun outcome(confirmed: Boolean, remains: Boolean, cancelled: Boolean) = when {

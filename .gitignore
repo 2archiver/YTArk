@@ -1,6 +1,9 @@
 TizenTube-upstream/
 TizenTube/mods/node_modules/
 *.apk
+# One deliberate exception: the compiled-manifest fixture the Python tests
+# read straight out of a real APK (androguard test data, Apache-2.0).
+!tools/tests/data/apk/AndroidManifest_ShortName.apk
 *.jks
 *.keystore
 *.p12

@@ -143,7 +143,7 @@ class UpdateScreenRemovalTests(unittest.TestCase):
         self.assertIn('permission_entry_attempted', text)
         self.assertIn('permission_route_in_flight', text)
         self.assertIn('InstallPermissionEntryPolicy.shouldRequestOnEntry', text)
-        self.assertIn('InstallAuthorizationAccess.settingsIntent', text)
+        self.assertIn('InstallAuthorizationAccess.openSettings', text)
         self.assertIn('InstallAuthorizationAccess.granted', text)
         self.assertIn('Android could not open the install-authorization screen', text)
         self.assertIn('findViewById<View>(focusId)', text)
@@ -178,11 +178,52 @@ class UpdateScreenRemovalTests(unittest.TestCase):
         self.assertIn('Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES', installer)
         self.assertIn('Settings.ACTION_SECURITY_SETTINGS', installer)
         self.assertIn('package:${context.packageName}', installer)
+        # The screen must know why Android refuses before it offers the switch again.
+        self.assertIn('InstallCapabilityPolicy.explanation', activity)
+        self.assertIn('InstallAuthorizationAccess.canHoldAuthorization', activity)
+        self.assertIn('InstallAuthorizationAccess.diagnose', activity)
+        self.assertIn('InstallCapabilityPolicy.REQUEST_INSTALL_PACKAGES', installer)
+        self.assertIn('APP_OPS_SERVICE', installer)
         self.assertIn('Settings.Secure.INSTALL_NON_MARKET_APPS', installer)
         self.assertIn('api >= 26', policies)
         self.assertIn('api in 24..25', policies)
         self.assertIn('android.permission.REQUEST_INSTALL_PACKAGES', repacker)
         self.assertIn('validate_install_unknown_sources_target_sdk', release_validator)
+
+    def test_install_app_op_is_pinned_because_the_sdk_field_is_hidden(self):
+        """AppOpsManager.OPSTR_REQUEST_INSTALL_PACKAGES is @hide/@SystemApi.
+
+        Referencing it is a *compile* error against the public android.jar, which
+        only the full-sources CI build sees. The AppOp name the TV's switch
+        writes is therefore pinned as a literal in the pure policy, covered by
+        the host-JVM state tests, and never read from the SDK constant.
+        """
+        policies = (MAIN_DIR / "Policies.kt").read_text(encoding="utf-8")
+        installer = (MAIN_DIR / "InstallCoordinator.kt").read_text(encoding="utf-8")
+        self.assertIn('InstallCapabilityPolicy.INSTALL_APP_OP', installer)
+        # No production source may read one of those hidden SDK fields.
+        for source in sorted(MAIN_DIR.glob("*.kt")):
+            self.assertNotIn(
+                "OPSTR_", source.read_text(encoding="utf-8"),
+                f"{source.name} must not read a hidden AppOps string field")
+        self.assertIn('const val INSTALL_APP_OP = "android:request_install_packages"', policies)
+
+    def test_the_manifest_step_resolves_aapt_instead_of_calling_it_from_path(self):
+        """A bare `aapt` is not on PATH on a runner: that failed with exit 127."""
+        workflow = (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+        step = workflow.split("- name: Verify the packaged manifest and install authorization", 1)[1]
+        step = step.split("- name:", 1)[0]
+        self.assertIn('aapt="$ANDROID_HOME/build-tools/$BUILD_TOOLS/aapt"', step)
+        self.assertIn('test -x "$aapt" ||', step)
+        self.assertIn('"$aapt" dump badging', step)
+        self.assertNotIn("$(aapt ", step)
+        # The same rule for every workflow that reads a manifest with aapt.
+        for name in ("ci.yml", "build-apk.yml", "build-candidate.yml"):
+            text = (ROOT / ".github" / "workflows" / name).read_text(encoding="utf-8")
+            for line in text.splitlines():
+                stripped = line.strip()
+                if stripped.startswith("aapt ") or "$(aapt " in line:
+                    self.fail(f"{name} calls aapt from PATH: {stripped}")
 
 
 class RepackDefaultsTests(unittest.TestCase):
