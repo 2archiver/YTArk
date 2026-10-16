@@ -168,7 +168,7 @@ fun main() {
     check(UpdatePresentation.latestLabel(staleCurrent)=="Last known compatible stable")
     val retryingStale = UpdateStates.checking(staleCurrent)
     check(!retryingStale.stale && retryingStale.errorCategory.isBlank())
-    check(UpdatePresentation.latestLabel(retryingStale)=="Last known compatible stable", "retry keeps stale provenance honest")
+    check(UpdatePresentation.latestLabel(retryingStale)=="Last known compatible stable") { "retry keeps stale provenance honest" }
     val failedStaleRetry = UpdateStates.failed(retryingStale, MappedError("http","HTTP error","",100L,403,"check"), "v3.3.0")
     check(UpdatePresentation.latestLabel(failedStaleRetry)=="Last known compatible stable")
     check(UpdateStates.installed(structured).latestVersion=="")
