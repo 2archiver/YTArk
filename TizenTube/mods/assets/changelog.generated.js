@@ -4,20 +4,73 @@ export const YTARK_CHANGELOG = {
   "schema": 1,
   "source": "CHANGELOG.md",
   "summaryFallback": "No short highlights available for this version.",
-  "sourceSha256": "1fdd1450abae541dce506b04c9d1b38a05ad977aad8228b9d2a56877aa94d17f",
+  "sourceSha256": "9bf238eba5f1c12d9d6b85c6c56ff3cf5ff86498836f22b69917fb85d76426bc",
   "entries": [
     {
-      "version": "3.5.0",
-      "display": "3.5",
+      "version": "3.5.1",
+      "display": "3.5.1",
       "status": "unreleased",
       "date": null,
       "publishedAt": null,
+      "tag": "v3.5.1",
+      "versionCode": 3050100,
+      "scriptTag": "s35",
+      "title": "YTArk 3.5.1",
+      "releaseUrl": null,
+      "facts": "Not yet published. Planned tag v3.5.1 · versionCode 3050100 · userscript s35 · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.",
+      "summary": "Honest install-authorization reporting, and a faster startup path that keeps its guarantees.",
+      "sections": [
+        {
+          "heading": "Fixed",
+          "items": [
+            "Updates explains why Android cannot keep the install authorization.",
+            "Updates no longer presents TV Settings as a fix when the installed build or the TV profile cannot hold the authorization, and the retry stays on screen."
+          ]
+        },
+        {
+          "heading": "Changed",
+          "items": [
+            "Faster startup defers optional work on one bounded schedule and falls back once.",
+            "Updates keeps authorization, download and installation as separate states; an installer opening is never reported as an installed update."
+          ]
+        },
+        {
+          "heading": "Added",
+          "items": [
+            "The release build refuses a candidate Android could never authorize.",
+            "Updates reports what Android answers for this build: the declared install permission, the target SDK, the system install app-op the TV Settings switch writes, and any profile restriction."
+          ]
+        },
+        {
+          "heading": "Known limitations",
+          "items": [
+            "Permission screens, faster startup, session-preserving upgrades and the ARMv7 runtime still need device testing; see the 3.5.1 evidence report.",
+            "A first in-place upgrade from a build Android will not authorize needs an already permitted installer; the updater cannot bootstrap its own authorization.",
+            "Userscript s35 is the candidate script tag and becomes live only through the release publication workflow."
+          ]
+        },
+        {
+          "heading": "Validation",
+          "items": [
+            "Java and Kotlin updater policy suite for the permission, download and install transitions.",
+            "Compiled-manifest tests over real aapt-produced manifests plus the aapt cross-check in the release pipeline.",
+            "ARMv7 APK build, signature, alignment and manifest checks: see the candidate evidence; they are not device tests."
+          ]
+        }
+      ]
+    },
+    {
+      "version": "3.5.0",
+      "display": "3.5",
+      "status": "published",
+      "date": "2026-10-15",
+      "publishedAt": "2026-10-15T15:04Z",
       "tag": "v3.5.0",
       "versionCode": 3050000,
       "scriptTag": "s34",
       "title": "YTArk 3.5",
-      "releaseUrl": null,
-      "facts": "Not yet published. Planned tag v3.5.0 · versionCode 3050000 · userscript s34 · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.",
+      "releaseUrl": "https://github.com/2archiver/YTArk/releases/tag/v3.5.0",
+      "facts": "Published 2026-10-15 15:04 UTC as YTArk 3.5 · tag v3.5.0 · versionCode 3050000 · userscript s34 · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.",
       "summary": "Privacy-corrected DeArrow lookups, applied before the page renders.",
       "sections": [
         {

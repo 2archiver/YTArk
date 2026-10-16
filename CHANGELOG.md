@@ -22,9 +22,33 @@ Conventions:
 - Capabilities inherited from TizenTube and TizenTubeCobalt are listed under
   "Upstream base and inherited capabilities", not as YTArk additions.
 
-## [3.5.0] — Unreleased
+## [3.5.1] — Unreleased
 
-> Not yet published. Planned tag `v3.5.0` · versionCode 3050000 · userscript `s34` · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.
+> Not yet published. Planned tag `v3.5.1` · versionCode 3050100 · userscript `s35` · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.
+
+Honest install-authorization reporting, and a faster startup path that keeps its guarantees.
+
+### Fixed
+- Updates explains why Android cannot keep the install authorization.
+- Updates no longer presents TV Settings as a fix when the installed build or the TV profile cannot hold the authorization, and the retry stays on screen.
+### Changed
+- Faster startup defers optional work on one bounded schedule and falls back once.
+- Updates keeps authorization, download and installation as separate states; an installer opening is never reported as an installed update.
+### Added
+- The release build refuses a candidate Android could never authorize.
+- Updates reports what Android answers for this build: the declared install permission, the target SDK, the system install app-op the TV Settings switch writes, and any profile restriction.
+### Known limitations
+- Permission screens, faster startup, session-preserving upgrades and the ARMv7 runtime still need device testing; see the 3.5.1 evidence report.
+- A first in-place upgrade from a build Android will not authorize needs an already permitted installer; the updater cannot bootstrap its own authorization.
+- Userscript `s35` is the candidate script tag and becomes live only through the release publication workflow.
+### Validation
+- Java and Kotlin updater policy suite for the permission, download and install transitions.
+- Compiled-manifest tests over real aapt-produced manifests plus the aapt cross-check in the release pipeline.
+- ARMv7 APK build, signature, alignment and manifest checks: see the candidate evidence; they are not device tests.
+
+## [3.5.0] — 2026-10-15
+
+> Published 2026-10-15 15:04 UTC as [YTArk 3.5](https://github.com/2archiver/YTArk/releases/tag/v3.5.0) · tag `v3.5.0` · versionCode 3050000 · userscript `s34` · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.
 
 Privacy-corrected DeArrow lookups, applied before the page renders.
 
