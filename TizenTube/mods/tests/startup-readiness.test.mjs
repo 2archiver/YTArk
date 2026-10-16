@@ -30,3 +30,27 @@ test('slow readiness and acceleration exceptions use bounded normal fallback', (
   const h=harness(true,false,10000); assert.ok(h.delays.includes(250)); assert.equal(h.time,10000);
   const e=harness(true,false,10000,true); assert.equal(e.time,40000); assert.ok(e.count<170); assert.equal(e.data.size,0);
 });
+test('the bounded window reports give-up exactly once and success never does', () => {
+  let giveUps = 0;
+  const timedOut = harnessWithGiveUp(true, 50000, () => { giveUps++; });
+  assert.equal(giveUps, 1, 'an exhausted 40s window reports the give-up once');
+  assert.equal(timedOut.data.size, 0, 'the interrupted marker is still cleared');
+  giveUps = 0;
+  harnessWithGiveUp(true, 80, () => { giveUps++; });
+  assert.equal(giveUps, 0, 'a successful readiness tick never reports a give-up');
+});
+
+function harnessWithGiveUp(enabled, readyAt, onGiveUp) {
+  let time = 0, count = 0, next;
+  const data = new Map();
+  const stop = startReadiness({ enabled,
+    storage: { getItem: k => data.get(k), setItem: (k,v) => data.set(k,v), removeItem: k => data.delete(k) },
+    now: () => time,
+    later: (fn,ms) => { next = { fn, ms }; return count; },
+    cancel: () => { next = null; },
+    onGiveUp,
+    tick: () => { count++; return time >= readyAt; },
+  });
+  while(next && count < 1000) { const task = next; next = null; time += task.ms; task.fn(); }
+  return { data, stop };
+}

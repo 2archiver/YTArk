@@ -4,20 +4,78 @@ export const YTARK_CHANGELOG = {
   "schema": 1,
   "source": "CHANGELOG.md",
   "summaryFallback": "No short highlights available for this version.",
-  "sourceSha256": "88d73be9b44bd16ac9004759ed89320a0e29c66783f4bad1ba6cd58f6f72bb57",
+  "sourceSha256": "5bd3edcaf3aa3db5817f4b623a5a9ce63eac6d6437dfc814f832c4ff3c2d8fb5",
   "entries": [
     {
-      "version": "3.5.1",
-      "display": "3.5.1",
+      "version": "3.5.2",
+      "display": "3.5.2",
       "status": "unreleased",
       "date": null,
       "publishedAt": null,
+      "tag": "v3.5.2",
+      "versionCode": 3050200,
+      "scriptTag": "s36",
+      "title": "YTArk 3.5.2",
+      "releaseUrl": null,
+      "facts": "Not yet published. Planned tag v3.5.2 · versionCode 3050200 · userscript s36 · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.",
+      "summary": "Reliable permission routes, safer startup navigation, and startup measurement.",
+      "sections": [
+        {
+          "heading": "Fixed",
+          "items": [
+            "Startup navigation is no longer silently lost when the TV command resolver is not ready yet. It waits, then runs once.",
+            "Updates never stacks two Android settings screens. The entry and install routes take turns; neither double-launches Settings.",
+            "A pending install waits for a genuine return from the system screen. A visible repaint or state update is not a return.",
+            "Android's install-authorization screens are launched and caught: an intent-visibility precheck no longer blocks a route that actually opens.",
+            "Android 7 (API 24–25) reports the legacy global unknown-sources setting; the Android 8+ per-app packaging prerequisites no longer classify or disable the legacy flow.",
+            "Remote focus moves to an enabled, visible action when the Allow installs button disappears after a grant.",
+            "Download progress no longer repeats an accessibility announcement on every tick.",
+            "The guide refresh runs when the command resolver exists instead of being silently lost at DOM-ready."
+          ]
+        },
+        {
+          "heading": "Added",
+          "items": [
+            "Lightweight monotonic startup marks (script start, DOM, controls, resolver, navigation, first remote key, first playback) so startup can be measured, not guessed.",
+            "One-shot native launch marks in logcat (tag YTArkStartup) on Android's monotonic clock; native and script timelines are read side by side, never subtracted without calibration."
+          ]
+        },
+        {
+          "heading": "Changed",
+          "items": [
+            "Faster startup (Experimental) stays opt-in with the same polling cadence; when its bounded window expires without readiness, that is now reported instead of ending silently."
+          ]
+        },
+        {
+          "heading": "Known limitations",
+          "items": [
+            "TV permission persistence, in-place upgrades and startup timing still need device testing; 3.5.1 has no TV test result either. See the 3.5.2 evidence report.",
+            "The startup marks enable a measured comparison; no startup speed improvement is claimed for 3.5.2 itself.",
+            "Userscript s36 is the candidate script tag and becomes live only through the release publication workflow."
+          ]
+        },
+        {
+          "heading": "Validation",
+          "items": [
+            "JavaScript: node --test over the TizenTube mods suite, including the startup-navigation, startup-timing and readiness give-up tests.",
+            "Java and Kotlin updater policy suite: API-aware capability classification, launch-outcome classification and departure-aware pending-install transitions.",
+            "ARMv7 APK build, signature, alignment and manifest checks run in the candidate workflow; they are not device tests."
+          ]
+        }
+      ]
+    },
+    {
+      "version": "3.5.1",
+      "display": "3.5.1",
+      "status": "published",
+      "date": "2026-10-16",
+      "publishedAt": "2026-10-16T05:38Z",
       "tag": "v3.5.1",
       "versionCode": 3050100,
       "scriptTag": "s35",
       "title": "YTArk 3.5.1",
-      "releaseUrl": null,
-      "facts": "Not yet published. Planned tag v3.5.1 · versionCode 3050100 · userscript s35 · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.",
+      "releaseUrl": "https://github.com/2archiver/YTArk/releases/tag/v3.5.1",
+      "facts": "Published 2026-10-16 05:38 UTC as YTArk 3.5.1 · tag v3.5.1 · versionCode 3050100 · userscript s35 · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.",
       "summary": "Honest install-authorization reporting, and an experimental faster startup.",
       "sections": [
         {

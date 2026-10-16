@@ -190,9 +190,9 @@ describe('About YTArk', () => {
     assert.ok(build.openPopupAction.popup.overlaySectionRenderer.overlay.overlayTwoPanelRenderer
       .actionPanel.overlayPanelRenderer.content.scrollPaneRenderer, 'D-pad scrollable');
     const details = modalItems(build).map(messageText).join('\n');
-    assert.match(details, /Build versionName: 3\.5\.1/);
-    assert.match(details, /versionCode: 3050100/);
-    assert.match(details, /YTArk userscript revision: s35/);
+    assert.match(details, /Build versionName: 3\.5\.2/);
+    assert.match(details, /versionCode: 3050200/);
+    assert.match(details, /YTArk userscript revision: s36/);
     assert.match(details, /Android engine\/base: v2\.0\.2/);
     assert.doesNotMatch(details, /YouTube frontend version: unavailable/i, 'no absent frontend placeholder');
 
@@ -237,15 +237,15 @@ describe('About YTArk', () => {
     await tick(20);
     resolveCommand({ customAction: { action: 'YTARK_PANEL_SHOW', parameters: { id: 'about' } } });
     const panel = lastModal(recorded, 'ytark-panel-about');
-    assert.equal(header(panel).subtitle, 'YTArk 3.5.1 (build metadata)', "this build's own version, labelled by source");
+    assert.equal(header(panel).subtitle, 'YTArk 3.5.2 (build metadata)', "this build's own version, labelled by source");
     const lines = modalItems(panel).map(messageText).filter(Boolean);
-    const current = YTARK_CHANGELOG.entries.find(entry => entry.version === '3.5.1');
+    const current = YTARK_CHANGELOG.entries.find(entry => entry.version === '3.5.2');
     assert.ok(current && current.status === 'unreleased');
     const expected = current.sections
       .filter(section => !['Known limitations', 'Validation', 'Notes'].includes(section.heading))
       .flatMap(section => section.items).slice(0, 3).map(item => `• ${item}`);
     assert.deepEqual(lines.filter(line => line.startsWith('• ')), expected,
-      'installed highlights are sourced from 3.5.1, never the remote latest release');
+      'installed highlights are sourced from 3.5.2, never the remote latest release');
     assert.ok(expected.length <= 3);
     assert.ok(!lines.some(line => line.includes('Known limitations')), 'full details stay behind an explicit action');
     assert.ok(!lines.some(line => /packaging metadata|Version unknown|Unavailable/.test(line)),
@@ -253,7 +253,7 @@ describe('About YTArk', () => {
 
     await press(resolveCommand, findRow(panel, 'Changelog'));
     const picker = lastModal(recorded, 'ytark-changelog');
-    await press(resolveCommand, findRow(picker, item => rowTitle(item).startsWith('3.5.1 — ')));
+    await press(resolveCommand, findRow(picker, item => rowTitle(item).startsWith('3.5.2 — ')));
     const fullNotes = modalItems(lastModal(recorded, 'ytark-changelog-version')).map(messageText).join('\n');
     assert.match(fullNotes, /Known limitations/);
     windowStub.h5vcc = bridge;

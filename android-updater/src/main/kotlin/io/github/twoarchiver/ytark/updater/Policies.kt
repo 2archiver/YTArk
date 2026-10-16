@@ -27,6 +27,13 @@ object InstallPermissionEntryPolicy {
     const val ROUTE_PACKAGE_SOURCE = "package_source"
     const val ROUTE_SECURITY_SETTINGS = "security_settings"
 
+    /** Per-attempt outcomes of launching one of Android's own screens. */
+    const val LAUNCH_OK = "launched"
+    const val LAUNCH_NOT_FOUND = "not-found"
+    const val LAUNCH_BLOCKED = "blocked"
+    const val OUTCOME_UNAVAILABLE = "unavailable"
+    const val OUTCOME_BLOCKED = "blocked"
+
     @JvmStatic fun routeForApi(api: Int): String = when {
         api >= 26 -> ROUTE_PACKAGE_SOURCE
         api in 24..25 -> ROUTE_SECURITY_SETTINGS
@@ -42,6 +49,25 @@ object InstallPermissionEntryPolicy {
         !inFlight -> "ignore"
         granted -> "granted"
         else -> "denied"
+    }
+
+    /**
+     * Classifies a sequence of launch attempts over the ordered Settings routes.
+     *
+     * Resolution and launchability are separate questions on modern Android:
+     * package-visibility filtering can make `resolveActivity` answer `null` for
+     * a screen that `startActivityForResult` opens normally. A precheck that
+     * refuses to *try* therefore blocks usable routes, so the routes are tried
+     * and only the real launch outcomes are classified here. `null` means one
+     * attempt launched; otherwise the honest aggregate failure is reported:
+     * "blocked" when the platform refused an attempt (SecurityException),
+     * "unavailable" when nothing was found to launch (or there was no route).
+     */
+    @JvmStatic fun openOutcome(attempts: List<String>?): String? = when {
+        attempts == null || attempts.isEmpty() -> OUTCOME_UNAVAILABLE
+        attempts.contains(LAUNCH_OK) -> null
+        attempts.contains(LAUNCH_BLOCKED) -> OUTCOME_BLOCKED
+        else -> OUTCOME_UNAVAILABLE
     }
 }
 
@@ -61,6 +87,10 @@ object InstallPermissionEntryPolicy {
  */
 object InstallCapabilityPolicy {
     const val MIN_TARGET_SDK = 26
+    /** The oldest API this package supports; below it there is no route at all. */
+    const val MIN_SUPPORTED_API = 24
+    /** API 26 introduced the per-source unknown-apps authorization. */
+    const val PER_SOURCE_MIN_API = 26
     const val REQUEST_INSTALL_PACKAGES = "android.permission.REQUEST_INSTALL_PACKAGES"
     /**
      * The internal AppOp name the TV's "install unknown apps" switch writes.
@@ -83,7 +113,23 @@ object InstallCapabilityPolicy {
     const val ROUTE_LIST = "list"
 
     /** `null` target SDK or declaration means "could not be read", never a missing feature. */
-    @JvmStatic fun state(targetSdk: Int?, declaresPermission: Boolean?, capability: Boolean?): String = when {
+    @JvmStatic fun state(targetSdk: Int?, declaresPermission: Boolean?, capability: Boolean?): String =
+        state(PER_SOURCE_MIN_API, targetSdk, declaresPermission, capability)
+
+    /**
+     * Platform-appropriate classification. The target-SDK and declaration
+     * prerequisites are the *per-source* rules Android 8+ applies to
+     * `canRequestPackageInstalls()`; on API 24–25 the authorization is the
+     * legacy global "unknown sources" setting, which does not consult either
+     * packaging property, so those states must not be reported there.
+     */
+    @JvmStatic fun state(api: Int, targetSdk: Int?, declaresPermission: Boolean?, capability: Boolean?): String = when {
+        api < MIN_SUPPORTED_API -> STATE_UNREADABLE
+        api < PER_SOURCE_MIN_API -> when {
+            capability == null -> STATE_UNREADABLE
+            capability -> STATE_GRANTED
+            else -> STATE_NOT_AUTHORIZED
+        }
         targetSdk == null || targetSdk < 1 || declaresPermission == null -> STATE_UNREADABLE
         targetSdk in 1 until MIN_TARGET_SDK -> STATE_TARGET_TOO_OLD
         !declaresPermission -> STATE_PERMISSION_NOT_DECLARED
@@ -94,7 +140,20 @@ object InstallCapabilityPolicy {
 
     /** True when Android can hold the authorization for this build at all. */
     @JvmStatic fun canHoldAuthorization(targetSdk: Int?, declaresPermission: Boolean?): Boolean =
-        targetSdk != null && declaresPermission == true && targetSdk >= MIN_TARGET_SDK
+        canHoldAuthorization(PER_SOURCE_MIN_API, targetSdk, declaresPermission)
+
+    /**
+     * API-aware capability. On API 24–25 the legacy global setting can be
+     * enabled for any package: the modern per-source prerequisites (target
+     * API 26+, declared REQUEST_INSTALL_PACKAGES) are properties of the
+     * Android 8+ route and must not disable the legacy flow. Below API 24 no
+     * supported route exists at all.
+     */
+    @JvmStatic fun canHoldAuthorization(api: Int, targetSdk: Int?, declaresPermission: Boolean?): Boolean = when {
+        api < MIN_SUPPORTED_API -> false
+        api < PER_SOURCE_MIN_API -> true
+        else -> targetSdk != null && declaresPermission == true && targetSdk >= MIN_TARGET_SDK
+    }
 
     /**
      * The honest short answer for the Updates screen. It never tells the user to
@@ -102,16 +161,23 @@ object InstallCapabilityPolicy {
      * no settings screen can change, and it never blames a device policy for a
      * missing declaration.
      */
-    @JvmStatic fun explanation(state: String): String = when (state) {
-        STATE_GRANTED -> "Android reports install authorization for this build."
-        STATE_TARGET_TOO_OLD ->
-            "This installed build targets an Android version below 8; Android refuses per-app install authorization for such a package, so the TV switch cannot stay on. Install this or a newer YTArk APK with an installer that is already allowed."
-        STATE_PERMISSION_NOT_DECLARED ->
-            "This installed build does not request android.permission.REQUEST_INSTALL_PACKAGES, which Android requires before it will grant install authorization, so the TV switch cannot stay on. Install this or a newer YTArk APK with an installer that is already allowed."
-        STATE_NOT_AUTHORIZED ->
-            "Android has not authorized this build to install packages. The switch in the TV's Settings writes a per-package system value; if this profile or a device policy forbids unknown sources, that value does not survive and YTArk cannot override it."
-        else ->
-            "Android did not report install authorization for this build. Update checks and release notes remain available; select Allow installs to open Android's own screen."
+    @JvmStatic fun explanation(state: String): String = explanation(state, PER_SOURCE_MIN_API)
+
+    /** Platform-appropriate explanation: the legacy setting is global, not per-app. */
+    @JvmStatic fun explanation(state: String, api: Int): String = when {
+        api in MIN_SUPPORTED_API until PER_SOURCE_MIN_API && state == STATE_NOT_AUTHORIZED ->
+            "This Android version (7.x) uses one global install-from-unknown-sources setting instead of a per-app switch, and it is currently off. Open Settings, then Security, and enable Unknown sources; update checks and release notes remain available either way."
+        else -> when (state) {
+            STATE_GRANTED -> "Android reports install authorization for this build."
+            STATE_TARGET_TOO_OLD ->
+                "This installed build targets an Android version below 8; Android refuses per-app install authorization for such a package, so the TV switch cannot stay on. Install this or a newer YTArk APK with an installer that is already allowed."
+            STATE_PERMISSION_NOT_DECLARED ->
+                "This installed build does not request android.permission.REQUEST_INSTALL_PACKAGES, which Android requires before it will grant install authorization, so the TV switch cannot stay on. Install this or a newer YTArk APK with an installer that is already allowed."
+            STATE_NOT_AUTHORIZED ->
+                "Android has not authorized this build to install packages. The switch in the TV's Settings writes a per-package system value; if this profile or a device policy forbids unknown sources, that value does not survive and YTArk cannot override it."
+            else ->
+                "Android did not report install authorization for this build. Update checks and release notes remain available; select Allow installs to open Android's own screen."
+        }
     }
 
     /** Settings route for the detected API level and whether the platform resolves the package screen. */
