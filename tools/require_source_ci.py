@@ -64,6 +64,22 @@ def parse_runs(payload: Any) -> list[dict[str, Any]]:
     return runs
 
 
+def run_order(run: dict[str, Any]) -> tuple[int, int, str, int]:
+    """Order CI attempts newest-first without trusting malformed API fields."""
+    try:
+        run_number = int(run.get("run_number") or 0)
+        run_attempt = int(run.get("run_attempt") or 0)
+        run_id = int(run.get("id") or 0)
+    except (TypeError, ValueError, OverflowError) as error:
+        raise SourceValidationError("GitHub returned malformed CI run ordering fields") from error
+    if min(run_number, run_attempt, run_id) < 0:
+        raise SourceValidationError("GitHub returned negative CI run ordering fields")
+    updated_at = run.get("updated_at") or ""
+    if not isinstance(updated_at, str):
+        raise SourceValidationError("GitHub returned a malformed CI run update time")
+    return run_number, run_attempt, updated_at, run_id
+
+
 def gh_runs_api(repository: str, head_sha: str, branch: str) -> dict[str, Any]:
     """Fetch CI runs filtered server-side by exact SHA and main branch."""
     command = [
@@ -113,41 +129,27 @@ def require_source_ci(
             run for run in parse_runs(api(repository, head_sha, branch))
             if matches_source_run(run, repository=repository, head_sha=head_sha, branch=branch)
         ]
-        successful = [
-            run for run in runs
-            if run.get("status") == "completed" and run.get("conclusion") == "success"
-        ]
-        if successful:
-            return max(
-                successful,
-                key=lambda run: (
-                    int(run.get("run_number") or 0),
-                    int(run.get("run_attempt") or 0),
-                    str(run.get("updated_at") or ""),
-                ),
-            )
-
-        active = [run for run in runs if run.get("status") in ACTIVE_STATUSES]
-        completed = [run for run in runs if run.get("status") == "completed"]
-        if completed and not active:
-            latest = max(
-                completed,
-                key=lambda run: (
-                    int(run.get("run_number") or 0),
-                    int(run.get("run_attempt") or 0),
-                    str(run.get("updated_at") or ""),
-                ),
-            )
+        latest = max(runs, key=run_order) if runs else None
+        if latest is not None and latest.get("status") == "completed":
+            if latest.get("conclusion") == "success":
+                return latest
             raise SourceValidationError(
-                "Exact-source CI completed without success for "
+                "Latest exact-source CI attempt completed without success for "
                 f"{head_sha} (conclusion: {latest.get('conclusion') or 'unknown'}, "
                 f"run: {latest.get('html_url') or latest.get('id') or 'unknown'}). "
+                "An older successful run cannot override a newer failed or cancelled attempt. "
                 "Fix or rerun CI for this same commit before release publication."
+            )
+
+        if latest is not None and latest.get("status") not in ACTIVE_STATUSES:
+            raise SourceValidationError(
+                "Latest exact-source CI attempt has an unrecognized status "
+                f"({latest.get('status') or 'unknown'}); publication is blocked."
             )
 
         remaining = deadline - monotonic()
         if remaining <= 0:
-            detail = "CI run is still in progress" if active else "no matching main-branch CI run appeared"
+            detail = "latest CI run is still in progress" if latest is not None else "no matching main-branch CI run appeared"
             raise SourceValidationError(
                 f"Timed out waiting for successful {WORKFLOW_FILE} on exact source "
                 f"{head_sha}: {detail}. Publication is blocked."

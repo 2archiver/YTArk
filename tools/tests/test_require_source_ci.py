@@ -70,11 +70,14 @@ class RequireSourceCiTests(unittest.TestCase):
                     untrusted, repository=REPOSITORY, head_sha=SHA, branch="main",
                 ))
 
-    def test_waits_for_an_exact_run_that_is_still_in_progress(self):
+    def test_newer_in_progress_run_supersedes_older_success_until_it_finishes(self):
         clock = Clock()
+        older_success = run(id=8122, run_number=70)
+        newer_active = run(id=8124, run_number=72, status="in_progress", conclusion=None)
+        newer_success = run(id=8124, run_number=72)
         responses = iter([
-            {"workflow_runs": [run(status="in_progress", conclusion=None)]},
-            {"workflow_runs": [run()]},
+            {"workflow_runs": [older_success, newer_active]},
+            {"workflow_runs": [older_success, newer_success]},
         ])
         result = require_source_ci.require_source_ci(
             SHA,
@@ -84,8 +87,26 @@ class RequireSourceCiTests(unittest.TestCase):
             timeout_seconds=5,
             poll_seconds=1,
         )
+        self.assertEqual(result["id"], 8124)
         self.assertEqual(result["conclusion"], "success")
         self.assertEqual(clock.value, 1.0)
+
+    def test_newer_failed_run_or_attempt_invalidates_older_success(self):
+        older_success = run()
+        newer_failures = [
+            run(id=8124, run_number=72, conclusion="failure"),
+            run(run_attempt=2, conclusion="cancelled"),
+        ]
+        for newer_failure in newer_failures:
+            with self.subTest(newer_failure=newer_failure):
+                with self.assertRaisesRegex(require_source_ci.SourceValidationError, "without success"):
+                    require_source_ci.require_source_ci(
+                        SHA,
+                        api=lambda *_: {"workflow_runs": [older_success, newer_failure]},
+                        monotonic=lambda: 0.0,
+                        sleep=lambda _seconds: self.fail("newer completed failure must not poll"),
+                        timeout_seconds=120,
+                    )
 
     def test_completed_failure_fails_closed_without_waiting(self):
         with self.assertRaisesRegex(require_source_ci.SourceValidationError, "without success"):
