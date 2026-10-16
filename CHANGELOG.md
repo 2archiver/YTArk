@@ -22,9 +22,35 @@ Conventions:
 - Capabilities inherited from TizenTube and TizenTubeCobalt are listed under
   "Upstream base and inherited capabilities", not as YTArk additions.
 
-## [3.5.2] — Unreleased
+## [3.6.0] — Unreleased
 
-> Not yet published. Planned tag `v3.5.2` · versionCode 3050200 · userscript `s36` · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.
+> Not yet published. Planned tag `v3.6.0` · versionCode 3060000 · userscript `s37` · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.
+
+Opt-in local diagnostics, safer startup, and reliable permission returns.
+
+### Added
+- Browser diagnostics are off by default; allowlisted startup, input, playback and buffering proxies stay in bounded local storage.
+- Native diagnostics have separate opt-in, report and clear controls in Updates; startup marks leave always-on logcat.
+- Reports are readable with the D-pad, OK and Back and explain sample scope, clock quality and unavailable measurements.
+### Changed
+- Disable stops collection immediately; Clear removes only that recorder's data and leaves settings, accounts, cookies, caches and installer APKs untouched.
+- Browser and Android reports remain separate, use app-private/local storage, and are never uploaded automatically.
+- Timing reports label media, frame callbacks and render opportunities as proxies, not input-to-photon or display latency.
+### Fixed
+- Guide refresh waits for both the executor and command constructor before dispatching once.
+- Permission detours have explicit entry/install ownership and require a genuine return before continuation.
+- Permission continuation is accepted against the same validated candidate even while serialized updater work is busy.
+### Known limitations
+- A complete browser launch capture begins on the next launch; enabling diagnostics now starts a labeled partial sample. Native startup milestones are not reconstructed; enable before the next launch to capture them.
+- Browser storage is capped at 10 sessions, 200 events per session, 256 KiB combined and five minutes per sample; native storage is separately bounded.
+- Device permission-return, D-pad and playback checks remain unverified; no speed, rendered-frame or cross-clock comparison is claimed.
+### Validation
+- Host tests cover default-off behavior, privacy allowlists, bounded storage, clock rollback, guide readiness and permission ownership/continuation.
+- Android SDK compilation, signed candidate APK evidence and device checks are reported separately; host tests are not device validation.
+
+## [3.5.2] — 2026-10-16
+
+> Published 2026-10-16 09:07 UTC as [YTArk 3.5.2](https://github.com/2archiver/YTArk/releases/tag/v3.5.2) · tag `v3.5.2` · versionCode 3050200 · userscript `s36` · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.
 
 Reliable permission routes, safer startup navigation, and startup measurement.
 
@@ -43,13 +69,13 @@ Reliable permission routes, safer startup navigation, and startup measurement.
 ### Changed
 - Faster startup (Experimental) stays opt-in with the same polling cadence; when its bounded window expires without readiness, that is now reported instead of ending silently.
 ### Known limitations
-- TV permission persistence, in-place upgrades and startup timing still need device testing; 3.5.1 has no TV test result either. See the 3.5.2 evidence report.
+- TV permission persistence, in-place upgrades and startup timing still need device testing; 3.5.1 has no TV test result either. See the dated 3.5.2 evidence report.
 - The startup marks enable a measured comparison; no startup speed improvement is claimed for 3.5.2 itself.
-- Userscript `s36` is the candidate script tag and becomes live only through the release publication workflow.
+- Userscript `s36` is the published immutable script tag.
 ### Validation
 - JavaScript: `node --test` over the TizenTube mods suite, including the startup-navigation, startup-timing and readiness give-up tests.
 - Java and Kotlin updater policy suite: API-aware capability classification, launch-outcome classification and departure-aware pending-install transitions.
-- ARMv7 APK build, signature, alignment and manifest checks run in the candidate workflow; they are not device tests.
+- ARMv7 APK build, signature, alignment and manifest checks ran in the candidate workflow; they are not device tests.
 
 ## [3.5.1] — 2026-10-16
 

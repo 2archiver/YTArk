@@ -29,6 +29,7 @@ describe('fresh installation defaults', () => {
     assert.equal(config.configRead('hidePlayerWatermark'), true);
     assert.equal(config.configRead('removePlayerScrim'), true);
     assert.equal(config.configRead('fasterStartup'), false, 'the experimental faster start begins off');
+    assert.equal(config.configRead('recordBrowserDiagnostics'), false, 'browser diagnostics are default-off on a fresh install');
     assert.equal(config.getConfigMeta().freshInstall, true);
     assert.equal(config.configRead('lastSeenVersion'), '');
     // Persisted immediately: on the next launch YouTube's own storage exists,
@@ -54,6 +55,7 @@ describe('upgrade from YTArk 2.2 or earlier', () => {
         routeColor: '#0d1f3c',
         sidebarContentsOrder: ['FEwhat_to_watch', { browseId: 'UC123', title: 'Channel' }],
         preferredVideoQuality: '1080p',
+        recordBrowserDiagnostics: true,
       }),
     });
     const config = await loadConfig(storage);
@@ -65,6 +67,7 @@ describe('upgrade from YTArk 2.2 or earlier', () => {
     assert.equal(config.configRead('focusContainerColor'), '#0a1628');
     assert.deepEqual(config.configRead('sidebarContentsOrder'), ['FEwhat_to_watch', { browseId: 'UC123', title: 'Channel' }]);
     assert.equal(config.configRead('preferredVideoQuality'), '1080p');
+    assert.equal(config.configRead('recordBrowserDiagnostics'), true, 'an explicit diagnostics opt-in survives upgrade migration');
     assert.equal(stored(storage).configSchemaVersion, config.CONFIG_SCHEMA_VERSION);
 
     // The user opts in later; the explicit choice wins on every restart.
@@ -144,6 +147,20 @@ describe('malformed saved settings', () => {
     const future = config.migrateConfig({ configSchemaVersion: 99, uiTheme: 'youtube' }, {});
     assert.equal(future.config.configSchemaVersion, 99, 'a newer schema marker is never downgraded');
     assert.equal(future.config.uiTheme, 'youtube', 'a newer schema is left untouched, key included');
+  });
+});
+
+describe('browser diagnostics migration', () => {
+  it('adds a missing opt-in as false and never overrides an explicit choice', async () => {
+    const missing = await loadConfig(propertyStorage({ [CONFIG_KEY]: JSON.stringify({ configSchemaVersion: 5, enableAdBlock: false }) }));
+    assert.equal(missing.configRead('recordBrowserDiagnostics'), false);
+    assert.equal(missing.configRead('enableAdBlock'), false);
+    assert.equal(missing.configRead('configSchemaVersion'), 6);
+
+    const optedIn = await loadConfig(propertyStorage({ [CONFIG_KEY]: JSON.stringify({ configSchemaVersion: 5, recordBrowserDiagnostics: true }) }));
+    assert.equal(optedIn.configRead('recordBrowserDiagnostics'), true);
+    const optedOut = await loadConfig(propertyStorage({ [CONFIG_KEY]: JSON.stringify({ configSchemaVersion: 5, recordBrowserDiagnostics: false }) }));
+    assert.equal(optedOut.configRead('recordBrowserDiagnostics'), false);
   });
 });
 

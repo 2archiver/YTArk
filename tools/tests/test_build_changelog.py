@@ -19,6 +19,7 @@ import validate_release  # noqa: E402
 
 # Every stable release published on GitHub (gh release list), newest first.
 PUBLISHED = [
+    ("3.5.2", "v3.5.2", "2026-10-16", 3050200, "s36"),
     ("3.5.1", "v3.5.1", "2026-10-16", 3050100, "s35"),
     ("3.5.0", "v3.5.0", "2026-10-15", 3050000, "s34"),
     ("3.4.0", "v3.4.0", "2026-10-15", 3040000, "s33"),
@@ -211,7 +212,7 @@ class RepositoryChangelogTests(unittest.TestCase):
             self.assertIn(required, headings)
         limitations = next(section for section in newest["sections"]
                            if section["heading"] == "Known limitations")
-        self.assertTrue(any("still need device testing" in item["text"]
+        self.assertTrue(any("remain unverified" in item["text"]
                             for item in limitations["items"]))
 
     def test_published_releases_stay_one_liners(self):

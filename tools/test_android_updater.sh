@@ -10,6 +10,8 @@ POLICY_SOURCES=(
   Policies.kt
   UpdateFailure.kt
   UpdateState.kt
+  PermissionDetourCoordinator.kt
+  NativeDiagnosticsCore.kt
   UpdatePresentation.kt
   UpdateReliability.kt
   UpdateRepository.kt

@@ -81,19 +81,40 @@ class WorkflowEnvTests(unittest.TestCase):
 
     def test_publication_depends_on_the_build_job_of_the_same_run(self):
         block = job_block(WORKFLOWS / BUILD, "publish-release")
-        self.assertIn("needs:\n      - release-guard\n      - build-apk-candidates", block)
+        self.assertIn("needs:\n      - release-guard\n      - source-validation\n      - build-apk-candidates", block)
         self.assertIn("needs.release-guard.result == 'success'", block)
+        self.assertIn("needs.source-validation.result == 'success'", block)
         self.assertIn("needs.build-apk-candidates.result != 'failure'", block)
         self.assertIn("needs.build-apk-candidates.result != 'cancelled'", block)
         self.assertIn("github.repository == '2archiver/YTArk'", block)
         self.assertIn("github.ref == 'refs/heads/main'", block)
         self.assertIn("contents: write", block)
 
+    def test_exact_source_ci_is_required_before_build_and_publication(self):
+        build = WORKFLOWS / BUILD
+        source = job_block(build, "source-validation")
+        candidate = job_block(build, "build-apk-candidates")
+        publication = job_block(build, "publish-release")
+        self.assertIn("github.ref == 'refs/heads/main'", source)
+        self.assertIn("actions: read", source)
+        self.assertIn("tools/require_source_ci.py", source)
+        self.assertIn("--head-sha \"$GITHUB_SHA\"", source)
+        self.assertIn("needs:\n      - release-guard\n      - source-validation", candidate)
+        self.assertIn("needs.source-validation.result == 'success'", candidate)
+        self.assertIn("needs.source-validation.result == 'success'", publication)
+        self.assertNotIn("needs.source-validation.result != 'failure'", publication)
+
     def test_build_job_stays_read_only_and_keeps_the_signing_key(self):
         block = job_block(WORKFLOWS / BUILD, "build-apk-candidates")
         self.assertIn("contents: read", block)
         self.assertNotIn("contents: write", block)
         self.assertIn("secrets.YTARK_KEYSTORE_B64", block)
+
+    def test_recovery_requires_source_ci_for_the_candidate_sha(self):
+        verify = job_block(WORKFLOWS / PUBLISH, "verify-candidate")
+        self.assertIn("tools/require_source_ci.py", verify)
+        self.assertIn("--head-sha \"$EXPECTED_SHA\"", verify)
+        self.assertIn("--branch main", verify)
 
     def test_recovery_workflow_binds_a_named_candidate(self):
         text = (WORKFLOWS / PUBLISH).read_text(encoding="utf-8")

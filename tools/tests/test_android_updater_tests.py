@@ -124,6 +124,44 @@ class RunnerWiringTests(unittest.TestCase):
             self.assertIn("InstallerResultPolicy tests passed", result.stdout)
 
 
+class NativeDiagnosticsContractTests(unittest.TestCase):
+    def test_native_recorder_is_default_off_local_bounded_and_separate(self):
+        core = (MAIN_DIR / "NativeDiagnosticsCore.kt").read_text(encoding="utf-8")
+        wrapper = (MAIN_DIR / "AndroidDiagnostics.kt").read_text(encoding="utf-8")
+        activity = (MAIN_DIR / "UpdateActivity.kt").read_text(encoding="utf-8")
+        native_components = (MAIN_DIR / "NativeComponents.kt").read_text(encoding="utf-8")
+        runner = RUNNER.read_text(encoding="utf-8")
+
+        self.assertIn('const val MAX_SESSIONS = 6', core)
+        self.assertIn('const val MAX_EVENTS_PER_SESSION = 32', core)
+        self.assertIn('const val MAX_TOTAL_EVENTS = 160', core)
+        self.assertIn('const val MAX_SERIALIZED_CHARS = 16_384', core)
+        self.assertIn('const val MAX_DURATION_MS = 10L * 60L * 1000L', core)
+        self.assertIn('const val MAX_OFFSET_MS = 24L * 60L * 60L * 1000L', core)
+        self.assertIn('getBoolean(KEY_ENABLED, false)', wrapper)
+        self.assertIn('"native_bootstrap_ready"', core)
+        self.assertIn('"native_first_activity_resumed"', core)
+        self.assertIn('not reconstructed; enable before the next launch', core)
+        self.assertIn('AndroidDiagnostics.initialize(app)\n        StartupTimeline.processStart()', native_components)
+        self.assertIn('AndroidDiagnostics.record("native_bootstrap_ready")', native_components)
+        self.assertIn('AndroidDiagnostics.record("native_first_activity_resumed")', native_components)
+        self.assertNotIn('YTArkStartup', native_components, 'native launch marks must not log unconditionally')
+        self.assertIn('getSharedPreferences(PREFS, Context.MODE_PRIVATE)', wrapper)
+        self.assertIn('SystemClock.elapsedRealtime()', wrapper)
+        self.assertIn('prefs.edit().remove(KEY_EVENTS).commit()', wrapper)
+        self.assertNotIn('prefs.edit().clear()', wrapper)
+        self.assertNotIn('HttpURLConnection', wrapper)
+        self.assertNotIn('ClipData', activity)
+        self.assertNotIn('ACTION_SEND', activity)
+        self.assertNotIn('clipboard', activity.lower())
+        self.assertIn('android updater diagnostics are separate from browser diagnostics', activity.lower())
+        self.assertIn('nativeDiagnosticsToggleButton=button', activity)
+        self.assertIn('nativeDiagnosticsReportButton=button', activity)
+        self.assertIn('nativeDiagnosticsClearButton=button', activity)
+        self.assertIn('ScrollView(this)', activity)
+        self.assertIn('NativeDiagnosticsCore.kt', runner)
+
+
 class UpdateScreenRemovalTests(unittest.TestCase):
     def test_no_production_java_reference_to_the_removed_storage_screen(self):
         for path in MAIN_DIR.rglob("*.kt"):
@@ -136,12 +174,15 @@ class UpdateScreenRemovalTests(unittest.TestCase):
         text = (MAIN_DIR / "UpdateActivity.kt").read_text()
         created = re.findall(r'(\w+Button)=button\((\d+),', text)
         self.assertEqual([name for name, _ in created],
-                         ['allowInstallsButton', 'checkButton', 'intervalButton', 'primaryButton', 'cancelButton', 'currentNotesButton', 'candidateNotesButton', 'detailsButton'])
-        self.assertEqual(len({id for _, id in created}), 8)
+                         ['allowInstallsButton', 'checkButton', 'intervalButton', 'primaryButton', 'cancelButton', 'currentNotesButton', 'candidateNotesButton', 'detailsButton', 'nativeDiagnosticsToggleButton', 'nativeDiagnosticsReportButton', 'nativeDiagnosticsClearButton'])
+        self.assertEqual(len({id for _, id in created}), 11)
         self.assertIn('ENTRY_PERMISSION', text)
         self.assertIn('fresh_entry_pending', text)
         self.assertIn('permission_entry_attempted', text)
-        self.assertIn('permission_route_in_flight', text)
+        self.assertIn('permissionRouteInFlight', text)
+        self.assertIn('PermissionDetourCoordinator', text)
+        self.assertIn('reconcileMissingPermissionRoute', text)
+        self.assertIn('focusPermissionRetry', text)
         self.assertIn('InstallPermissionEntryPolicy.shouldRequestOnEntry', text)
         self.assertIn('InstallAuthorizationAccess.openSettings', text)
         self.assertIn('InstallAuthorizationAccess.granted', text)
@@ -167,13 +208,22 @@ class UpdateScreenRemovalTests(unittest.TestCase):
     def test_permission_entry_has_api_specific_routes_and_saved_no_loop_state(self):
         activity = (MAIN_DIR / "UpdateActivity.kt").read_text(encoding="utf-8")
         installer = (MAIN_DIR / "InstallCoordinator.kt").read_text(encoding="utf-8")
+        detours = (MAIN_DIR / "PermissionDetourCoordinator.kt").read_text(encoding="utf-8")
         policies = (MAIN_DIR / "Policies.kt").read_text(encoding="utf-8")
         repacker = (ROOT / "tools" / "repack_apk.py").read_text(encoding="utf-8")
         release_validator = (ROOT / "tools" / "validate_release.py").read_text(encoding="utf-8")
         for marker in ('"fresh_entry_pending"', '"permission_entry_attempted"',
-                       '"permission_route_in_flight"', 'beginFreshPageEntry()',
+                       '"detour_active"', '"detour_returned"', '"detour_revision"',
+                       'PermissionDetourSnapshot.mostRecent', 'beginFreshPageEntry()',
                        'finishEntryPermissionReturn()', 'ENTRY_PERMISSION', 'Allow installs'):
             self.assertIn(marker, activity)
+        # Joined entry/install routes must return through the request code owned by
+        # the route that actually launched Settings, including process recreation.
+        self.assertIn('?: (permissionDetours.current?.owner == PermissionDetourOwner.ENTRY)', activity)
+        self.assertIn('val requestCode = if (route.owner == PermissionDetourOwner.ENTRY) ENTRY_PERMISSION else InstallCoordinator.PERMISSION', activity)
+        self.assertIn('InstallAuthorizationAccess.openSettings(this, requestCode)', activity)
+        self.assertIn('!active.launched && !fromActivityResult', detours)
+        self.assertIn('PermissionDetourSnapshot.mostRecent', activity)
         self.assertIn('context.packageManager.canRequestPackageInstalls()', installer)
         self.assertIn('Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES', installer)
         self.assertIn('Settings.ACTION_SECURITY_SETTINGS', installer)

@@ -32,62 +32,31 @@ internal object InstallAuthorizationAccess {
         null
     }
 
-    /**
-     * The target SDK of the *installed* build. Android's capability check reads
-     * exactly this value: a package targeting below API 26 is refused outright,
-     * which no settings screen can change. `null` means it could not be read.
-     */
     fun targetSdk(context: Context): Int? = try {
         context.applicationInfo.targetSdkVersion.takeIf { it > 0 }
-    } catch (_: Exception) {
-        null
-    }
+    } catch (_: Exception) { null }
 
-    /**
-     * Whether the installed manifest requests the permission Android requires.
-     * A declaration that a build capped with `maxSdkVersion` is caught by the
-     * packaged-manifest release gate, which reads the compiled manifest bytes.
-     */
     fun declaresInstallPermission(context: Context): Boolean? = try {
         val info = context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_PERMISSIONS)
         info.requestedPermissions?.contains(InstallCapabilityPolicy.REQUEST_INSTALL_PACKAGES) ?: false
-    } catch (_: Exception) {
-        null
-    }
+    } catch (_: Exception) { null }
 
-    /**
-     * The per-package system AppOp that the TV's Settings switch writes. This is
-     * read-only context for the screen: Android's own `canRequestPackageInstalls`
-     * stays the authority, because a forbidden write leaves no state here.
-     */
     fun appOpMode(context: Context): Int? = try {
         val ops = context.getSystemService(Context.APP_OPS_SERVICE) as? AppOpsManager
         if (ops == null) null else {
             val uid = context.applicationInfo.uid
-            if (Build.VERSION.SDK_INT >= 29) {
-                ops.unsafeCheckOpNoThrow(InstallCapabilityPolicy.INSTALL_APP_OP, uid, context.packageName)
-            } else {
+            if (Build.VERSION.SDK_INT >= 29) ops.unsafeCheckOpNoThrow(InstallCapabilityPolicy.INSTALL_APP_OP, uid, context.packageName)
+            else {
                 @Suppress("DEPRECATION")
                 ops.checkOpNoThrow(InstallCapabilityPolicy.INSTALL_APP_OP, uid, context.packageName)
             }
         }
-    } catch (_: Exception) {
-        null
-    }
+    } catch (_: Exception) { null }
 
-    /** The reason code the Updates screen explains, so it can never guess. */
     fun diagnose(context: Context): String = InstallCapabilityPolicy.state(
-        Build.VERSION.SDK_INT,
-        targetSdk(context),
-        declaresInstallPermission(context),
-        granted(context),
+        Build.VERSION.SDK_INT, targetSdk(context), declaresInstallPermission(context), granted(context),
     )
-
-    /** Platform-appropriate explanation for the screen; never hand-assembled at call sites. */
-    fun explanation(context: Context): String =
-        InstallCapabilityPolicy.explanation(diagnose(context), Build.VERSION.SDK_INT)
-
-    /** Factual app-op note for the screen. Diagnostics only, never a grant decision. */
+    fun explanation(context: Context): String = InstallCapabilityPolicy.explanation(diagnose(context), Build.VERSION.SDK_INT)
     fun appOpNote(context: Context): String = when (appOpMode(context)) {
         AppOpsManager.MODE_ALLOWED -> " System install app-op: allowed."
         AppOpsManager.MODE_ERRORED -> " System install app-op: denied."
@@ -96,42 +65,19 @@ internal object InstallAuthorizationAccess {
         null -> ""
         else -> " System install app-op: unresolved."
     }
+    fun canHoldAuthorization(context: Context): Boolean = InstallCapabilityPolicy.canHoldAuthorization(
+        Build.VERSION.SDK_INT, targetSdk(context), declaresInstallPermission(context),
+    )
 
-    fun canHoldAuthorization(context: Context): Boolean =
-        InstallCapabilityPolicy.canHoldAuthorization(
-            Build.VERSION.SDK_INT, targetSdk(context), declaresInstallPermission(context),
+    fun settingsIntents(context: Context): List<Intent> = when (InstallPermissionEntryPolicy.routeForApi(Build.VERSION.SDK_INT)) {
+        InstallPermissionEntryPolicy.ROUTE_PACKAGE_SOURCE -> listOf(
+            Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:${context.packageName}")),
+            Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES),
         )
-
-    /**
-     * Android's own screens, most specific first. The package input of
-     * ACTION_MANAGE_UNKNOWN_APP_SOURCES is optional: an OEM build that does not
-     * resolve the package-scoped screen still resolves the list screen. No
-     * manufacturer component name is hard-coded.
-     */
-    fun settingsIntents(context: Context): List<Intent> =
-        when (InstallPermissionEntryPolicy.routeForApi(Build.VERSION.SDK_INT)) {
-            InstallPermissionEntryPolicy.ROUTE_PACKAGE_SOURCE -> listOf(
-                Intent(
-                    Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
-                    Uri.parse("package:${context.packageName}"),
-                ),
-                Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES),
-            )
-            InstallPermissionEntryPolicy.ROUTE_SECURITY_SETTINGS -> listOf(Intent(Settings.ACTION_SECURITY_SETTINGS))
-            else -> emptyList()
-        }
-
+        InstallPermissionEntryPolicy.ROUTE_SECURITY_SETTINGS -> listOf(Intent(Settings.ACTION_SECURITY_SETTINGS))
+        else -> emptyList()
+    }
     fun settingsIntent(context: Context): Intent? = settingsIntents(context).firstOrNull()
-
-    /**
-     * Launches the first screen the platform actually opens, and classifies the
-     * real launch outcomes. Resolution is deliberately *not* a precheck:
-     * package-visibility filtering on modern Android can make
-     * `resolveActivity` answer `null` for a screen that launches normally, so
-     * filtering on it would block usable routes. Returns `null` when a screen
-     * was opened, else `OPEN_UNAVAILABLE` (nothing to launch) or
-     * `OPEN_BLOCKED` (the platform refused).
-     */
     fun openSettings(activity: Activity, requestCode: Int): String? {
         val attempts = mutableListOf<String>()
         for (intent in settingsIntents(activity)) {
@@ -139,11 +85,8 @@ internal object InstallAuthorizationAccess {
                 activity.startActivityForResult(intent, requestCode)
                 attempts.add(InstallPermissionEntryPolicy.LAUNCH_OK)
                 return null
-            } catch (_: SecurityException) {
-                attempts.add(InstallPermissionEntryPolicy.LAUNCH_BLOCKED)
-            } catch (_: Exception) {
-                attempts.add(InstallPermissionEntryPolicy.LAUNCH_NOT_FOUND)
-            }
+            } catch (_: SecurityException) { attempts.add(InstallPermissionEntryPolicy.LAUNCH_BLOCKED) }
+            catch (_: Exception) { attempts.add(InstallPermissionEntryPolicy.LAUNCH_NOT_FOUND) }
         }
         return when (InstallPermissionEntryPolicy.openOutcome(attempts)) {
             InstallPermissionEntryPolicy.OUTCOME_BLOCKED -> OPEN_BLOCKED
@@ -160,48 +103,76 @@ internal object InstallAuthorizationAccess {
 class InstallCoordinator(private val activity: UpdateActivity, private val updates: UpdateCoordinator) {
     private var flow = false
     fun permissionGranted() = InstallAuthorizationAccess.granted(activity) == true
+
+    /** Ordinary user request; the post-permission path passes the captured identity. */
     fun install(returning: Boolean = false) {
-        if (flow || !activity.visible) return
-        if (returning && !permissionGranted()) { updates.clearPermissionRequest(); return }
-        flow = true
-        updates.prepareInstall(returning) { c, file ->
-            if (!activity.visible || c == null || file == null) { flow = false; return@prepareInstall }
-            if (!permissionGranted()) openPermission(c, file) else handoff(c, file)
+        if (returning) {
+            resumed(updates.state)
+            return
         }
+        if (flow || !activity.visible) return
+        flow = true
+        val accepted = updates.prepareInstall(returning = false) { candidate, file ->
+            if (!activity.visible || candidate == null || file == null) {
+                flow = false
+                return@prepareInstall
+            }
+            if (!permissionGranted()) openPermission(candidate, file) else handoff(candidate, file)
+        }
+        if (!accepted) flow = false
     }
-    private fun openPermission(c: Candidate, file: File) {
-        updates.markExternal(UpdatePhase.AwaitingPermission, c, file) {
+
+    private fun openPermission(candidate: Candidate, file: File) {
+        val reserved = activity.reserveInstallPermissionRoute(candidate.identity)
+        if (reserved.route == null || reserved.kind == PermissionDetourStartKind.BLOCKED) {
+            flow = false
+            updates.externalReturned("Another Android install-authorization route is still active. Return to Updates and retry; the verified APK is kept.")
+            return
+        }
+        if (reserved.kind == PermissionDetourStartKind.ALREADY_ACTIVE) {
+            flow = false
+            return
+        }
+        val requestId = reserved.route.requestId
+        updates.markExternal(UpdatePhase.AwaitingPermission, candidate, file) {
             try {
-                if (!activity.visible) { updates.clearPermissionRequest(); return@markExternal }
-                // Android answers the capability question from the packaged
-                // manifest, so a package that can never be authorized gets the
-                // honest reason and the manual upgrade path instead of a screen
-                // that cannot keep the switch on.
+                if (!activity.visible) {
+                    activity.cancelInstallPermissionRoute(requestId, candidate.identity)
+                    updates.clearPermissionRequest(candidate.identity)
+                    return@markExternal
+                }
                 if (!InstallAuthorizationAccess.canHoldAuthorization(activity)) {
+                    activity.cancelInstallPermissionRoute(requestId, candidate.identity)
                     updates.externalReturned(InstallAuthorizationAccess.explanation(activity) + " Select Install update to retry once an allowed installer replaced this build.")
                     return@markExternal
                 }
-                // The Updates entry route already owns a live system-screen
-                // detour: opening a second one would stack Settings screens and
-                // race their returns. Its return path re-reads the grant, and
-                // resumed() continues this pending install from there.
-                if (activity.permissionRouteInFlight) return@markExternal
-                when (InstallAuthorizationAccess.openSettings(activity, PERMISSION)) {
-                    null -> Unit
-                    InstallAuthorizationAccess.OPEN_UNAVAILABLE -> updates.externalReturned("Android has no install-authorization screen on this device. Check this TV's Security settings, then select Install update.")
-                    else -> updates.externalReturned("This TV refused to open the install-authorization screen. Allow installs for YTArk in Android Settings, then select Install update.")
+                val outcome = activity.launchReservedInstallPermissionRoute(requestId)
+                if (outcome != null) {
+                    activity.cancelInstallPermissionRoute(requestId, candidate.identity)
+                    updates.externalReturned(if (outcome == InstallAuthorizationAccess.OPEN_UNAVAILABLE)
+                        "Android has no install-authorization screen on this device. Check this TV's Security settings, then select Install update."
+                    else "This TV refused to open the install-authorization screen. Allow installs for YTArk in Android Settings, then select Install update.")
                 }
             } finally {
-                // Leave the phase at AwaitingPermission, but allow resume to continue exactly once.
                 flow = false
+                // The shared entry route might have returned while markExternal
+                // was queued. Recheck only after the busy mark is released.
+                stateChanged(updates.state)
             }
         }
     }
-    private fun handoff(c: Candidate, file: File) {
-        updates.markExternal(UpdatePhase.AwaitingInstaller, c, file) {
+
+    private fun handoff(candidate: Candidate, file: File) {
+        updates.markExternal(UpdatePhase.AwaitingInstaller, candidate, file) {
             try {
                 if (!activity.visible) { updates.externalReturned("APK ready. Select Install update when ready."); return@markExternal }
-                if (!permissionGranted()) { updates.externalReturned("Install permission required. Enable Allow from this source for YTArk, then select Install update."); return@markExternal }
+                // Android remains the authority; the permission is re-read after
+                // the queued APK validation and immediately before handoff.
+                if (!permissionGranted()) {
+                    updates.externalReturned("Install permission changed before handoff. Select Install update to check it again; the verified APK is kept.")
+                    return@markExternal
+                }
+                AndroidDiagnostics.record("installer_handoff", "requested")
                 val app = activity.applicationContext
                 val free = file.parentFile?.usableSpace ?: 0L
                 val canCopy = free >= file.length() + UpdateGuards.SAFETY_MARGIN_BYTES
@@ -218,11 +189,11 @@ class InstallCoordinator(private val activity: UpdateActivity, private val updat
                     }
                 }
             } finally {
-                // AwaitingInstaller disables the button. Clearing flow lets Install work again after return.
                 flow = false
             }
         }
     }
+
     private fun legacy(file: File): Boolean {
         val uri = Uri.parse("content://${activity.packageName}.ytarkupdater.files/update.apk")
         val flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
@@ -236,26 +207,73 @@ class InstallCoordinator(private val activity: UpdateActivity, private val updat
         return try { activity.startActivityForResult(intent, INSTALLER); true }
         catch (_: Exception) { false }
     }
+
     fun result(request: Int) {
         flow = false
-        if (request == INSTALLER) updates.externalReturned("Installation was not confirmed. Select Install update to retry; the downloaded APK is kept.")
-    }
-    fun resumed(s: UpdateState) {
-        // Denial clears the pending request once, and continuation installs
-        // once — but only after the page genuinely departed for the system
-        // screen and came back. A state update while the activity is still
-        // visible is not an external return; acting on it would clear (or
-        // even continue) a pending install the user never left for.
-        if (s.phase == UpdatePhase.AwaitingPermission && s.pendingIdentity != null && !flow) {
-            val departed = activity.departedForExternal
-            if (!departed) return
-            val granted = permissionGranted()
-            activity.departedForExternal = false
-            if (PendingInstallPolicy.mayContinue(s.pendingIdentity, s.candidate?.identity, granted, activity.visible, departed)) install(true)
-            else if (PendingInstallPolicy.shouldClear(s.pendingIdentity, s.candidate?.identity, granted, activity.visible, departed)) updates.clearPermissionRequest()
+        if (request == INSTALLER) {
+            AndroidDiagnostics.record("installer_ui_returned", "returned")
+            updates.externalReturned("Installation was not confirmed. Select Install update to retry; the downloaded APK is kept.")
         }
     }
-    fun stateChanged(s: UpdateState) { if (s.phase == UpdatePhase.Failed) flow = false; resumed(s) }
+
+    /** Called on the UI thread for lifecycle evidence and every coordinator state notification. */
+    fun resumed(s: UpdateState) {
+        val route = activity.currentPermissionDetour() ?: return
+        if (!route.returned || route.continuationAccepted || route.candidateIdentity == null) return
+        val identity = route.candidateIdentity
+        if (s.phase == UpdatePhase.Validating && s.candidate == null) return // restore has not loaded state yet
+        if (s.candidate?.identity != identity) {
+            activity.completePermissionRoute(route.requestId)
+            if (s.pendingIdentity != null) updates.clearPermissionRequest(s.pendingIdentity)
+            return
+        }
+        if (s.pendingIdentity != identity) {
+            if (s.phase == UpdatePhase.Validating) return // recovery will restore AwaitingPermission or a retryable state
+            activity.completePermissionRoute(route.requestId)
+            return
+        }
+        if (s.phase != UpdatePhase.AwaitingPermission) return
+        if (!permissionGranted()) {
+            activity.completePermissionRoute(route.requestId)
+            updates.clearPermissionRequest(identity)
+            activity.focusPermissionRetry()
+            AndroidDiagnostics.record("permission_denied", "denied")
+            return
+        }
+        if (!activity.visible || flow) return
+
+        flow = true
+        val accepted = updates.prepareInstall(returning = true, expectedIdentity = identity) { candidate, file ->
+            if (!activity.visible || candidate == null || candidate.identity != identity || file == null) {
+                flow = false
+                return@prepareInstall
+            }
+            // Re-read authorization after revalidation and again immediately
+            // before the system installer request. If it changed, issue a new
+            // owned permission route; never treat the earlier result as consent.
+            if (!permissionGranted()) openPermission(candidate, file) else handoff(candidate, file)
+        }
+        if (!accepted) {
+            flow = false
+            return
+        }
+        if (!activity.acceptPermissionContinuation(route.requestId, identity)) {
+            flow = false
+            return
+        }
+    }
+
+    fun stateChanged(s: UpdateState) {
+        if (s.phase == UpdatePhase.Failed) {
+            flow = false
+            val route = activity.currentPermissionDetour()
+            if (route != null && route.candidateIdentity != null && !route.launched) {
+                activity.cancelInstallPermissionRoute(route.requestId, route.candidateIdentity)
+            }
+        }
+        resumed(s)
+    }
+
     companion object {
         const val PERMISSION = 7311
         const val INSTALLER = 7312
@@ -263,7 +281,7 @@ class InstallCoordinator(private val activity: UpdateActivity, private val updat
             "com.android.packageinstaller",
             "com.google.android.packageinstaller",
             "com.android.permissioncontroller",
-            "com.google.android.permissioncontroller"
+            "com.google.android.permissioncontroller",
         )
     }
 }
@@ -298,8 +316,6 @@ internal object SessionInstall {
         } catch (e: Exception) {
             try { session.abandon() } catch (_: Exception) { }
             throw e
-        } finally {
-            session.close()
-        }
+        } finally { session.close() }
     }
 }

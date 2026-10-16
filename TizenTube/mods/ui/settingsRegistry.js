@@ -33,6 +33,7 @@ import {
 import { YTARK_BUILD_INFO } from '../assets/buildInfo.generated.js';
 import { tx } from '../translations/text.js';
 import { changelogEntryFor } from '../features/whatsNew.js';
+import { browserDiagnostics } from '../features/browserDiagnostics.js';
 
 const qrcodes = {};
 
@@ -201,6 +202,14 @@ function aboutPanel() {
       { icon: 'INFO' },
       [custom('YTARK_PANEL_SHOW', { id: 'about.buildInfo' })],
     ),
+    (() => {
+      const row = buttonItem(
+        { title: 'Diagnostics', subtitle: 'Opt-in local startup/playback measurements; Android update reports are separate' },
+        { icon: 'INFO' }, [custom('YTARK_PANEL_SHOW', { id: 'about.diagnostics' })],
+      );
+      row.compactLinkRenderer.itemId = 'ytark-about-diagnostics';
+      return row;
+    })(),
     buttonItem(
       {
         title: tx('ytark.about.noticesTitle', 'Credits & licenses'),
@@ -226,6 +235,42 @@ function aboutPanel() {
 }
 
 /** Technical metadata is separate from the short About screen and scrollable. */
+function aboutDiagnosticsPanel() {
+  const enabled = configRead('recordBrowserDiagnostics') === true;
+  const state = browserDiagnostics.status;
+  const status = enabled
+    ? (state === 'recording' ? 'Recording a browser startup/playback sample now.' : 'Recording is enabled; the last sample completed or is waiting for a new sample.')
+    : 'Browser startup/playback recording is off.';
+  const makeRow = (id, title, subtitle, icon, action, parameters = {}) => {
+    const row = buttonItem({ title, subtitle }, { icon }, [custom(action, parameters)]);
+    row.compactLinkRenderer.itemId = `ytark-diagnostics-${id}`;
+    return row;
+  };
+  const items = [
+    overlayMessageRenderer('Technical measurements stay on this device; nothing is sent automatically. A complete browser launch capture requires the next launch. Enabling now starts a labeled partial sample.'),
+    overlayMessageRenderer(`${status} Samples stop after five minutes or 200 events. The browser and Android updater recorders are separate.`),
+    makeRow('recording', enabled ? 'Disable / stop recording' : 'Enable / start recording',
+      enabled ? 'Stops collection immediately; completed reports remain until cleared.' : 'Persists this choice for the next launch; records locally only.',
+      enabled ? 'STOP' : 'PLAY_ARROW', 'YTARK_DIAGNOSTICS_SET', { enabled: !enabled }),
+    makeRow('new-sample', 'Start new sample',
+      enabled ? 'Ends the current sample and starts a new partial capture.' : 'Enables recording and starts a partial capture now.',
+      'REFRESH', 'YTARK_DIAGNOSTICS_NEW_SAMPLE'),
+    makeRow('latest', 'View latest report', 'Readable browser-only report; missing marks are shown as unavailable.',
+      'DESCRIPTION', 'YTARK_DIAGNOSTICS_LATEST'),
+    makeRow('sessions', 'View recent sessions', 'Up to ten locally retained browser samples.',
+      'HISTORY', 'YTARK_DIAGNOSTICS_SESSIONS'),
+    makeRow('clear', 'Clear diagnostic data', 'Clears browser reports only. Android reports are managed in Updates.',
+      'DELETE', 'YTARK_DIAGNOSTICS_CLEAR_CONFIRM'),
+    makeRow('android', 'Android update diagnostics', 'Separate native recorder and report; this browser page cannot read its status.',
+      'SYSTEM_UPDATE', 'YTARK_NATIVE_UPDATES_OPEN'),
+  ];
+  return {
+    title: 'Diagnostics',
+    subtitle: 'On-device browser measurements · Android scope is separate',
+    content: overlayPanelItemListRenderer(items, 2),
+  };
+}
+
 function aboutBuildInfoPanel() {
   const build = YTARK_BUILD_INFO || {};
   const installed = installedVersionInfo();
@@ -828,6 +873,14 @@ export function buildSettingsTree() {
           description: tx('ytark.about.buildDetailsSubtitle', 'Version code, engine and frontend identifiers'),
           icon: 'INFO',
           panel: aboutBuildInfoPanel,
+        },
+        {
+          id: 'about.diagnostics',
+          type: 'panel',
+          title: 'Diagnostics',
+          description: 'Opt-in local browser measurements; Android updater diagnostics are separate',
+          icon: 'INFO',
+          panel: aboutDiagnosticsPanel,
         },
         {
           id: 'about.notices',

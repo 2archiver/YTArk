@@ -1,19 +1,6 @@
-/**
- * One-shot startup navigation.
- *
- * `resolveCommand()` iterates `window._yttv` and silently returns `undefined`
- * when no module exposes a resolver instance, so dispatching the saved startup
- * destination (or the `reloadHomeOnStartup` soft reload) before the resolver
- * exists loses the navigation without a trace. This module defers the dispatch
- * until the resolver is actually available and guarantees it runs at most
- * once, without delaying the rest of the controls initialization.
- *
- * It never changes what is dispatched: an explicit `launchToOnStartup`
- * destination keeps priority over the `reloadHomeOnStartup` soft reload, and
- * with `reloadHomeOnStartup` off there is nothing to dispatch at all.
- */
+/** One-shot startup navigation, dispatched only after the real resolver exists. */
 
-/** Parse the stored startup destination; anything malformed means "none". */
+/** Parse the stored destination; malformed data never becomes a raw command. */
 export function readStartupDestination(raw, warn = null) {
   if (!raw) return null;
   try {
@@ -26,33 +13,71 @@ export function readStartupDestination(raw, warn = null) {
 }
 
 export function createStartupNavigation({ configRead, resolveCommand, hasResolver, mark = () => {}, warn = null }) {
-  let done = false;
+  let status = 'pending';
   let dispatched = null;
+  let errorCategory = null;
   return {
-    /** True once navigation has run or was configured off. */
-    get done() { return done; },
-    /** The command actually dispatched ('explicit-destination' | 'soft-reload' | 'disabled' | null). */
+    get status() { return status; },
+    get done() { return status !== 'pending'; },
     get dispatched() { return dispatched; },
-    /**
-     * Runs the navigation when its dependency exists. Returns true when the
-     * step is complete (dispatched or disabled), false while it is deferred
-     * because the command resolver is not available yet.
-     */
+    get errorCategory() { return errorCategory; },
+    /** Returns false only while the resolver dependency is not available. */
     tryRun() {
-      if (done) return true;
-      if (!configRead('reloadHomeOnStartup')) {
-        done = true;
-        dispatched = 'disabled';
-        mark('startup-navigation', 'disabled');
+      if (status !== 'pending') return true;
+      let reload;
+      try { reload = configRead('reloadHomeOnStartup'); }
+      catch (error) {
+        status = 'failed';
+        errorCategory = 'configuration';
+        if (typeof warn === 'function') { try { warn(error); } catch (_) { /* best effort */ } }
+        mark('startup-navigation-failed', 'failed');
         return true;
       }
-      if (!hasResolver()) return false;
-      done = true;
-      const destination = readStartupDestination(configRead('launchToOnStartup'), warn);
-      dispatched = destination ? 'explicit-destination' : 'soft-reload';
-      mark('startup-navigation', dispatched);
-      resolveCommand(destination || { signalAction: { signal: 'SOFT_RELOAD_PAGE' } });
+      if (!reload) {
+        status = 'disabled';
+        dispatched = 'disabled';
+        mark('startup-navigation-dispatched', 'disabled');
+        return true;
+      }
+      let ready = false;
+      try { ready = hasResolver() === true; } catch (_) { ready = false; }
+      if (!ready) return false;
+
+      let destination = null;
+      try { destination = readStartupDestination(configRead('launchToOnStartup'), warn); }
+      catch (error) {
+        if (typeof warn === 'function') { try { warn(error); } catch (_) { /* best effort */ } }
+      }
+      const category = destination ? 'explicit-destination' : 'soft-reload';
+      const command = destination || { signalAction: { signal: 'SOFT_RELOAD_PAGE' } };
+      // An invocation that throws can have performed a side effect already.
+      // Consume the attempt once, but mark it failed rather than pretending it
+      // was dispatched or retrying an ambiguous navigation.
+      try {
+        const result = resolveCommand(command);
+        if (result === false) {
+          status = 'failed';
+          errorCategory = 'resolver-rejected';
+          mark('startup-navigation-failed', 'failed');
+          return true;
+        }
+        status = 'dispatched';
+        dispatched = category;
+        mark('startup-navigation-dispatched', category);
+      } catch (error) {
+        status = 'failed';
+        errorCategory = 'dispatch-threw';
+        if (typeof warn === 'function') { try { warn(error); } catch (_) { /* best effort */ } }
+        mark('startup-navigation-failed', 'failed');
+      }
       return true;
+    },
+    timeOut() {
+      if (status === 'pending') {
+        status = 'timed-out';
+        errorCategory = 'resolver-unavailable';
+      }
+      return status;
     },
   };
 }

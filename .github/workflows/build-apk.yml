@@ -68,13 +68,42 @@ jobs:
           python3 tools/publish_release.py plan \
             --head-sha "$GITHUB_SHA" --file "$GITHUB_OUTPUT"
 
+  source-validation:
+    name: Require successful exact-source CI validation
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    if: github.repository == '2archiver/YTArk' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - name: Checkout the exact commit under release consideration
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Wait for successful CI on this exact main commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 tools/require_source_ci.py \
+            --head-sha "$GITHUB_SHA" \
+            --repository "$GITHUB_REPOSITORY" \
+            --branch "$GITHUB_REF_NAME" \
+            --timeout-seconds 2100 \
+            --poll-seconds 15 \
+            --summary-file "$GITHUB_STEP_SUMMARY"
+
   build-apk-candidates:
     name: Build and package-check the ARMv7 APK
     runs-on: ubuntu-latest
     timeout-minutes: 150
     needs:
       - release-guard
-    if: github.repository == '2archiver/YTArk' && needs.release-guard.outputs.build_needed == 'true'
+      - source-validation
+    if: github.repository == '2archiver/YTArk' && github.ref == 'refs/heads/main' && needs.release-guard.outputs.build_needed == 'true' && needs.source-validation.result == 'success'
     # Candidate only: no tag, no release, no write token. Signing secrets are
     # used only on push/workflow_dispatch of this repository, never for fork PRs.
     permissions:
@@ -340,8 +369,10 @@ jobs:
     timeout-minutes: 60
     needs:
       - release-guard
+      - source-validation
       - build-apk-candidates
-    # Explicit dependency on a successful build of THIS run for trusted code:
+    # Explicit dependency on successful exact-source CI and, when needed, a
+    # successful build of THIS run for trusted code:
     # a failed or cancelled build can never reach publication.
     # `always()` only lifts GitHub's rule that a job whose needs were skipped is
     # skipped; every gate below still applies, so a failed, cancelled or unguarded
@@ -354,6 +385,7 @@ jobs:
       && github.repository == '2archiver/YTArk'
       && github.ref == 'refs/heads/main'
       && needs.release-guard.result == 'success'
+      && needs.source-validation.result == 'success'
       && needs.build-apk-candidates.result != 'failure'
       && needs.build-apk-candidates.result != 'cancelled'
     permissions:

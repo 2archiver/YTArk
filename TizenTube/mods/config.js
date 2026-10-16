@@ -20,14 +20,13 @@
 //                its own cleanup (the retired Cobalt user-agent override).
 //   4            YTArk 2.8.0: adds opt-in playback recovery; it defaults off and
 //                merges without changing stored preferences or YouTube session data.
-//   5            Current marker. An installation stamped 4 or lower runs the
-//                RETIRED_KEYS sweep when it reaches 5, which also removes the legacy
-//                startup-animation keys (skipStartupAnimation,
-//                enableSkipStartupAnimation). The release that introduced marker 5 is
-//                not recorded in this checkout; see docs/SETTINGS-3.5-AUDIT.md.
+//   5            Removes the legacy startup-animation keys (the original marker-5
+//                release is documented in docs/SETTINGS-3.5-AUDIT.md).
+//   6            Adds default-off browser diagnostic recording. Existing settings
+//                are merged missing-key-only; explicit user choices are retained.
 
 const CONFIG_KEY = 'ytaf-configuration';
-export const CONFIG_SCHEMA_VERSION = 5;
+export const CONFIG_SCHEMA_VERSION = 6;
 
 /**
  * Preferences that no longer exist, with the schema that retired them.
@@ -146,6 +145,9 @@ const defaultConfig = {
   // Optional mod-readiness polling acceleration. Essential readiness, session
   // restoration and the engine/system splash are unchanged. Off by default.
   fasterStartup: false,
+  // Browser-side startup/playback measurements. Default-off on fresh installs
+  // and missing-key-only on upgrades; native updater diagnostics are separate.
+  recordBrowserDiagnostics: false,
   // Automatic retries are an explicit opt-in because PlayerService.loadVideo is not a general recovery API.
   enablePlaybackRecovery: false,
   autoFrameRate: false,
