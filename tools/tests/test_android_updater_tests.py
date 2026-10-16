@@ -190,7 +190,8 @@ class UpdateScreenRemovalTests(unittest.TestCase):
         self.assertIn('findViewById<View>(focusId)', text)
         self.assertIn('currentFocus?.id', text)
         render = text.split('private fun render(s: UpdateState)', 1)[1]
-        self.assertIn('Retry check', render)
+        self.assertIn('Check again', render)
+        self.assertIn('Checking…', render)
         self.assertIn('Retry download', render)
         self.assertIn('Retry install', render)
         self.assertIn('Download & install', text)
@@ -274,6 +275,40 @@ class UpdateScreenRemovalTests(unittest.TestCase):
                 stripped = line.strip()
                 if stripped.startswith("aapt ") or "$(aapt " in line:
                     self.fail(f"{name} calls aapt from PATH: {stripped}")
+
+
+class CurrentUpdateResultTests(unittest.TestCase):
+    def test_latest_version_is_structured_persisted_and_never_inferred_from_success_copy(self):
+        state = (MAIN_DIR / "UpdateState.kt").read_text(encoding="utf-8")
+        store = (MAIN_DIR / "UpdateStore.kt").read_text(encoding="utf-8")
+        states = (MAIN_DIR / "UpdateReliability.kt").read_text(encoding="utf-8")
+        presentation = (MAIN_DIR / "UpdatePresentation.kt").read_text(encoding="utf-8")
+        coordinator = (MAIN_DIR / "UpdateCoordinator.kt").read_text(encoding="utf-8")
+        activity = (MAIN_DIR / "UpdateActivity.kt").read_text(encoding="utf-8")
+
+        self.assertIn('val latestVersion: String = ""', state)
+        self.assertIn('val installedAhead: Boolean = false', state)
+        self.assertIn('"latestVersion"', store)
+        self.assertIn('"installedAhead"', store)
+        self.assertIn('"latestVersionStale"', store)
+        self.assertIn('latestVersionStale: Boolean = false', state)
+        self.assertIn('latestVersion = version', states)
+        self.assertIn('httpStatus = httpStatus', states)
+        self.assertIn('verifiedPath = if (s.candidate?.identity == candidate.identity)', states)
+        self.assertIn('installedAhead = installedAhead', states)
+        self.assertIn('"You\'re on the latest version."', states)
+        self.assertIn('"Installed version is newer than the latest stable release."', presentation)
+        self.assertIn('s.latestVersion.isNotBlank()', presentation)
+        self.assertNotRegex(presentation, r'Regex\([^\n]*Installed version is current')
+        self.assertIn('candidate.code <= installedCode', coordinator)
+        self.assertIn('UpdateStates.upToDate(state, candidate.version, now', coordinator)
+        self.assertIn('UpdatePresentation.latestLabel(s)', activity)
+        self.assertIn('Installed: $installed', activity)
+        self.assertIn('s.phase==UpdatePhase.Idle && s.lastSuccess>0 -> "Check again"', activity)
+        self.assertIn('primaryButton.isEnabled=!s.busy && s.candidate!=null', activity)
+        self.assertIn('candidate = null', states)
+        self.assertIn('verifiedPath = null', states)
+        self.assertIn('pendingIdentity = null', states)
 
 
 class RepackDefaultsTests(unittest.TestCase):

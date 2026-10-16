@@ -23,6 +23,7 @@ const RELEASES_LATEST = 'https://github.com/2archiver/YTArk/releases/latest';
 
 export const CHANGELOG_MODAL_ID = 'ytark-changelog';
 export const CHANGELOG_VERSION_MODAL_ID = 'ytark-changelog-version';
+let changelogSettingsInputOwner = false;
 
 /** Plain, bounded text: no control characters, no markup, no angle brackets. */
 export function sanitizeText(value, limit = MAX_ITEM_LENGTH) {
@@ -136,7 +137,8 @@ export function headlineFor(entry) {
 }
 
 /** Version picker: newest first, installed version marked and focused. */
-export function showChangelog({ update = false, focusVersion = '' } = {}) {
+export function showChangelog({ update = false, focusVersion = '', settingsInputOwner = false } = {}) {
+  changelogSettingsInputOwner = settingsInputOwner === true;
   const installed = installedVersion();
   const entries = changelogEntries();
   const rows = [];
@@ -149,7 +151,7 @@ export function showChangelog({ update = false, focusVersion = '' } = {}) {
         subtitle: tx('ytark.whatsNew.dismissSubtitle', 'Hides the What\'s new card in YTArk Settings for this version'),
       },
       { icon: 'CLOSE' },
-      [{ customAction: { action: 'YTARK_WHATS_NEW_DISMISS', parameters: { refresh: 'changelog' } } }],
+      [{ customAction: { action: 'YTARK_WHATS_NEW_DISMISS', parameters: { refresh: 'changelog', settingsInputOwner: changelogSettingsInputOwner } } }],
     ));
   }
   entries.forEach((entry, index) => {
@@ -196,13 +198,14 @@ export function showChangelog({ update = false, focusVersion = '' } = {}) {
     overlayPanelItemListRenderer(rows, selectedIndex),
     CHANGELOG_MODAL_ID,
     update,
+    { settingsInputOwner: changelogSettingsInputOwner },
   );
 }
 
 /** One version as plain text in a scroll pane (D-pad up/down scrolls). */
 export function showChangelogVersion(version, { update = false } = {}) {
   const entry = findEntry(version);
-  if (!entry) return showChangelog({ update: true });
+  if (!entry) return showChangelog({ update: true, settingsInputOwner: changelogSettingsInputOwner });
   const installed = installedVersion();
   return showModal(
     {
@@ -212,6 +215,7 @@ export function showChangelogVersion(version, { update = false } = {}) {
     scrollPaneRenderer(versionMessages(entry, installed).map(text => overlayMessageRenderer(text))),
     CHANGELOG_VERSION_MODAL_ID,
     update,
+    { settingsInputOwner: changelogSettingsInputOwner },
   );
 }
 
@@ -224,6 +228,7 @@ export function showChangelogNote(index) {
     scrollPaneRenderer(items.map(text => overlayMessageRenderer(text))),
     'ytark-changelog-note',
     false,
+    { settingsInputOwner: changelogSettingsInputOwner },
   );
 }
 
@@ -242,5 +247,6 @@ export function showReleaseQr(version) {
     overlayPanelItemListRenderer(items),
     'ytark-changelog-qr',
     false,
+    { settingsInputOwner: changelogSettingsInputOwner },
   );
 }

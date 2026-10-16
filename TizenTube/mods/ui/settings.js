@@ -212,7 +212,8 @@ export function showSettingsMenu(menuId = 'root', options = {}) {
     ? [deferred('YTARK_MENU_SHOW', { menuId: parent.id, focusId: node.id, update: true })]
     : undefined;
   return showModal(header, overlayPanelItemListRenderer(rows, selectedIndex),
-    node.menuId || `ytark-menu-${node.id}`, !!options.update, { onDismiss });
+    node.menuId || `ytark-menu-${node.id}`, !!options.update,
+    { onDismiss, settingsInputOwner: true });
 }
 
 /**
@@ -236,7 +237,10 @@ export function showPanel(id, options = {}) {
     panel.content,
     `ytark-panel-${node.id}`,
     !!options.update,
-    { onDismiss: parent ? [deferred('YTARK_MENU_SHOW', { menuId: parent.id, focusId: node.id, update: true })] : undefined },
+    {
+      onDismiss: parent ? [deferred('YTARK_MENU_SHOW', { menuId: parent.id, focusId: node.id, update: true })] : undefined,
+      settingsInputOwner: true,
+    },
   );
 }
 
@@ -251,6 +255,18 @@ function returnToDiagnosticsCommands() {
 }
 
 /** Readable, scrollable browser-only report. No file, clipboard, URL or native bridge is assumed. */
+export function showBrowserStartupSummary() {
+  const report = browserDiagnostics.startupSummary();
+  const content = scrollPaneRenderer(report.split('\n').map((line) => overlayMessageRenderer(line || ' ')));
+  return showModal(
+    { title: 'Startup summary', subtitle: 'Local browser measurements · no cross-clock comparisons' },
+    content,
+    'ytark-browser-startup-summary',
+    false,
+    { onDismiss: returnToDiagnosticsCommands(), settingsInputOwner: true },
+  );
+}
+
 export function showBrowserDiagnosticsReport(sessionIndex = null) {
   const snapshot = browserDiagnosticSnapshot();
   let session = null;
@@ -260,11 +276,11 @@ export function showBrowserDiagnosticsReport(sessionIndex = null) {
   const report = browserDiagnostics.report(session);
   const content = scrollPaneRenderer(report.split('\n').map((line) => overlayMessageRenderer(line || ' ')));
   return showModal(
-    { title: 'Browser diagnostics report', subtitle: 'On-device text · browser scope only' },
+    { title: 'Advanced browser event report', subtitle: 'On-device text · browser scope only' },
     content,
     'ytark-browser-diagnostics-report',
     false,
-    { onDismiss: returnToDiagnosticsCommands() },
+    { onDismiss: returnToDiagnosticsCommands(), settingsInputOwner: true },
   );
 }
 
@@ -294,7 +310,7 @@ export function showBrowserDiagnosticSessions() {
     overlayPanelItemListRenderer(rows, 0),
     'ytark-browser-diagnostics-sessions',
     false,
-    { onDismiss: returnToDiagnosticsCommands() },
+    { onDismiss: returnToDiagnosticsCommands(), settingsInputOwner: true },
   );
 }
 
@@ -315,7 +331,7 @@ export function showBrowserDiagnosticsClearConfirm() {
     overlayPanelItemListRenderer(rows, 2),
     'ytark-browser-diagnostics-clear-confirm',
     false,
-    { onDismiss: returnToDiagnosticsCommands() },
+    { onDismiss: returnToDiagnosticsCommands(), settingsInputOwner: true },
   );
 }
 
@@ -360,6 +376,7 @@ export function showResetConfirm(menuId) {
     overlayPanelItemListRenderer(items, 2),
     'ytark-reset-confirm',
     false,
+    { settingsInputOwner: true },
   );
 }
 
@@ -378,7 +395,7 @@ export default function modernUI(update, parameters) {
 export function optionShow(parameters, update) {
   if (update === 'customUI') {
     const option = parameters.options;
-    showModal({ title: option.title, subtitle: option.subtitle }, option.content, 'tt-settings-support', false);
+    showModal({ title: option.title, subtitle: option.subtitle }, option.content, 'tt-settings-support', false, { settingsInputOwner: true });
     return;
   }
   const buttons = [];
@@ -450,5 +467,6 @@ export function optionShow(parameters, update) {
   }
 
   showModal(parameters.menuHeader ? parameters.menuHeader : t('settings.ttSettings.title'),
-    overlayPanelItemListRenderer(buttons, parameters.selectedIndex), parameters.menuId || 'tt-settings-options', update);
+    overlayPanelItemListRenderer(buttons, parameters.selectedIndex), parameters.menuId || 'tt-settings-options', update,
+    { settingsInputOwner: true });
 }

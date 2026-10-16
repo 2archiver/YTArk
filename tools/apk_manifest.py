@@ -885,7 +885,7 @@ def _cmd_self_test(_args) -> int:
     data = encode_axml(_self_test_manifest())
     facts = facts_from_root(parse_binary_xml(data))
     assert facts.package == "io.github.twoarchiver.ytark", facts.package
-    assert facts.version_code == 3060000, facts.version_code
+    assert facts.version_code == 3070000, facts.version_code
     assert facts.target_sdk == 34, facts.target_sdk
     assert facts.declares(REQUEST_INSTALL_PACKAGES), facts.permissions
     assert facts.install_capability()["can_be_granted"], facts.install_capability()
@@ -896,8 +896,8 @@ def _cmd_self_test(_args) -> int:
 def _self_test_manifest() -> "NodeSpec":
     return NodeSpec("manifest", (
         attr("package", "io.github.twoarchiver.ytark", android=False),
-        attr("versionCode", 3060000),
-        attr("versionName", "3.6.0"),
+        attr("versionCode", 3070000),
+        attr("versionName", "3.7.0"),
     ), (
         NodeSpec("uses-sdk", (attr("minSdkVersion", 24), attr("targetSdkVersion", 34))),
         NodeSpec("uses-permission", (attr("name", REQUEST_INSTALL_PACKAGES),)),

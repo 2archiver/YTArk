@@ -39,6 +39,18 @@ test('repeated readiness ticks never dispatch twice', () => {
   assert.equal(h.commands.length, 1, 'exactly one startup navigation per launch');
 });
 
+test('a deliberate user input cancels delayed startup navigation without issuing a replacement route', () => {
+  const h = harness();
+  assert.equal(h.nav.tryRun(), false, 'the resolver has not appeared yet');
+  assert.equal(h.nav.cancelForUserInput(), true);
+  assert.equal(h.nav.status, 'cancelled');
+  assert.equal(h.nav.errorCategory, 'user-input');
+  h.setResolver(true);
+  assert.equal(h.nav.tryRun(), true);
+  assert.deepEqual(h.commands, [], 'no saved destination or soft reload overrides the user');
+  assert.deepEqual(h.marks, [['startup-navigation-cancelled', 'user-input']]);
+});
+
 test('an explicit startup destination keeps priority over the soft reload', () => {
   const destination = JSON.stringify({ browseEndpoint: { browseId: 'FEsubscriptions' } });
   const h = harness({ destination, resolver: true });
@@ -96,14 +108,22 @@ test('a resolver that is present but rejects a command is not reported as dispat
   assert.deepEqual(marks, [['startup-navigation-failed', 'failed']]);
 });
 
-test('destination parsing keeps objects and refuses arrays, scalars and malformed JSON', () => {
+test('destination parsing accepts only the fixed startup allowlist and exact command shapes', () => {
   const warnings = [];
-  const warn = (error) => warnings.push(error);
-  assert.deepEqual(readStartupDestination('{"a":1}', warn), { a: 1 });
+  const warn = error => warnings.push(error);
+  assert.deepEqual(readStartupDestination('{"browseEndpoint":{"browseId":"FEtopics"}}', warn),
+    { browseEndpoint: { browseId: 'FEtopics' } });
+  assert.deepEqual(readStartupDestination('{"searchEndpoint":{"query":""}}', warn),
+    { searchEndpoint: { query: '' } });
   assert.equal(readStartupDestination(null, warn), null);
   assert.equal(readStartupDestination('', warn), null);
-  assert.equal(readStartupDestination('[1,2]', warn), null, 'arrays are not destinations');
-  assert.equal(readStartupDestination('"home"', warn), null, 'scalars are not destinations');
-  assert.equal(readStartupDestination('nope', warn), null);
-  assert.equal(warnings.length, 1, 'only the malformed JSON is reported');
+  for (const unsupported of [
+    '{"browseEndpoint":{"browseId":"FEshorts"}}',
+    '{"watchEndpoint":{"videoId":"secret"}}',
+    '{"browseEndpoint":{"browseId":"FEtopics","params":"x"}}',
+    '{"browseEndpoint":{"browseId":"FEtopics"},"watchEndpoint":{}}',
+    '{"searchEndpoint":{"query":"a user query"}}',
+    '[1,2]', '"home"', 'nope',
+  ]) assert.equal(readStartupDestination(unsupported, warn), null, unsupported);
+  assert.ok(warnings.length >= 6, 'unsupported and malformed destinations are reported for diagnostics only');
 });

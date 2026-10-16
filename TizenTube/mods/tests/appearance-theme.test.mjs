@@ -4,6 +4,7 @@
 // ui/appearanceStyles.js).
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { FakeElement, FakeMutationObserver, waitFor } from './helpers/fake-dom.mjs';
 import { setupEnvironment } from './helpers/ytlr-harness.mjs';
 
@@ -41,6 +42,14 @@ describe('appearance stylesheet', () => {
     assert.match(css, /#container \{ background-color: #0f0f0f !important; \}/);
     assert.doesNotMatch(css, /filter\s*:|backdrop-filter|mix-blend|opacity\s*:/i,
       'no filters, tints or opacity changes');
+  });
+
+  it('scopes the base idom shadow rule to the player instead of every same-named div', () => {
+    const css = readFileSync(new URL('../ui/ui.css', import.meta.url), 'utf8');
+    assert.match(css, /ytlr-watch-default\s+div\[idomkey="shadow"\]/);
+    assert.match(css, /ytlr-watch-default\s+\.ytLrWatchDefaultShadow/);
+    assert.doesNotMatch(css, /(?:^|,\s*)div\[idomkey="shadow"\]/m,
+      'non-player elements with the same internal attribute keep their own appearance');
   });
 
   it('rebuilds the stylesheet when a saved colour changes, and flips classes when a feature changes', () => {

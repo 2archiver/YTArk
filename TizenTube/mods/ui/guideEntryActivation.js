@@ -1,45 +1,25 @@
 /**
  * Explicit activation for the YTArk Settings entry in the TV guide.
  *
- * The bug this fixes
- * ------------------
- * The guide entry injected by `ui/customGuideAction.js` carried
- * `{ customAction: { action: 'TT_SETTINGS_SHOW' } }` as its
- * `navigationEndpoint`. The YouTube TV frontend resolves a guide entry's
- * navigation endpoint when the entry receives *focus* — that is how the
- * sidebar browses — so merely scrolling past the entry opened the YTArk
- * Settings panel, with no OK/Enter and no click.
+ * The guide entry already carries a dedicated `YTARK_GUIDE_SETTINGS_OPEN`
+ * action: the TV frontend may resolve navigation endpoints on focus as well as
+ * on OK, so a Settings action must not be attached directly to the focused row.
+ * The residual edge fixed here was that any OK press armed a one-second token,
+ * and the row's own OK was not consumed. A delayed guide resolution could
+ * therefore reuse an unrelated token, or let the same OK reach content below.
  *
- * The fix
- * -------
- * The entry now carries its own action (`YTARK_GUIDE_SETTINGS_OPEN`) which is
- * only honoured after an *explicit* activation was seen: an OK/Enter keydown or
- * a click/pointer press. Focusing, hovering, scrolling past, a visibility
- * change or a selection change never arms it, so the endpoint the frontend
- * resolves on focus is ignored and the row only highlights.
+ * The frontend resolver and the short fallback are two paths to one panel:
+ * the resolver opens only with an explicit row activation; if that frontend
+ * build does not resolve on OK, the fallback opens only after OK/Enter/click
+ * targets the YTArk row. The event is synchronously consumed before fallback,
+ * so it cannot also activate content underneath. Repeats do not create another
+ * timer or panel. Any subsequent navigation, editable-field event, or unrelated
+ * resolver command cancels the pending activation and fallback timer.
  *
- * Two paths lead to exactly one panel:
- *
- *   1. The frontend resolves the entry's endpoint on OK (the normal case): the
- *      resolver sees an armed activation and opens the panel.
- *   2. A frontend that resolves guide endpoints on focus only would leave OK
- *      with nothing to do, so when the OK/Enter press lands on the entry itself
- *      (matched by its own label, inside the guide container, or by the marker
- *      attribute set on the first match) the panel is opened after a short
- *      delay — unless path 1 already opened it.
- *
- * Both paths funnel through one per-activation token, so a press can never open
- * two panels, and no key is swallowed: this module never calls
- * preventDefault/stopPropagation, it only decides whether its own action runs.
- * Any other command the resolver sees (POPUP_BACK, a browse/watch endpoint,
- * …) disarms the activation, so an OK spent elsewhere — for example on a
- * modal's Back button — cannot leak into a focus event on the entry and reopen
- * the panel.
- *
- * Back behaviour: nothing here navigates, so the frontend's POPUP_BACK closes
- * the panel and restores the sidebar exactly where it was, with focus back on
- * the entry. The listeners are installed once per page and are never removed
- * and re-added, so repeated opening cannot stack handlers.
+ * Matching is bounded to the event target's ancestors or the frontend's
+ * `.zylon-focus` marker when remote events target the document. Listeners are
+ * installed once per page. Actual TV focus restoration and remote key mapping
+ * still require device verification.
  */
 
 import { t } from 'i18next';
@@ -73,6 +53,7 @@ const state = {
   installed: false,
   listeners: 0,
   lastOpenAt: 0,
+  fallbackTimer: null,
 };
 
 function now() {
@@ -90,15 +71,32 @@ export function guideEntryLabel() {
   }
 }
 
+/** Clear the one outstanding fallback, if any. */
+function clearFallbackTimer() {
+  if (state.fallbackTimer === null) return;
+  try {
+    if (typeof clearTimeout === 'function') clearTimeout(state.fallbackTimer);
+  } catch (_) {
+    /* token validation below still makes a late callback harmless */
+  }
+  state.fallbackTimer = null;
+}
+
 /** Record an explicit user activation (OK/Enter keydown, click or press). */
 export function armActivation() {
   state.armedAt = now();
   return state.armedAt;
 }
 
-/** Drop a pending activation (an OK spent on anything else, or a panel open). */
+/** Drop a pending activation and invalidate its fallback callback. */
 export function disarmActivation() {
   state.armedAt = 0;
+  state.token += 1;
+  clearFallbackTimer();
+}
+
+function cancelPendingActivation() {
+  if (state.armedAt !== 0 || state.fallbackTimer !== null) disarmActivation();
 }
 
 /** True while one explicit activation is still valid. */
@@ -130,6 +128,7 @@ export function activationFromCommand() {
   if (!activationArmed()) {
     return { opened: false, reason: 'no-explicit-activation' };
   }
+  clearFallbackTimer();
   state.token += 1;
   const opened = openOnce(state.token);
   return { opened, reason: opened ? 'explicit-command' : 'already-open' };
@@ -189,33 +188,80 @@ function eventTarget(event) {
 }
 
 /**
- * Keydown/press handling. Arms the activation for the command path and, when
- * the press is on the entry itself, schedules the fallback open. Never
- * prevents or stops anything: unrelated keys reach the frontend untouched.
+ * Some TV remotes dispatch key events at the document rather than the focused
+ * row. Fall back only to the frontend's active guide marker, never an arbitrary
+ * OK press elsewhere in the app.
+ */
+function focusedGuideEntryTarget() {
+  const doc = typeof document !== 'undefined' ? document : null;
+  if (!doc || typeof doc.querySelectorAll !== 'function') return null;
+  try {
+    for (const candidate of doc.querySelectorAll('.zylon-focus')) {
+      let node = candidate;
+      for (let depth = 0; node && depth < MAX_ANCESTOR_DEPTH; depth += 1) {
+        if (node.matches && node.matches(GUIDE_CONTAINER_SELECTOR)) {
+          if (isGuideEntryTarget(candidate)) return candidate;
+          break;
+        }
+        node = node.parentNode;
+      }
+    }
+  } catch (_) {
+    /* the event target path remains available on older DOMs */
+  }
+  return null;
+}
+
+/**
+ * Keydown/press handling. Unrelated activations reach the frontend untouched;
+ * a press on the YTArk entry is consumed before scheduling the fallback open.
  */
 export function handleActivationEvent(event) {
   if (!event) return false;
   const type = String(event.type || '');
   const isKey = type === 'keydown';
+  let repeat = false;
   if (isKey) {
     const code = Number(event.keyCode !== undefined ? event.keyCode : event.which);
-    if (!ACTIVATION_KEY_CODES.includes(code)) return false;
-    if (event.repeat) return false;
+    if (!ACTIVATION_KEY_CODES.includes(code)) {
+      cancelPendingActivation();
+      return false;
+    }
+    repeat = event.repeat === true;
   } else if (type !== 'click' && type !== 'pointerdown' && type !== 'mousedown') {
     return false;
   }
   const target = eventTarget(event);
+  const doc = typeof document !== 'undefined' ? document : null;
   // A text field's Enter belongs to the text entry panel, not to the guide.
-  if (isEditable(target)) return false;
+  if (isEditable(target) || (isKey && doc && isEditable(doc.activeElement))) {
+    cancelPendingActivation();
+    return false;
+  }
 
+  const focusedGuideTarget = isKey ? focusedGuideEntryTarget() : null;
+  const activationTarget = isGuideEntryTarget(target)
+    ? target : (focusedGuideTarget && isGuideEntryTarget(focusedGuideTarget) ? focusedGuideTarget : null);
+  if (!activationTarget) {
+    cancelPendingActivation();
+    return false;
+  }
+
+  // Consume only the activation whose target is the YTArk guide row. A held OK
+  // remains owned by this row but never creates another panel/timer.
+  try { event.preventDefault(); } catch (_) { /* legacy event */ }
+  try { event.stopImmediatePropagation(); } catch (_) { /* older event object */ }
+  try { event.stopPropagation(); } catch (_) { /* older event object */ }
+  if (repeat) return true;
+
+  clearFallbackTimer();
   armActivation();
-  if (!isGuideEntryTarget(target)) return false;
-
   state.token += 1;
   const token = state.token;
   if (typeof setTimeout !== 'function') return openOnce(token);
-  setTimeout(() => {
-    if (token === state.token) openOnce(token);
+  state.fallbackTimer = setTimeout(() => {
+    state.fallbackTimer = null;
+    if (token === state.token && activationArmed()) openOnce(token);
   }, FALLBACK_DELAY_MS);
   return true;
 }
@@ -271,11 +317,13 @@ export function guideActivationState() {
     installed: state.installed,
     listeners: state.listeners,
     lastOpenAt: state.lastOpenAt,
+    fallbackPending: state.fallbackTimer !== null,
   };
 }
 
 /** Test hook: forget the installation state so a harness can reinstall. */
 export function resetGuideActivationForTests() {
+  clearFallbackTimer();
   state.armedAt = 0;
   state.token = 0;
   state.openedToken = -1;

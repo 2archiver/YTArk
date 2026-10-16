@@ -23,8 +23,12 @@ data class UpdateState(
     val httpStatus: Int = 0,
     val speedBps: Long = 0,
     val releaseTag: String = "",
-    /** Machine-readable latest compatible version; presentation never parses status text. */
-    val latestVersion: String = ""
+    /** Machine-readable latest compatible stable version; presentation never parses status text. */
+    val latestVersion: String = "",
+    /** Installed versionCode exceeded the latest compatible stable release on the last successful check. */
+    val installedAhead: Boolean = false,
+    /** Latest-version metadata came only from a stale cache, not a fresh check. */
+    val latestVersionStale: Boolean = false
 ) {
     val busy get() = phase in setOf(UpdatePhase.Checking, UpdatePhase.Downloading, UpdatePhase.Validating, UpdatePhase.AwaitingPermission, UpdatePhase.AwaitingInstaller)
 }

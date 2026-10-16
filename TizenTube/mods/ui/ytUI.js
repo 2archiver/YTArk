@@ -1,4 +1,14 @@
 import resolveCommand from '../resolveCommand.js';
+import {
+    hasVisibleYtarkModal, hasVisibleYtarkSettingsPanel, ytarkModalBackCommand,
+    noteYtarkModalCommand, registerYtarkModal, restoreYtarkModal,
+    resetYtarkModalStateForTests,
+} from './ytarkModalOwnership.js';
+
+export {
+    hasVisibleYtarkModal, hasVisibleYtarkSettingsPanel, ytarkModalBackCommand,
+    noteYtarkModalCommand, resetYtarkModalStateForTests,
+};
 
 function showToast(title, subtitle, thumbnails) {
     const toastCmd = {
@@ -118,8 +128,17 @@ function backCommand(options) {
 
 function showModal(header, content, id, update, options) {
     const modalCmd = Modal(header, content, id, update, options);
-
-    resolveCommand(modalCmd);
+    const previous = registerYtarkModal(
+        id,
+        modalCmd.openPopupAction.popup.overlaySectionRenderer.dismissalCommand,
+        !!(options && options.settingsInputOwner === true),
+    );
+    try {
+        resolveCommand(modalCmd);
+    } catch (error) {
+        restoreYtarkModal(previous);
+        throw error;
+    }
     return modalCmd;
 }
 

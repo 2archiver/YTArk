@@ -50,6 +50,7 @@ export function startReadiness({
   onGiveUp = null,
   onReady = null,
   onInterrupted = null,
+  onMode = null,
   now = null,
   later = (fn, ms) => setTimeout(fn, ms),
   cancel = (id) => clearTimeout(id),
@@ -66,12 +67,33 @@ export function startReadiness({
   const injectedStart = typeof now === 'function' ? now() : null;
   const clockStart = clock && clock.read();
   let interrupted = false;
+  let initialReason = enabled ? 'storage-unavailable' : 'disabled';
   try {
     interrupted = !!(storage && storage.getItem(marker) === '1');
-    accelerated = !!enabled && !!storage && !interrupted;
-    if (accelerated) storage.setItem(marker, '1');
-    else if (storage) storage.removeItem(marker);
-  } catch (_) { accelerated = false; }
+    if (interrupted) initialReason = 'interrupted';
+    else if (enabled && storage) {
+      accelerated = true;
+      initialReason = 'faster';
+      storage.setItem(marker, '1');
+    } else {
+      accelerated = false;
+      if (storage) storage.removeItem(marker);
+    }
+  } catch (_) {
+    accelerated = false;
+    initialReason = 'storage-unavailable';
+  }
+  const notifyMode = (mode) => {
+    if (typeof onMode === 'function') {
+      try { onMode(mode); } catch (_) { /* diagnostics cannot block startup */ }
+    }
+  };
+  notifyMode(accelerated ? 'faster' : `normal-${initialReason}`);
+  const useNormalFallback = () => {
+    if (!accelerated) return;
+    accelerated = false;
+    notifyMode('normal-fallback');
+  };
   if (interrupted && typeof onInterrupted === 'function') {
     try { onInterrupted(); } catch (_) { /* diagnostics cannot block startup */ }
   }
@@ -102,10 +124,10 @@ export function startReadiness({
     } catch (_) { /* tick accounting is the bounded fallback */ }
 
     let ready = false;
-    try { ready = tick() === true; } catch (_) { accelerated = false; }
+    try { ready = tick() === true; } catch (_) { useNormalFallback(); }
     if (ready) { finish(false); return; }
     if (elapsed >= 40_000 || tickCount >= 202) { finish(true); return; }
-    if (elapsed >= 2_000) accelerated = false;
+    if (elapsed >= 2_000) useNormalFallback();
     scheduledDelay = accelerated ? 50 : 250;
     timer = later(run, scheduledDelay);
   };

@@ -84,7 +84,7 @@ interface MetadataSource {
 sealed class Discovery {
     class UseCache(@JvmField val cache: CachedRelease, @JvmField val stale: Boolean, @JvmField val retryAt: Long) : Discovery()
     class Fresh(@JvmField val candidate: Candidate, @JvmField val cache: CachedRelease) : Discovery()
-    class RateLimited(@JvmField val retryAt: Long, @JvmField val cache: CachedRelease?) : Discovery()
+    class RateLimited(@JvmField val retryAt: Long, @JvmField val cache: CachedRelease?, @JvmField val httpStatus: Int = 0) : Discovery()
 }
 
 class MappedError(
@@ -457,21 +457,50 @@ object UpdateErrorMapper {
 }
 
 object UpdateStates {
-    @JvmStatic fun checking(s: UpdateState): UpdateState = s.copy(phase = UpdatePhase.Checking, message = "Checking stable ARMv7 release…", detail = "", errorCategory = "", httpStatus = 0, speedBps = 0, stale = false, bytes = 0)
-    @JvmStatic fun upToDate(s: UpdateState, version: String, now: Long): UpdateState = s.copy(phase = UpdatePhase.Idle, candidate = null, verifiedPath = null, pendingIdentity = null, lastSuccess = now, bytes = 0, stale = false, detail = "", errorCategory = "", httpStatus = 0, speedBps = 0, latestVersion = version, message = "Installed version is current. Latest compatible: $version.")
-    @JvmStatic fun available(s: UpdateState, candidate: Candidate, now: Long, verified: String?): UpdateState = s.copy(phase = UpdatePhase.Available, candidate = candidate, verifiedPath = verified, pendingIdentity = null, lastSuccess = now, bytes = 0, stale = false, detail = "", errorCategory = "", httpStatus = 0, speedBps = 0, message = "YTArk ${candidate.version} is available.")
-    @JvmStatic fun staleAvailable(s: UpdateState, candidate: Candidate, retryAt: Long, message: String): UpdateState = s.copy(phase = UpdatePhase.Available, candidate = candidate, pendingIdentity = null, stale = true, retryAt = retryAt, message = message, errorCategory = "rate_limit", stage = "check", speedBps = 0)
+    /** Keep a last-confirmed release visible during a retry, but clear the preceding error. */
+    @JvmStatic fun checking(s: UpdateState): UpdateState = s.copy(
+        phase = UpdatePhase.Checking, message = "Checking stable ARMv7 release…", detail = "", errorCategory = "",
+        httpStatus = 0, speedBps = 0, stale = false, bytes = 0, stage = "", retryAt = 0
+    )
+    @JvmStatic fun upToDate(s: UpdateState, version: String, now: Long, installedAhead: Boolean = false): UpdateState = s.copy(
+        phase = UpdatePhase.Idle, candidate = null, verifiedPath = null, pendingIdentity = null,
+        lastSuccess = now, bytes = 0, stale = false, detail = "", errorCategory = "", httpStatus = 0,
+        speedBps = 0, stage = "", retryAt = 0, latestVersion = version, installedAhead = installedAhead,
+        latestVersionStale = false,
+        message = if (installedAhead) "Installed version is ahead of the latest stable release." else "You're on the latest version."
+    )
+    @JvmStatic fun available(s: UpdateState, candidate: Candidate, now: Long, verified: String?): UpdateState = s.copy(
+        phase = UpdatePhase.Available, candidate = candidate, verifiedPath = verified, pendingIdentity = null,
+        lastSuccess = now, bytes = 0, stale = false, detail = "", errorCategory = "", httpStatus = 0,
+        speedBps = 0, stage = "", retryAt = 0, latestVersion = "", installedAhead = false,
+        latestVersionStale = false, message = "YTArk ${candidate.version} is available."
+    )
+    @JvmStatic fun staleAvailable(s: UpdateState, candidate: Candidate, retryAt: Long, message: String, httpStatus: Int = 0): UpdateState = s.copy(
+        phase = UpdatePhase.Available, candidate = candidate,
+        verifiedPath = if (s.candidate?.identity == candidate.identity) s.verifiedPath else null,
+        pendingIdentity = null, stale = true, retryAt = retryAt, message = message,
+        errorCategory = "rate_limit", stage = "check", httpStatus = httpStatus, speedBps = 0,
+        releaseTag = candidate.tag, latestVersion = candidate.version, installedAhead = false, latestVersionStale = true
+    )
     @JvmStatic fun downloading(s: UpdateState): UpdateState = s.copy(phase = UpdatePhase.Downloading, message = "Downloading update…", verifiedPath = null, bytes = 0, speedBps = 0, detail = "", errorCategory = "", stale = false)
     @JvmStatic fun progress(s: UpdateState, bytes: Long, speed: Long): UpdateState = s.copy(phase = UpdatePhase.Downloading, bytes = bytes, speedBps = speed)
     @JvmStatic fun verifying(s: UpdateState): UpdateState = s.copy(phase = UpdatePhase.Validating, message = "Verifying package, version, ABI, checksum and signer…", speedBps = 0)
     @JvmStatic fun ready(s: UpdateState, path: String): UpdateState = s.copy(phase = UpdatePhase.Ready, verifiedPath = path, pendingIdentity = null, message = "Update ready. Select Install update; Android will ask for confirmation.", speedBps = 0, errorCategory = "", detail = "")
     @JvmStatic fun cancelled(s: UpdateState): UpdateState = s.copy(phase = UpdatePhase.Available, pendingIdentity = null, message = "Download cancelled. Retry when ready.", speedBps = 0, bytes = 0, errorCategory = "cancelled")
-    @JvmStatic fun failed(s: UpdateState, mapped: MappedError, tag: String): UpdateState = s.copy(phase = UpdatePhase.Failed, pendingIdentity = null, message = mapped.message, detail = mapped.detail, retryAt = mapped.retryAt, errorCategory = mapped.category, stage = mapped.stage.ifBlank { "updater" }, httpStatus = mapped.httpStatus, speedBps = 0, releaseTag = tag)
+    @JvmStatic fun failed(s: UpdateState, mapped: MappedError, tag: String): UpdateState = s.copy(
+        phase = UpdatePhase.Failed, pendingIdentity = null, message = mapped.message, detail = mapped.detail,
+        retryAt = mapped.retryAt, errorCategory = mapped.category, stage = mapped.stage.ifBlank { "updater" },
+        httpStatus = mapped.httpStatus, speedBps = 0, releaseTag = tag
+    )
     @JvmStatic fun permission(s: UpdateState, identity: String): UpdateState = s.copy(phase = UpdatePhase.AwaitingPermission, pendingIdentity = identity, message = "Install permission required. Enable Allow from this source for YTArk, then return.")
     @JvmStatic fun handedToSystem(s: UpdateState): UpdateState = s.copy(phase = UpdatePhase.AwaitingInstaller, pendingIdentity = null, message = "Handed to Android's installer. Installation is not confirmed yet.")
     @JvmStatic fun permissionDenied(s: UpdateState): UpdateState = s.copy(phase = if (s.verifiedPath != null) UpdatePhase.Ready else UpdatePhase.Available, pendingIdentity = null, message = "Install permission required. Enable Allow from this source for YTArk, then select Install update.", errorCategory = "permission", stage = "install")
     @JvmStatic fun installUnconfirmed(s: UpdateState): UpdateState = s.copy(phase = if (s.verifiedPath != null) UpdatePhase.Ready else UpdatePhase.Available, pendingIdentity = null, message = "Installation was not confirmed. Select Install update to retry; the downloaded APK is kept.")
-    @JvmStatic fun installed(s: UpdateState): UpdateState = s.copy(phase = UpdatePhase.Idle, candidate = null, verifiedPath = null, pendingIdentity = null, bytes = 0, stale = false, detail = "", errorCategory = "", latestVersion = "", message = "Update installed. Your application data was not cleared.")
+    @JvmStatic fun installed(s: UpdateState): UpdateState = s.copy(
+        phase = UpdatePhase.Idle, candidate = null, verifiedPath = null, pendingIdentity = null, bytes = 0,
+        stale = false, detail = "", errorCategory = "", latestVersion = "", installedAhead = false,
+        latestVersionStale = false, releaseTag = "", message = "Update installed. Your application data was not cleared."
+    )
 }
 
 /** Explicit edges used by the coordinator. Same-state progress is always allowed. */
@@ -580,7 +609,7 @@ class UpdateRepository(private val source: MetadataSource) {
             val tag = source.probeLatestTag()
             if (cache != null && cache.tag == tag) return Discovery.UseCache(cache.touched(now), false, 0L)
         } catch (e: HttpFailure) {
-            if (e.category == "rate_limit") return Discovery.RateLimited(e.retryAt, cache)
+            if (e.category == "rate_limit") return Discovery.RateLimited(e.retryAt, cache, e.status)
             // Do not switch endpoints after a real HTTP error (notably 403/5xx).
             throw e
         } catch (e: IOException) {
@@ -607,7 +636,7 @@ class UpdateRepository(private val source: MetadataSource) {
         val doc = try {
             source.metadata(cache?.etag?.ifBlank { null }, cache?.lastModified?.ifBlank { null })
         } catch (e: HttpFailure) {
-            if (e.category == "rate_limit") return Discovery.RateLimited(e.retryAt, cache)
+            if (e.category == "rate_limit") return Discovery.RateLimited(e.retryAt, cache, e.status)
             throw e
         }
         if (doc.status == 304) {

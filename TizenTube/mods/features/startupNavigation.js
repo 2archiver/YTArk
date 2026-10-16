@@ -1,15 +1,9 @@
 /** One-shot startup navigation, dispatched only after the real resolver exists. */
+import { parseStartupDestination } from './startupDestination.js';
 
-/** Parse the stored destination; malformed data never becomes a raw command. */
+/** Parse the stored destination; malformed or unsupported data never becomes a raw command. */
 export function readStartupDestination(raw, warn = null) {
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
-  } catch (error) {
-    if (typeof warn === 'function') warn(error);
-    return null;
-  }
+  return parseStartupDestination(raw, warn);
 }
 
 export function createStartupNavigation({ configRead, resolveCommand, hasResolver, mark = () => {}, warn = null }) {
@@ -21,6 +15,18 @@ export function createStartupNavigation({ configRead, resolveCommand, hasResolve
     get done() { return status !== 'pending'; },
     get dispatched() { return dispatched; },
     get errorCategory() { return errorCategory; },
+    /**
+     * A real navigation key/click before readiness means the viewer has taken
+     * control. Drop the delayed automatic action instead of navigating over
+     * the route they just selected. This never consumes their input event.
+     */
+    cancelForUserInput() {
+      if (status !== 'pending') return false;
+      status = 'cancelled';
+      errorCategory = 'user-input';
+      mark('startup-navigation-cancelled', 'user-input');
+      return true;
+    },
     /** Returns false only while the resolver dependency is not available. */
     tryRun() {
       if (status !== 'pending') return true;

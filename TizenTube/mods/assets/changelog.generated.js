@@ -4,20 +4,74 @@ export const YTARK_CHANGELOG = {
   "schema": 1,
   "source": "CHANGELOG.md",
   "summaryFallback": "No short highlights available for this version.",
-  "sourceSha256": "bf2c76dbe79a41ae6bbfd3fa7ed0fc4a1e0d1344cdd3ab1fd2b08b84f510f6c4",
+  "sourceSha256": "3d68b15980b0e5f114e4a88e78fa30c53668e0ad146829d9dfb2802681b2058c",
   "entries": [
     {
-      "version": "3.6.0",
-      "display": "3.6",
+      "version": "3.7.0",
+      "display": "3.7",
       "status": "unreleased",
       "date": null,
       "publishedAt": null,
+      "tag": "v3.7.0",
+      "versionCode": 3070000,
+      "scriptTag": "s38",
+      "title": "YTArk 3.7",
+      "releaseUrl": null,
+      "facts": "Not yet published. Planned tag v3.7.0 · versionCode 3070000 · userscript s38 · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.",
+      "summary": "Explicit Settings access, honest local startup comparisons, and retryable update checks.",
+      "sections": [
+        {
+          "heading": "Added",
+          "items": [
+            "Startup summary reports the narrow userscript-module-to-controls interval and compares only complete, matched local samples.",
+            "Browser diagnostics retain at most 20 bounded local sessions; advanced event details remain separate from the concise summary."
+          ]
+        },
+        {
+          "heading": "Changed",
+          "items": [
+            "About removes the inline What's New wall while retaining the full Changelog, Technical details, Credits & licenses, and Project link.",
+            "Faster startup remains opt-in; reports show the actual readiness mode and make no speedup promise."
+          ]
+        },
+        {
+          "heading": "Fixed",
+          "items": [
+            "Guide-row Settings opens only on explicit OK/click; scrolling past the row no longer opens the panel.",
+            "Open Settings modals keep D-pad, OK, Back, and color shortcuts within the active panel.",
+            "Already-current update checks show installed/latest versions, clear prior errors, and remain retryable.",
+            "Startup routes are fixed and allowlisted, and delayed navigation cancels when the user starts navigating."
+          ]
+        },
+        {
+          "heading": "Known limitations",
+          "items": [
+            "The browser interval is a UI-bootstrap proxy, not Android app start, full YouTube readiness, playback-ready, or first frame; no Faster startup benefit is claimed.",
+            "Physical-TV Settings access, guide activation, remote focus, normal playback, deliberate Shorts access, permission return, clean install, and in-place upgrade checks are NOT RUN.",
+            "Startup comparisons need at least three complete matched launches in each actual mode; five alternating pairs are recommended, without promising a benefit."
+          ]
+        },
+        {
+          "heading": "Validation",
+          "items": [
+            "Node regression tests cover modal ownership, targeted guide activation, startup cancellation/readiness, diagnostics bounds/comparisons, About, and CSS scope.",
+            "Release/Android checks and physical-device evidence are recorded separately; mocks and static checks are not TV verification."
+          ]
+        }
+      ]
+    },
+    {
+      "version": "3.6.0",
+      "display": "3.6",
+      "status": "published",
+      "date": "2026-10-16",
+      "publishedAt": "2026-10-16T14:57Z",
       "tag": "v3.6.0",
       "versionCode": 3060000,
       "scriptTag": "s37",
       "title": "YTArk 3.6",
-      "releaseUrl": null,
-      "facts": "Not yet published. Planned tag v3.6.0 · versionCode 3060000 · userscript s37 · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.",
+      "releaseUrl": "https://github.com/2archiver/YTArk/releases/tag/v3.6.0",
+      "facts": "Published 2026-10-16 14:57 UTC as YTArk 3.6 · tag v3.6.0 · versionCode 3060000 · userscript s37 · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.",
       "summary": "Opt-in local diagnostics, safer startup, and reliable permission returns.",
       "sections": [
         {

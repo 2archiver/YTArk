@@ -71,7 +71,7 @@ class UpdateCoordinator private constructor(context: Context) {
             store.setRateUntil(mapped.retryAt)
             val cache = store.loadCache()
             if (cache != null) {
-                showCached(cache, true, mapped.retryAt, mapped.message)
+                showCached(cache, true, mapped.retryAt, mapped.message, mapped.httpStatus)
                 return
             }
         } else if (mapped.category != "cancelled") {
@@ -190,7 +190,7 @@ class UpdateCoordinator private constructor(context: Context) {
             is Discovery.RateLimited -> {
                 store.setRateUntil(discovery.retryAt)
                 val cache = discovery.cache
-                if (cache != null) showCached(cache, true, discovery.retryAt, RateLimitPolicy.message(discovery.retryAt, now, TimeZone.getDefault()))
+                if (cache != null) showCached(cache, true, discovery.retryAt, RateLimitPolicy.message(discovery.retryAt, now, TimeZone.getDefault()), discovery.httpStatus)
                 else throw HttpFailure(429, discovery.retryAt, RateLimitPolicy.message(discovery.retryAt, now, TimeZone.getDefault()), "rate_limit")
             }
             is Discovery.UseCache -> applyCandidate(discovery.cache.candidate(), discovery.cache, now, automatic, discovery.stale, discovery.retryAt)
@@ -202,21 +202,31 @@ class UpdateCoordinator private constructor(context: Context) {
             }
         }
     }
-    private fun showCached(cache: CachedRelease, stale: Boolean, retryAt: Long, rateMessage: String) {
+    private fun showCached(cache: CachedRelease, stale: Boolean, retryAt: Long, rateMessage: String, httpStatus: Int = 0) {
         val age = UpdateTexts.age(System.currentTimeMillis() - cache.fetchedAt)
         val suffix = " Showing saved release ${cache.tag.removePrefix("v")} from $age (stale)."
         val message = if (stale) rateMessage.trimEnd('.') + "." + suffix else rateMessage
-        if (validator.code(validator.installed()) >= cache.code) {
-            set(state.copy(phase = UpdatePhase.Idle, candidate = null, verifiedPath = null, pendingIdentity = null, stale = stale, retryAt = retryAt, releaseTag = cache.tag, errorCategory = if (stale) "rate_limit" else "", stage = "check", httpStatus = if (stale) 403 else 0, latestVersion = cache.tag.removePrefix("v"), message = if (stale) message else "Installed version is current. Latest compatible: ${cache.tag.removePrefix("v")}."))
+        val installedCode = validator.code(validator.installed())
+        if (installedCode >= cache.code) {
+            val checkedAt = if (stale) state.lastSuccess else System.currentTimeMillis()
+            val current = UpdateStates.upToDate(state, cache.tag.removePrefix("v"), checkedAt, installedAhead = installedCode > cache.code)
+            set(current.copy(
+                stale = stale, retryAt = if (stale) retryAt else 0L,
+                errorCategory = if (stale) "rate_limit" else "", stage = if (stale) "check" else "",
+                httpStatus = if (stale) httpStatus else 0, releaseTag = cache.tag,
+                latestVersionStale = stale,
+                message = if (stale) message else current.message
+            ))
         } else {
-            set(UpdateStates.staleAvailable(state, cache.candidate(), retryAt, message))
+            set(UpdateStates.staleAvailable(state, cache.candidate(), retryAt, message, httpStatus))
         }
     }
     private fun applyCandidate(candidate: Candidate, cache: CachedRelease, now: Long, automatic: Boolean, stale: Boolean, retryAt: Long) {
         if (stale) { showCached(cache, true, retryAt, RateLimitPolicy.message(retryAt, now, TimeZone.getDefault())); return }
         store.saveCache(cache.touched(now))
-        if (candidate.code <= validator.code(validator.installed())) {
-            set(UpdateStates.upToDate(state, candidate.version, now).copy(releaseTag = candidate.tag))
+        val installedCode = validator.code(validator.installed())
+        if (candidate.code <= installedCode) {
+            set(UpdateStates.upToDate(state, candidate.version, now, installedAhead = candidate.code < installedCode).copy(releaseTag = candidate.tag))
             files.clean(emptySet())
             return
         }

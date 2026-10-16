@@ -8,7 +8,7 @@ import { configRead, resetConfigKeys } from '../config.js';
 import { showToast } from './ytUI.js';
 import {
   showSettingsMenu, showPanel, showResetConfirm, resetScope,
-  showBrowserDiagnosticsReport, showBrowserDiagnosticSessions, showBrowserDiagnosticsClearConfirm,
+  showBrowserStartupSummary, showBrowserDiagnosticsReport, showBrowserDiagnosticSessions, showBrowserDiagnosticsClearConfirm,
 } from './settings.js';
 import {
   setBrowserDiagnosticsEnabled, startBrowserDiagnosticSample, clearBrowserDiagnosticData,
@@ -90,6 +90,9 @@ export function handleYtarkAction(action, parameters) {
       defer(() => showPanel('about.diagnostics', { update: true }));
       return true;
     }
+    case 'YTARK_DIAGNOSTICS_STARTUP_SUMMARY':
+      showBrowserStartupSummary();
+      return true;
     case 'YTARK_DIAGNOSTICS_LATEST':
       showBrowserDiagnosticsReport();
       return true;
@@ -146,7 +149,7 @@ export function handleYtarkAction(action, parameters) {
       return true;
     }
     case 'YTARK_CHANGELOG_SHOW':
-      showChangelog({ update: !!p.update, focusVersion: p.focusVersion });
+      showChangelog({ update: !!p.update, focusVersion: p.focusVersion, settingsInputOwner: p.settingsInputOwner === true });
       return true;
     case 'YTARK_CHANGELOG_VERSION':
       showChangelogVersion(p.version);
@@ -159,7 +162,7 @@ export function handleYtarkAction(action, parameters) {
       return true;
     case 'YTARK_WHATS_NEW_DISMISS':
       dismissWhatsNew();
-      if (p.refresh === 'changelog') showChangelog({ update: true });
+      if (p.refresh === 'changelog') showChangelog({ update: true, settingsInputOwner: p.settingsInputOwner === true });
       else showSettingsMenu('root', { update: true });
       return true;
     case 'YTARK_YTS_RESTORE_CONFIRM':
