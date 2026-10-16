@@ -3,11 +3,12 @@
 Status: **draft PR [#63](https://github.com/2archiver/YTArk/pull/63) is open from
 `arena/30326b60-ytark`; not merged or published.** Evidence updated 2026-10-17
 (Australia/Brisbane). This is a source and hosted-candidate build report, not a
-device-validation report. Both hosted PR workflows passed on exact head
-`cb2db98771923b1dc758a62f9063f9460b797a26`: [source CI](https://github.com/2archiver/YTArk/actions/runs/38913559703)
-and [ARMv7 no-publication candidate build](https://github.com/2archiver/YTArk/actions/runs/38913559446).
-The candidate APK exists only in the PR workflow artifact; it is not a release
-asset. No stable tag or release was created or moved, and main was not updated.
+device-validation report. Both hosted PR workflows passed on exact candidate
+source `e56d11edad39672eaedb3ea37e3fdf17c27b8953`: [source CI](https://github.com/2archiver/YTArk/actions/runs/38917041407)
+and [ARMv7 no-publication candidate build](https://github.com/2archiver/YTArk/actions/runs/38917041495).
+The later evidence-report change is documentation-only; the candidate APK
+exists only in the PR workflow artifact and is not a release asset. No stable
+tag or release was created or moved, and main was not updated.
 
 This report distinguishes what was verified from what remains **NOT RUN**. The
 permission-return and playback changes address conditions confirmed from source
@@ -25,15 +26,16 @@ of that earlier candidate cycle.
 | Package | `io.github.twoarchiver.ytark` (unchanged) |
 | Signing lineage | Existing pinned community certificate in `signing/YTArk-cert-sha256.txt`; no key rotation |
 | Base / ABI | TizenTubeCobalt `v2.0.2`; `armeabi-v7a` only |
-| SDK / build system | Existing Android SDK 34 / target contract and current Kotlin, D8, and APK-repack build path; no Gradle migration |
-| Current upstream release | `v3.5.2`, published `2026-10-16T09:07:53Z`; the live GitHub release API and remote refs were rechecked on 2026-10-16 |
-| Candidate-ref availability | Live `git ls-remote` found `v3.6.0` and `s37` unused; existing `v3.5.2` and `s36` were left untouched |
-| Exact PR source | `cb2db98771923b1dc758a62f9063f9460b797a26`; both hosted PR workflows passed |
-| Candidate-only artifact | `ytark-3.6.0-armv7-candidate-cb2db98771923b1dc758a62f9063f9460b797a26` from [workflow run 38913559446](https://github.com/2archiver/YTArk/actions/runs/38913559446); Actions artifact only, not a release |
-| Candidate APK SHA-256 | `a32f76c6fa489b085b3b52bdef144f70c5e3d44bb6dce3b368c13fe5f7b530a2` (candidate-only; not copied to release metadata) |
+| SDK / build system | Existing API 34 platform / Build Tools 34.0.0, Kotlin, D8, and APK-repack path; the packaged manifest inherits `minSdk 24` / `targetSdk 36` from the pinned base (confirmed by both manifest parser and `aapt`); no Gradle migration |
+| Current upstream release | `v3.5.2`, published `2026-10-16T09:07:53Z`; live GitHub release metadata and remote refs were rechecked on 2026-10-17 |
+| Candidate-ref availability | Live `git ls-remote` found `v3.6.0` and `s37` unused; the release list has no `v3.6.0`; existing `v3.5.2` and `s36` were left untouched |
+| Exact candidate source | `e56d11edad39672eaedb3ea37e3fdf17c27b8953`; source CI and candidate workflows both passed on this exact PR source |
+| Candidate-only artifact | `ytark-3.6.0-armv7-candidate-e56d11edad39672eaedb3ea37e3fdf17c27b8953` from [workflow run 38917041495](https://github.com/2archiver/YTArk/actions/runs/38917041495); Actions artifact only, not a release |
+| Candidate APK SHA-256 | `a7f8663ab3bfdbf8150f28096507f276b2935fa76ea548da1bf556813fe018c9` (candidate-only; not copied to release metadata) |
 | Candidate userscript SHA-256 | `33e0d72195fdcc6db1f48f02a496376fa94ce95b55a20a978f2a9d7e2c9261d6` (candidate-only build evidence) |
-| Candidate package / ABI / signer | `io.github.twoarchiver.ytark` `3.6.0` (`3060000`), `armeabi-v7a` only; signer fingerprint matches the existing pinned certificate |
-| Static upgrade eligibility | Hosted candidate workflow reported ARMv7 eligible against the previous published APK; no install or in-place upgrade was performed |
+| Candidate package / ABI / signer | `io.github.twoarchiver.ytark` `3.6.0` (`3060000`), `armeabi-v7a` only; signer SHA-256 `b9cb7e4b4d5179870e672e850f5d3661f02c248f943dbaf10cd78cd0c047eaae`, matching the pinned certificate |
+| Candidate / published manifest | Source CI verified candidate `minSdk 24`, `targetSdk 36`, uncapped `REQUEST_INSTALL_PACKAGES` install capability, and private updater components; both manifest parser and `aapt` agreed. Repack tests reject broad storage and `POST_NOTIFICATIONS` permissions. The previous published 3.5.2 APK also has install capability |
+| Static upgrade eligibility | Hosted candidate workflow reported `eligible_armv7=true` against the previous published APK; no install or in-place upgrade was performed |
 
 Generated packaging metadata is sourced from `release/version.properties` and
 checked in `TizenTube/mods/assets/buildInfo.generated.js`. The historical
@@ -90,7 +92,8 @@ clipboard, export, download, native bridge, or network path.
 opt-in Android updater recorder in app-private `SharedPreferences`. The default
 is off for fresh installs and upgrades. Its report and controls live in Android
 Updates; the browser page cannot inspect native state, and native controls cannot
-change browser diagnostics. No new permission or telemetry endpoint was added.
+change browser diagnostics. The diagnostics recorder itself adds no permission
+or telemetry endpoint; updater-required permissions are audited separately.
 
 The native allowlist records one native bootstrap mark and first-activity-resumed
 milestone, updater-page visibility, check/download and APK validation outcomes,
@@ -113,17 +116,36 @@ cookies, browser reports, and downloaded or staged installer APKs. The native
 report is on-screen and scrollable; no clipboard, share intent, APK path, or
 other export was introduced.
 
-## 3. Startup readiness and permission-route changes
+## 3. Startup readiness, version fallback, remote timeouts, and permission-route changes
 
 - Guide refresh now waits for both the command executor and its command
   constructor. Missing dependencies remain pending until a later bounded
   readiness tick; construction or dispatch failure is terminal to avoid
   duplicate side effects. Tests cover late readiness, constructor failure,
   executor failure, and the bounded timeout.
-- Startup navigation remains one-shot and waits for its real resolver. Readiness
-  deadlines use a monotonic clock when available and a scheduled-tick ceiling as
-  a hard bound when that clock is unavailable or invalid. Existing startup
-  destination priority, explicit settings, and readiness cadence are preserved.
+- Startup navigation remains one-shot and waits for its real resolver; it
+  never substitutes a guessed command if the resolver is absent. Readiness uses
+  a monotonic clock when available and otherwise a scheduled-tick ceiling; the
+  hard give-up is 40 seconds or 202 ticks. The optional faster cadence is
+  disabled unless explicitly enabled and falls back from 50 ms to 250 ms ticks
+  after two seconds. Existing destination priority and explicit settings are
+  preserved.
+- The installed-version display has an offline fallback: `appVersion.js` accepts
+  synchronous, callback, or Promise package-version responses, tries
+  immediately and then retries after 0.5, 2, and 6 seconds with a 2.5-second
+  per-read timeout, and keeps generated bundle metadata visible (and labeled as
+  bundle metadata) while the package value is pending or unavailable. It does
+  not use a network lookup and never mistakes the YouTube/Cobalt version for
+  YTArk's installed package version.
+- Remote release checks are bounded and scoped: the browser read-only check has
+  a 12-second settlement deadline and a 512 KiB metadata cap (abort is best
+  effort); native HTTP uses a 15-second connect timeout, 20-second HEAD read
+  timeout, 45-second other read timeout, at most six HTTP exchanges in a
+  redirect chain, and a 1 MiB metadata/sums cap. The native read timeout applies
+  per blocking read, not as a total metadata-request deadline. APK streaming
+  separately has a 30-minute monotonic deadline and expected-size/hash/signature
+  validation. Timeout,
+  network, HTTP, and rate-limit outcomes stay distinct and sanitized.
 - Native permission detours now carry explicit `ENTRY` or `INSTALL` ownership,
   request identity, candidate identity, launch/departure/return state, and
   one-shot continuation acceptance. Versioned Activity/SharedPreferences
@@ -145,17 +167,22 @@ installation, an upgrade, or successful playback on hardware.
 
 ## 4. Exact-source CI prerequisite for publication
 
-`tools/require_source_ci.py` requires a completed successful `ci.yml` run for
-the exact full commit SHA on the trusted `2archiver/YTArk` `main` branch. It
-rejects pull-request runs, other repositories, other branches, other commits,
-other workflows, and failed/cancelled runs; it fails closed on API errors or a
-bounded wait timeout. It is wired into both the trusted main publication
-workflow and the manual recovery workflow, before candidate build/publication
-steps. Workflow-policy and helper tests cover these constraints. The successful
-PR-event check is not accepted as publication evidence: because this PR remains
-unmerged, no successful main-branch run for this source is claimed. Publication
-must wait for the configured exact-SHA main CI run. The gate is automatic CI,
-not a device-test or manual-approval gate.
+`tools/require_source_ci.py` requires successful `ci.yml` on the exact full
+commit SHA in trusted `2archiver/YTArk` on `main`; only `push` or
+`workflow_dispatch` runs from that repository/branch/workflow qualify. It orders
+matching attempts by `run_number` and `run_attempt` (with update time and run ID
+tie-breaks), then considers only the newest: a newer active run is awaited, and
+a newer failure, cancellation, or unknown status blocks publication rather than
+falling back to an older success. New regression tests cover both an older
+success superseded by a newer active run and by a newer failed run/attempt. The
+gate also rejects PR events, mismatched sources, and API errors, and fails
+closed on its bounded wait timeout. It is wired into both the trusted main
+publication workflow and the manual recovery workflow before candidate
+build/publication steps. A PR-event check never authorizes publication; because
+this PR remains unmerged, no successful trusted-main run for this candidate is
+claimed. Publication must wait for successful CI on the exact source SHA after
+it is on `main`. This is an automatic CI prerequisite, not a device-test or
+manual-approval gate.
 
 ## 5. Verification performed for this candidate source
 
@@ -168,19 +195,31 @@ not a device-test or manual-approval gate.
   (45 required contract symbols). The ignored `dist` bundle is a local build
   output, not a release asset or signed candidate.
 - `python3 -m py_compile tools/*.py tools/tests/*.py`: passed.
-- `python3 -m unittest discover -s tools/tests -v`: **245 passed, 0 failed, 1
-  skipped** locally. The skipped test is the Java/Kotlin host runner because this
-  sandbox has no host JDK; the hosted PR workflow below ran it with Java 17.
-- Hosted source CI passed for the exact PR head `cb2db98771923b1dc758a62f9063f9460b797a26` in
-  [run 38913559703](https://github.com/2archiver/YTArk/actions/runs/38913559703):
+- `python3 -m unittest discover -s tools/tests -v`: **247 tests; 246 passed,
+  0 failed, 1 skipped** locally. The skipped test is the Java/Kotlin host runner
+  because this sandbox has no host JDK; hosted source CI ran it with Java 17.
+  The source-CI gate regressions verify that a newer active, failed, or cancelled
+  exact-SHA attempt supersedes an older success and that an active latest run
+  times out without accepting that older success.
+- Hosted source CI passed on exact candidate source
+  `e56d11edad39672eaedb3ea37e3fdf17c27b8953` in
+  [run 38917041407](https://github.com/2archiver/YTArk/actions/runs/38917041407):
   Node/build, Python, shell, release-contract, all native updater Kotlin sources,
-  policy tests, DEX production, repack integration, compiled JNI definitions and
-  packaged-manifest/install-authorization checks all passed.
-- The no-publication candidate workflow passed in
-  [run 38913559446](https://github.com/2archiver/YTArk/actions/runs/38913559446):
-  the ARMv7 candidate was repacked, signed, aligned and statically inspected;
-  the candidate artifact is listed above. Static upgrade eligibility passed.
-  These are package checks only, not an install or device test.
+  policy tests, DEX production, repack integration, compiled JNI definitions,
+  and packaged-manifest/install-authorization checks all passed. The manifest
+  check reported `io.github.twoarchiver.ytark`, `versionCode 3060000`,
+  `minSdk 24`, `targetSdk 36`, and grantable `REQUEST_INSTALL_PACKAGES`; the
+  previous published 3.5.2 APK was also reported grantable.
+- The no-publication ARMv7 candidate workflow passed on that same exact source in
+  [run 38917041495](https://github.com/2archiver/YTArk/actions/runs/38917041495):
+  the APK was repacked, signed, aligned, and statically inspected. The candidate
+  artifact, APK SHA-256, userscript SHA-256, package, ABI, and signer are listed
+  above. Static upgrade eligibility against the previous published ARMv7 APK
+  passed. These are package checks only, not an install or device test.
+- D-pad evidence is host-only: the browser diagnostics UI test checks the first
+  actionable selection and intended controls; the updater focus-policy test
+  checks its fallback order against controls actually created/inserted. Real
+  remote traversal on a TV has not been run.
 - Passed `bash -n tools/*.sh`, `tools/repack_apk.py --self-test`, launcher-art
   checks, repository/history secret scan, workflow-policy checks, generated
   build-info/changelog checks, and `tools/apk_manifest.py --self-test`.
