@@ -1,13 +1,13 @@
 # YTArk 3.6.0 candidate evidence report
 
-Status: **candidate on `arena/30326b60-ytark`; not merged or published.** This is a
-source-and-host-test snapshot prepared before opening the draft pull request,
-not an Android package or device-validation report. Hosted pull-request checks
-were not yet available at this snapshot and are not claimed here; their result
-will be visible on the pull request.
-No candidate APK was produced in this environment, so there is no candidate APK
-hash to record. No tag, release, asset, or main-branch publication was created
-or changed.
+Status: **draft PR [#63](https://github.com/2archiver/YTArk/pull/63) is open from
+`arena/30326b60-ytark`; not merged or published.** Evidence updated 2026-10-17
+(Australia/Brisbane). This is a source and hosted-candidate build report, not a
+device-validation report. Both hosted PR workflows passed on exact head
+`cb2db98771923b1dc758a62f9063f9460b797a26`: [source CI](https://github.com/2archiver/YTArk/actions/runs/38913559703)
+and [ARMv7 no-publication candidate build](https://github.com/2archiver/YTArk/actions/runs/38913559446).
+The candidate APK exists only in the PR workflow artifact; it is not a release
+asset. No stable tag or release was created or moved, and main was not updated.
 
 This report distinguishes what was verified from what remains **NOT RUN**. The
 permission-return and playback changes address conditions confirmed from source
@@ -28,6 +28,12 @@ of that earlier candidate cycle.
 | SDK / build system | Existing Android SDK 34 / target contract and current Kotlin, D8, and APK-repack build path; no Gradle migration |
 | Current upstream release | `v3.5.2`, published `2026-10-16T09:07:53Z`; the live GitHub release API and remote refs were rechecked on 2026-10-16 |
 | Candidate-ref availability | Live `git ls-remote` found `v3.6.0` and `s37` unused; existing `v3.5.2` and `s36` were left untouched |
+| Exact PR source | `cb2db98771923b1dc758a62f9063f9460b797a26`; both hosted PR workflows passed |
+| Candidate-only artifact | `ytark-3.6.0-armv7-candidate-cb2db98771923b1dc758a62f9063f9460b797a26` from [workflow run 38913559446](https://github.com/2archiver/YTArk/actions/runs/38913559446); Actions artifact only, not a release |
+| Candidate APK SHA-256 | `a32f76c6fa489b085b3b52bdef144f70c5e3d44bb6dce3b368c13fe5f7b530a2` (candidate-only; not copied to release metadata) |
+| Candidate userscript SHA-256 | `33e0d72195fdcc6db1f48f02a496376fa94ce95b55a20a978f2a9d7e2c9261d6` (candidate-only build evidence) |
+| Candidate package / ABI / signer | `io.github.twoarchiver.ytark` `3.6.0` (`3060000`), `armeabi-v7a` only; signer fingerprint matches the existing pinned certificate |
+| Static upgrade eligibility | Hosted candidate workflow reported ARMv7 eligible against the previous published APK; no install or in-place upgrade was performed |
 
 Generated packaging metadata is sourced from `release/version.properties` and
 checked in `TizenTube/mods/assets/buildInfo.generated.js`. The historical
@@ -145,8 +151,11 @@ rejects pull-request runs, other repositories, other branches, other commits,
 other workflows, and failed/cancelled runs; it fails closed on API errors or a
 bounded wait timeout. It is wired into both the trusted main publication
 workflow and the manual recovery workflow, before candidate build/publication
-steps. Workflow-policy and helper tests cover these constraints. The gate is
-automatic CI, not a device-test or manual-approval gate.
+steps. Workflow-policy and helper tests cover these constraints. The successful
+PR-event check is not accepted as publication evidence: because this PR remains
+unmerged, no successful main-branch run for this source is claimed. Publication
+must wait for the configured exact-SHA main CI run. The gate is automatic CI,
+not a device-test or manual-approval gate.
 
 ## 5. Verification performed for this candidate source
 
@@ -160,8 +169,18 @@ automatic CI, not a device-test or manual-approval gate.
   output, not a release asset or signed candidate.
 - `python3 -m py_compile tools/*.py tools/tests/*.py`: passed.
 - `python3 -m unittest discover -s tools/tests -v`: **245 passed, 0 failed, 1
-  skipped**. The skipped test is the Java/Kotlin host runner, because this
-  environment has no host JDK.
+  skipped** locally. The skipped test is the Java/Kotlin host runner because this
+  sandbox has no host JDK; the hosted PR workflow below ran it with Java 17.
+- Hosted source CI passed for the exact PR head `cb2db98771923b1dc758a62f9063f9460b797a26` in
+  [run 38913559703](https://github.com/2archiver/YTArk/actions/runs/38913559703):
+  Node/build, Python, shell, release-contract, all native updater Kotlin sources,
+  policy tests, DEX production, repack integration, compiled JNI definitions and
+  packaged-manifest/install-authorization checks all passed.
+- The no-publication candidate workflow passed in
+  [run 38913559446](https://github.com/2archiver/YTArk/actions/runs/38913559446):
+  the ARMv7 candidate was repacked, signed, aligned and statically inspected;
+  the candidate artifact is listed above. Static upgrade eligibility passed.
+  These are package checks only, not an install or device test.
 - Passed `bash -n tools/*.sh`, `tools/repack_apk.py --self-test`, launcher-art
   checks, repository/history secret scan, workflow-policy checks, generated
   build-info/changelog checks, and `tools/apk_manifest.py --self-test`.
@@ -176,18 +195,16 @@ automatic CI, not a device-test or manual-approval gate.
 
 ## 6. NOT RUN / NOT CLAIMED
 
-- **NOT RUN:** Java/Kotlin host policy tests in this sandbox (no `java`/`javac`);
-  they are included in CI and the Python runner-wiring test was the single
-  skipped test above.
-- **NOT RUN:** Android SDK API 34 Kotlin compilation, D8, repacking, signing,
-  candidate APK manifest/signature/alignment inspection, or a signed candidate
-  artifact. The manifest self-test is an in-memory parser test, not a packaged
-  APK check.
+- **NOT RUN locally:** Java/Kotlin host policy tests in this sandbox (no
+  `java`/`javac`); the hosted Java 17 PR source workflow passed the native host
+  policy runner and production compilation.
 - **NOT RUN:** any TV/device test: install, in-place upgrade, Settings
   permission departure/return, D-pad report navigation, guide refresh in the
-  real Cobalt runtime, playback, buffering, or frame-callback behavior.
+  real Cobalt runtime, playback, buffering, or frame-callback behavior. The
+  signed hosted candidate was not installed or launched.
 - No startup-speed improvement, input-to-photon latency, rendered-frame time,
   usable Home time, permission-switch persistence, or successful installation
   is claimed.
-- No release, userscript tag, APK asset, publication, main-branch update, or
-  merge occurred.
+- No stable release, userscript tag, release APK asset, publication,
+  main-branch update, or merge occurred; the signed candidate is only a
+  time-limited Actions artifact attached to the draft PR workflow.
