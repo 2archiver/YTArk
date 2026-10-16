@@ -91,7 +91,7 @@ object NativeDiagnosticsPolicy {
     }
 
     fun sanitize(sessions: List<NativeDiagnosticSession>): List<NativeDiagnosticSession> {
-        val cleaned = sessions.asSequence()
+        val cleaned: List<NativeDiagnosticSession> = sessions.asSequence()
             .filter { it.number > 0L }
             .map { session ->
                 val events = session.events.mapNotNull {
@@ -103,9 +103,9 @@ object NativeDiagnosticsPolicy {
             .sortedBy { it.number }
             .takeLast(MAX_SESSIONS)
             .toList()
-        var result = cleaned
+        var result: List<NativeDiagnosticSession> = cleaned
         while (result.sumOf { it.events.size } > MAX_TOTAL_EVENTS) {
-            val first = result.firstOrNull() ?: break
+            val first: NativeDiagnosticSession = result.firstOrNull() ?: break
             result = if (first.events.size <= 1) result.drop(1)
                 else listOf(first.copy(events = first.events.drop(1))) + result.drop(1)
         }
