@@ -1,6 +1,8 @@
 # YTArk 3.5.2 evidence report
 
-Status: **candidate on branch `arena/f407bd23-ytark`, not merged, not published.**
+Status: **candidate on branch `arena/f407bd23-ytark`, PR #62, not merged, not
+published.** Both hosted gates passed on the candidate commit (`ci.yml` run 38873444094,
+`build-candidate.yml` run 38873444102 — signed candidate artefact, no publication).
 This report records what was implemented, what was actually verified, and what remains
 **NOT RUN**. Nothing here claims that 3.5.2 fixes the historical "Allow from this source"
 switch reset on the user's TV, that it installs, upgrades, or starts faster on any device.
@@ -28,13 +30,14 @@ any specific device.
 - Remote state re-checked live: `v3.5.1` is the published latest release
   (2026-10-16T05:38:03Z, publication run recorded in `docs/YTARK-3.5.1-EVIDENCE.md`);
   tags `v3.5.1` and `s35` exist; `s36`/`v3.5.2` do not.
-- The published 3.5.1 APK bytes could **not** be re-downloaded here: this sandbox only
-  reaches `github.com`/`api.github.com`, and release assets redirect to
-  `release-assets.githubusercontent.com`, which is blocked. The packaged-manifest facts
-  (target API 36, minSdk 24, uncapped `REQUEST_INSTALL_PACKAGES`, ARMv7, signer digest)
-  are therefore taken from the repository-recorded 3.5.1 evidence, not re-measured:
-  **APK re-inspection NOT RUN** in this sandbox; CI re-runs the packaged-manifest and
-  signer gates on the new candidate instead.
+- The published 3.5.1 APK bytes could **not** be re-downloaded into this sandbox (it only
+  reaches `github.com`/`api.github.com`; release assets redirect to a blocked host).
+  The hosted CI validation run re-downloaded and re-inspected it instead: the published
+  `v3.5.1` APK is `io.github.twoarchiver.ytark`, versionCode 3050100, minSdk 24,
+  **targetSdk 36**, install capability **yes** (annotation "YTArk published APK manifest"
+  in run 38873444094). This confirms the repository-recorded 3.5.1 manifest facts on the
+  live published bytes, so the historical switch reset is **not** explained by a missing
+  permission or a target below 26 on that package.
 - No TV or matching test device is available in this environment, so the §2 baseline
   device test of the genuine signed 3.5.1 APK (install in place, capture
   `canRequestPackageInstalls()`, AppOp, UserManager restrictions, Settings route) was
@@ -212,16 +215,44 @@ Run locally (this worktree, candidate commit):
 | `tools/build_buildinfo.py --check` / `--write` | pass (3.5.2 / 3050200 / s36) |
 | `tools/validate_release.py emit-env` | pass: VERSION_NAME=3.5.2, VERSION_CODE=3050200, VERSION_TAG=v3.5.2, SCRIPT_TAG=s36, APK_ARMV7=YTArk-v3.5.2-armv7.apk, no ARM64 |
 | `tools/repack_apk.py --self-test`, `tools/apk_manifest.py` self-test, `check_workflow_policy.py`, `render_launcher_art.py --check`, `build_logo_asset.py --check`, `fetch_premium_logo.py --verify-only`, `check_no_secrets.py --history`, `bash -n tools/*.sh` | all pass |
-| Kotlin policy suite (`tools/test_android_updater.sh`) | **NOT RUN locally (no JVM)**; runs inside CI's full-source build step |
-| Full-source Kotlin compile vs real API-34 `android.jar`, D8, repack, zipalign, signature and packaged-manifest gates | run by `ci.yml` / `build-candidate.yml` on the PR — see §4.1 |
+| Kotlin policy suite (`tools/test_android_updater.sh`) | NOT RUN locally (no JVM); **PASS** inside CI's full-source build step (§4.1) |
+| Full-source Kotlin compile vs real API-34 `android.jar`, D8, repack, zipalign, signature and packaged-manifest gates | **PASS** in `ci.yml` / `build-candidate.yml` on the PR — see §4.1 |
 
-### 4.1 Hosted CI results (filled from the actual runs)
+### 4.1 Hosted CI results (recorded from the actual runs, PR #62)
 
-- `ci.yml` validation run: _(pending — see the PR checks; to be recorded here)_
-- `build-candidate.yml` run: _(pending)_
-- Candidate APK `YTArk-v3.5.2-armv7.apk` SHA-256: _(pending from the candidate run)_
-- Signer SHA-256 equality with `signing/YTArk-cert-sha256.txt`: _(pending)_
-- Packaged manifest facts (package / versionCode / minSdk / targetSdk / install capability): _(pending)_
+Source commit under test: `674a131236bd3fdb406cab1fb5dd3b43846a259d` (the follow-up
+commit adding this results section is documentation-only; its CI re-run repeats the same
+gates on the same sources and the candidate artefact name carries the head SHA).
+
+- `ci.yml` validation run: https://github.com/2archiver/YTArk/actions/runs/38873444094 —
+  **success**. Includes the full-source Kotlin compile against the real API-34
+  `android.jar`, the Java/Kotlin policy suites (including the new
+  `InstallCapabilityPolicyTest` and the extended `StateTest`), D8, the unsigned repack
+  round-trip, the JNI/dex contract and the packaged-manifest gates.
+- `build-candidate.yml` run: https://github.com/2archiver/YTArk/actions/runs/38873444102 —
+  **success** (no publication; artefact only). Steps passed: Kotlin compile + production
+  contract tests, pinned-base download/verify, repack, `zipalign -c -p 4`, signing with
+  the pinned public Hearth community keystore, signature verification, checksums,
+  static upgrade eligibility.
+- Candidate APK `YTArk-v3.5.2-armv7.apk`: SHA-256
+  `da55d14a1da0533fe7a28cb8299ee5383e90ea1849e08c3518e3692b4e40d07c`;
+  package `io.github.twoarchiver.ytark`; versionCode `3050200`; versionName `3.5.2`;
+  native `armeabi-v7a` only. (APK signatures are randomised per run, so a re-run produces
+  a different APK digest for identical sources; the userScript digest is stable.)
+- Bundled `userScript.js`: SHA-256
+  `d319b7f15433beb2cafba73f926773518e073580653056acd12dd1b0835735db`, 807,693 bytes,
+  script URL bound to tag `s36` (which only the release publication workflow publishes).
+- Signer SHA-256:
+  `b9cb7e4b4d5179870e672e850f5d3661f02c248f943dbaf10cd78cd0c047eaae` — equal to the
+  pinned `signing/YTArk-cert-sha256.txt` and to the 3.5.1/3.5.0 signer (upgrade lineage
+  preserved; no new key).
+- Packaged manifest facts (candidate, aapt and `tools/apk_manifest.py` in agreement):
+  minSdk 24, **targetSdk 36**, install capability **yes**; pinned base
+  `reisxd/TizenTubeCobalt@v2.0.2` unchanged (targetSdk 36).
+- Static upgrade eligibility against the published `v3.5.1` APK: **eligible_armv7=true**
+  (package ID, ABI, versionCode 3050200 > 3050100, permanent-signer checks). No install
+  was run.
+- DeArrow live API probe (informational only): 3 requests, all HTTP 200.
 
 ## 5. Device acceptance protocol (smallest targeted checklist) — ALL NOT RUN
 
@@ -263,10 +294,11 @@ SHA-256 before starting. Do not uninstall or clear app data at any point.
 
 ## 6. Release acceptance status (honest boundary)
 
-1. Source/tests passed — **PASS** locally for JS/Python; Kotlin/D8/manifest gates run in
-   CI (§4.1).
-2. Final APK built and statically verified — **CI result, see §4.1** (candidate only;
-   publication is a separate, deliberate step that this branch must not trigger).
+1. Source/tests passed — **PASS** (JS/Python locally; Kotlin policy suites, full-source
+   compile, D8 and manifest gates in CI, §4.1).
+2. Final APK built and statically verified — **PASS as a candidate** (§4.1: signed,
+   aligned, signer-verified, manifest-checked, statically upgrade-eligible; publication
+   is a separate, deliberate step that this branch must not trigger).
 3. Real install and upgrade verified — **NOT RUN** (no device).
 4. Permission persistence verified on identified TV hardware — **NOT RUN** (no device);
    the historical switch-reset cause remains **UNVERIFIED/unknown** for the user's TV.
