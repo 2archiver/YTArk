@@ -84,6 +84,11 @@ jobs:
       - name: Validate Python, shell, icon/manifest patcher self-tests and release metadata
         run: |
           set -euo pipefail
+          # A failure inside this step used to be visible only in the raw job log,
+          # which expires and is not readable through the API: a red job with no
+          # stated reason. Every failing command now names itself as a check
+          # annotation, so the failing check is readable from the API alone.
+          trap 'code=$?; printf "::error title=Release metadata validation::%s (line %s, exit %s)\n" "$BASH_COMMAND" "$LINENO" "$code"' ERR
           python3 -m py_compile tools/*.py tools/tests/*.py
           python3 -m unittest discover -s tools/tests -v
           bash -n tools/*.sh
