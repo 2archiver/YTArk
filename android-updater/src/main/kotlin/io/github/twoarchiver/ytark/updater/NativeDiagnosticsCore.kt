@@ -101,8 +101,8 @@ object NativeDiagnosticsPolicy {
             }
             .distinctBy { it.number }
             .sortedBy { it.number }
-            .takeLast(MAX_SESSIONS)
             .toList()
+            .takeLast(MAX_SESSIONS)
         var result: List<NativeDiagnosticSession> = cleaned
         while (result.sumOf { it.events.size } > MAX_TOTAL_EVENTS) {
             val first: NativeDiagnosticSession = result.firstOrNull() ?: break
