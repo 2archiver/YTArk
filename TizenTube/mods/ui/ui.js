@@ -3,11 +3,15 @@ import '../spatial-navigation-polyfill.js';
 import { startReadiness } from '../features/startupReadiness.js';
 import { browserDiagnostics, remoteKeyCategory } from '../features/browserDiagnostics.js';
 import { createStartupNavigation } from '../features/startupNavigation.js';
+import { installStartupIntentGuard } from '../features/startupIntentGuard.js';
+import { createSettingsInputOwner } from './settingsInputOwnership.js';
 import { createStartupGuideRefresh } from '../features/startupGuideRefresh.js';
 import css from './ui.css';
 import { configRead, configWrite, configWriteMany, configChangeEmitter } from '../config.js';
 import updateStyle from './theme.js';
-import { showToast } from './ytUI.js';
+import {
+  showToast, hasVisibleYtarkModal, hasVisibleYtarkSettingsPanel, ytarkModalBackCommand,
+} from './ytUI.js';
 import { tx } from '../translations/text.js';
 import modernUI from './settings.js';
 import resolveCommand, { patchResolveCommand } from '../resolveCommand.js';
@@ -58,8 +62,13 @@ const startupNavigation = createStartupNavigation({
   mark: (event, outcome) => {
     if (event === 'startup-navigation-dispatched') browserDiagnostics.recordNavigation(outcome);
     else if (event === 'startup-navigation-failed') diagnosticMark(event, 'failed');
+    else if (event === 'startup-navigation-cancelled') diagnosticMark(event, outcome);
   },
   warn: () => console.warn('[YTArk] Startup navigation configuration or dispatch failed.'),
+});
+const startupIntentGuard = installStartupIntentGuard({
+  documentObject: typeof document !== 'undefined' ? document : null,
+  cancelNavigation: () => startupNavigation.cancelForUserInput(),
 });
 const startupGuideRefresh = createStartupGuideRefresh({
   getExecutor: getCommandExecutor,
@@ -71,8 +80,10 @@ startReadiness({
   enabled: configRead('fasterStartup') === true,
   storage: startupStorage,
   onInterrupted: () => diagnosticMark('startup-readiness-interrupted', 'interrupted'),
+  onMode: mode => browserDiagnostics.recordStartupReadinessMode(mode),
   onReady: () => diagnosticMark('startup-readiness-complete', 'complete'),
   onGiveUp: () => {
+    startupIntentGuard.dispose();
     if (!startupNavigation.done) {
       startupNavigation.timeOut();
       diagnosticMark('startup-navigation-failed', 'failed');
@@ -110,6 +121,7 @@ startReadiness({
     // readiness tick. Invocation failure is terminal to avoid duplicate effects.
     startupGuideRefresh.tryDispatch();
     if (controlsInitialized) startupNavigation.tryRun();
+    if (startupNavigation.done) startupIntentGuard.dispose();
 
     return controlsInitialized && resolverObserved && resolverPatchAttempted
       && startupNavigation.done && startupGuideRefresh.done;
@@ -280,6 +292,38 @@ function execute_once_dom_loaded() {
   } catch (e) { }
 
   const handledRemoteKeys = new Set();
+  const modalRootSelector = [
+    '[aria-modal="true"]', '[role="dialog"]', 'ytlr-overlay-section-renderer',
+    'ytlr-overlay-panel-renderer', 'ytlr-overlay-panel', 'ytlr-popup-container',
+  ].join(', ');
+  const consumeRemoteEvent = (event) => {
+    try { event.preventDefault(); } catch (_) { /* synthetic/legacy event */ }
+    try { event.stopImmediatePropagation(); } catch (_) { /* not supported */ }
+    try { event.stopPropagation(); } catch (_) { /* not supported */ }
+  };
+  const visibleModalRoot = () => {
+    try {
+      const roots = document.querySelectorAll(modalRootSelector);
+      for (let index = roots.length - 1; index >= 0; index -= 1) {
+        const root = roots[index];
+        if (root && root.isConnected !== false && root.getAttribute?.('aria-hidden') !== 'true') return root;
+      }
+    } catch (_) { /* older Cobalt does not expose querySelectorAll consistently */ }
+    return null;
+  };
+  const restoreModalFocus = (root) => {
+    if (!root || typeof root.querySelectorAll !== 'function') return false;
+    try {
+      const candidates = root.querySelectorAll('[tabindex],button,[role="button"],a,input');
+      const target = Array.from(candidates).find((element) => {
+        if (!element || element.isConnected === false || element.disabled === true) return false;
+        const tabindex = element.getAttribute?.('tabindex');
+        return tabindex === null || tabindex === undefined || Number(tabindex) >= 0;
+      });
+      if (target && typeof target.focus === 'function') { target.focus(); return true; }
+    } catch (_) { /* focus restoration is best effort */ }
+    return false;
+  };
   const isTextEntryTarget = (target) => {
     if (!target) return false;
     const tag = String(target.tagName || '').toLowerCase();
@@ -287,14 +331,31 @@ function execute_once_dom_loaded() {
       || target.isContentEditable === true
       || target.getAttribute?.('contenteditable') === 'true';
   };
+  const settingsInputOwner = createSettingsInputOwner({
+    isPanelOpen: hasVisibleYtarkSettingsPanel,
+    dismissPanel: () => resolveCommand(ytarkModalBackCommand() || { signalAction: { signal: 'POPUP_BACK' } }),
+    findModalRoot: visibleModalRoot,
+    restoreModalFocus,
+  });
 
   const handleEvent = (evt) => {
     // Only act on keydown. keypress/keyup used to open duplicate settings on
     // remotes that synthesize a full key event sequence.
     if (evt.type !== 'keydown') return true;
-    if (isTextEntryTarget(evt.target)) return true;
+    const code = Number(evt.keyCode || evt.which || 0);
+    const ytarkModalOpen = hasVisibleYtarkModal();
+    if (settingsInputOwner.handleKeyDown(evt)) return false;
+    if (isTextEntryTarget(evt.target || document.activeElement)) return true;
+    // A generic YTArk dialog is not a Settings input owner, but its remote
+    // colour shortcuts must not open panels behind that dialog.
+    if (ytarkModalOpen && (code === 403 || code === 404)) {
+      handledRemoteKeys.add(code);
+      consumeRemoteEvent(evt);
+      return false;
+    }
+    if (ytarkModalOpen && [13, 32, 37, 38, 39, 40].includes(code)) return true;
 
-    if (evt.keyCode in keys && !evt.repeat) {
+    if (!ytarkModalOpen && evt.keyCode in keys && !evt.repeat) {
       const percentage = keys[evt.keyCode] * 10;
       const video = document.querySelector('video');
       if (video && Number.isFinite(video.duration) && video.duration > 0) {
@@ -324,10 +385,12 @@ function execute_once_dom_loaded() {
     }
 
     if (evt.keyCode === 403 || evt.keyCode === 404) {
-      if (evt.repeat || handledRemoteKeys.has(evt.keyCode)) return false;
+      if (evt.repeat || handledRemoteKeys.has(evt.keyCode)) {
+        consumeRemoteEvent(evt);
+        return false;
+      }
       handledRemoteKeys.add(evt.keyCode);
-      evt.preventDefault();
-      evt.stopPropagation();
+      consumeRemoteEvent(evt);
       if (evt.keyCode === 403) {
         if (uiContainer.style.display === 'none') {
           previousFocus = document.activeElement;
@@ -346,7 +409,7 @@ function execute_once_dom_loaded() {
       return false;
     }
 
-    if (evt.keyCode === 39 && window.isPipPlaying
+    if (!ytarkModalOpen && evt.keyCode === 39 && window.isPipPlaying
         && document.querySelector('ytlr-search-text-box > .zylon-focus')) {
       const ytlrPlayer = document.querySelector('ytlr-player');
       if (ytlrPlayer) {
@@ -366,7 +429,12 @@ function execute_once_dom_loaded() {
 
   if (!startupSteps.listeners) {
     document.addEventListener('keydown', eventHandler, true);
-    document.addEventListener('keyup', (evt) => handledRemoteKeys.delete(evt.keyCode), true);
+    document.addEventListener('keyup', (evt) => {
+      const code = Number(evt && (evt.keyCode || evt.which) || 0);
+      settingsInputOwner.handleKeyUp(evt);
+      if (handledRemoteKeys.has(code)) consumeRemoteEvent(evt);
+      handledRemoteKeys.delete(code);
+    }, true);
     startupSteps.listeners = true;
   }
   // Startup navigation and optional guide refresh are dispatched by the

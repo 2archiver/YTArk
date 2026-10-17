@@ -32,16 +32,24 @@ describe('About diagnostics navigation and scopes', () => {
     actions.handleYtarkAction('YTARK_PANEL_SHOW', { id: 'about.diagnostics' });
     const panel = lastModal(recorded, 'ytark-panel-about.diagnostics');
     assert.equal(header(panel).title, 'Diagnostics');
-    assert.equal(selectedIndex(panel), 2, 'D-pad selection starts on the first actionable control');
+    assert.equal(selectedIndex(panel), 2, 'D-pad selection starts on the recording control');
     const titles = modalItems(panel).map(rowTitle).filter(Boolean);
     assert.deepEqual(titles, [
-      'Enable / start recording', 'Start new sample', 'View latest report',
-      'View recent sessions', 'Clear diagnostic data', 'Android update diagnostics',
+      'Enable / start recording', 'Leave launches unclassified', 'Label launches as cold starts',
+      'Label launches as warm starts', 'View startup summary', 'Start new partial sample',
+      'Advanced event report', 'View recent sessions', 'Clear diagnostic data', 'Android update diagnostics',
     ]);
     const descriptions = modalItems(panel).map(messageText).filter(Boolean).join('\n');
     assert.match(descriptions, /nothing is sent automatically/i);
-    assert.match(descriptions, /next launch/i);
+    assert.match(descriptions, /next complete browser launch/i);
     assert.match(descriptions, /separate/i);
+    const coldLabel = findRow(panel, 'Label launches as cold starts');
+    const labelCommands = rowCommands(coldLabel);
+    assert.equal(labelCommands[0].setClientSettingEndpoint.settingDatas[0].clientSettingEnum.item, 'startupDiagnosticRunKind');
+    assert.equal(labelCommands[0].setClientSettingEndpoint.settingDatas[0].stringValue, 'cold');
+    assert.equal(labelCommands[1].customAction.action, 'YTARK_PANEL_SHOW');
+    const summaryAction = actionFromRow(findRow(panel, 'View startup summary'));
+    assert.equal(summaryAction.action, 'YTARK_DIAGNOSTICS_STARTUP_SUMMARY');
     const native = actionFromRow(findRow(panel, 'Android update diagnostics'));
     assert.equal(native.action, 'YTARK_NATIVE_UPDATES_OPEN');
     const clearConfirmRow = actionFromRow(findRow(panel, 'Clear diagnostic data'));
@@ -61,6 +69,13 @@ describe('About diagnostics navigation and scopes', () => {
     assert.equal(browser.record('raw-video-id', 'secret'), false);
     browser._persist({ draft: browser._plainSession(browser.active) });
     assert.ok(localStorage[recorderModule.BROWSER_DIAGNOSTICS_DRAFT_KEY]);
+
+    actions.handleYtarkAction('YTARK_DIAGNOSTICS_STARTUP_SUMMARY', {});
+    const summary = lastModal(recorded, 'ytark-browser-startup-summary');
+    const summaryText = modalItems(summary).map(messageText).join('\n');
+    assert.match(summaryText, /Measured interval: userscript module evaluation/);
+    assert.match(summaryText, /partial sample/i);
+    assert.doesNotMatch(summaryText, /0\.0 ms|Median interval|Observed difference/);
 
     actions.handleYtarkAction('YTARK_DIAGNOSTICS_LATEST', {});
     const report = lastModal(recorded, 'ytark-browser-diagnostics-report');
@@ -104,6 +119,11 @@ describe('About diagnostics navigation and scopes', () => {
     const report = lastModal(recorded, 'ytark-browser-diagnostics-report');
     const reportText = modalItems(report).map(messageText).join('\n');
     assert.match(reportText, /Capture: launch capture from userscript bootstrap/);
+    actions.handleYtarkAction('YTARK_DIAGNOSTICS_STARTUP_SUMMARY', {});
+    const summary = lastModal(recorded, 'ytark-browser-startup-summary');
+    const summaryText = modalItems(summary).map(messageText).join('\n');
+    assert.match(summaryText, /Latest sample:/, 'the concise summary reads existing local history while off');
+    assert.doesNotMatch(summaryText, /Local browser diagnostic storage is unavailable/);
     assert.equal(browser.status, 'off', 'opening a report does not enable collection');
   });
 

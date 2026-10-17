@@ -32,7 +32,6 @@ import {
 } from './ytUI.js';
 import { YTARK_BUILD_INFO } from '../assets/buildInfo.generated.js';
 import { tx } from '../translations/text.js';
-import { changelogEntryFor } from '../features/whatsNew.js';
 import { browserDiagnostics } from '../features/browserDiagnostics.js';
 
 const qrcodes = {};
@@ -152,27 +151,9 @@ function startupDestination(id, titleKey, icon, endpoint) {
 }
 
 /**
- * About YTArk — a compact identity panel for TV screens. The first line is the
- * installed short version, highlights come only from that bundled release
- * entry, and detailed metadata / attribution stay behind navigable rows.
+ * About YTArk stays concise and TV-readable. Release notes, technical data,
+ * attribution, licenses and project access are separate navigable destinations.
  */
-function aboutHighlightLines(version) {
-  const entry = changelogEntryFor(version);
-  if (!entry || !Array.isArray(entry.sections)) return [];
-  const lines = [];
-  for (const section of entry.sections) {
-    if (!section || !Array.isArray(section.items)
-        || ['Known limitations', 'Validation', 'Notes'].includes(section.heading)) continue;
-    for (const raw of section.items) {
-      const text = String(raw || '').replace(/\s+/g, ' ').trim();
-      if (!text) continue;
-      lines.push(text.length > 132 ? `${text.slice(0, 129).replace(/\s+\S*$/, '')}…` : text);
-      if (lines.length >= 3) return lines;
-    }
-  }
-  return lines;
-}
-
 function aboutPanel() {
   const info = installedVersionInfo();
   const version = info.loading
@@ -180,11 +161,6 @@ function aboutPanel() {
     : `YTArk ${ytarkDisplayVersion()}`;
   const items = [overlayMessageRenderer(tx(
     'ytark.about.description', 'Independent enhancements for the YouTube TV app.'))];
-  const highlights = info.loading ? [] : aboutHighlightLines(info.version);
-  if (highlights.length) {
-    items.push(overlayMessageRenderer(tx('ytark.about.highlights', 'What’s new')));
-    for (const highlight of highlights) items.push(overlayMessageRenderer(`• ${highlight}`));
-  }
   items.push(
     buttonItem(
       {
@@ -192,7 +168,7 @@ function aboutPanel() {
         subtitle: tx('ytark.about.changelogSubtitle', 'Full release notes and earlier versions'),
       },
       { icon: 'HISTORY' },
-      [custom('YTARK_CHANGELOG_SHOW', { focusVersion: info.version || '' })],
+      [custom('YTARK_CHANGELOG_SHOW', { focusVersion: info.version || '', settingsInputOwner: true })],
     ),
     buttonItem(
       {
@@ -238,6 +214,8 @@ function aboutPanel() {
 function aboutDiagnosticsPanel() {
   const enabled = configRead('recordBrowserDiagnostics') === true;
   const state = browserDiagnostics.status;
+  const launchKind = ['cold', 'warm'].includes(configRead('startupDiagnosticRunKind'))
+    ? configRead('startupDiagnosticRunKind') : 'unclassified';
   const status = enabled
     ? (state === 'recording' ? 'Recording a browser startup/playback sample now.' : 'Recording is enabled; the last sample completed or is waiting for a new sample.')
     : 'Browser startup/playback recording is off.';
@@ -246,27 +224,44 @@ function aboutDiagnosticsPanel() {
     row.compactLinkRenderer.itemId = `ytark-diagnostics-${id}`;
     return row;
   };
+  const launchKindRow = (kind, title, subtitle) => {
+    const selected = launchKind === kind;
+    const row = buttonItem({ title, subtitle }, {
+      icon: 'SPEED', secondaryIcon: selected ? 'RADIO_BUTTON_CHECKED' : 'RADIO_BUTTON_UNCHECKED',
+    }, [
+      { setClientSettingEndpoint: { settingDatas: [{ clientSettingEnum: { item: 'startupDiagnosticRunKind' }, stringValue: kind }] } },
+      custom('YTARK_PANEL_SHOW', { id: 'about.diagnostics', update: true }),
+    ]);
+    row.compactLinkRenderer.itemId = `ytark-diagnostics-launch-kind-${kind}`;
+    return row;
+  };
   const items = [
-    overlayMessageRenderer('Technical measurements stay on this device; nothing is sent automatically. A complete browser launch capture requires the next launch. Enabling now starts a labeled partial sample.'),
-    overlayMessageRenderer(`${status} Samples stop after five minutes or 200 events. The browser and Android updater recorders are separate.`),
+    overlayMessageRenderer('Technical measurements stay on this device; nothing is sent automatically. Enable diagnostics before launch to capture the next complete browser launch. Enabling mid-launch starts a partial sample that is never counted as a complete launch.'),
+    overlayMessageRenderer(`${status} Retention is bounded to 20 sessions, five minutes and 200 events per session. Browser and Android updater recorders are separate.`),
     makeRow('recording', enabled ? 'Disable / stop recording' : 'Enable / start recording',
       enabled ? 'Stops collection immediately; completed reports remain until cleared.' : 'Persists this choice for the next launch; records locally only.',
       enabled ? 'STOP' : 'PLAY_ARROW', 'YTARK_DIAGNOSTICS_SET', { enabled: !enabled }),
-    makeRow('new-sample', 'Start new sample',
-      enabled ? 'Ends the current sample and starts a new partial capture.' : 'Enables recording and starts a partial capture now.',
+    overlayMessageRenderer('For comparisons, label future launches below. Cold/warm is a user label; the app cannot detect process coldness. Keep the same label, TV, build and startup destination.'),
+    launchKindRow('unclassified', 'Leave launches unclassified', launchKind === 'unclassified' ? 'Selected; these samples will not enter a comparison.' : 'Recommended unless you are deliberately collecting a matched set.'),
+    launchKindRow('cold', 'Label launches as cold starts', launchKind === 'cold' ? 'Selected for future launch samples.' : 'User-supplied label; use only for consistently cold starts.'),
+    launchKindRow('warm', 'Label launches as warm starts', launchKind === 'warm' ? 'Selected for future launch samples.' : 'User-supplied label; use only for consistently warm starts.'),
+    makeRow('startup-summary', 'View startup summary', 'Measured interval, actual Faster startup mode, and comparable local medians.',
+      'ASSESSMENT', 'YTARK_DIAGNOSTICS_STARTUP_SUMMARY'),
+    makeRow('new-sample', 'Start new partial sample',
+      enabled ? 'Ends the current sample and starts a labeled partial capture.' : 'Enables recording and starts a partial capture now.',
       'REFRESH', 'YTARK_DIAGNOSTICS_NEW_SAMPLE'),
-    makeRow('latest', 'View latest report', 'Readable browser-only report; missing marks are shown as unavailable.',
+    makeRow('latest', 'Advanced event report', 'Detailed browser-only events; missing marks remain unavailable, never zero.',
       'DESCRIPTION', 'YTARK_DIAGNOSTICS_LATEST'),
-    makeRow('sessions', 'View recent sessions', 'Up to ten locally retained browser samples.',
+    makeRow('sessions', 'View recent sessions', 'Up to 20 locally retained browser samples.',
       'HISTORY', 'YTARK_DIAGNOSTICS_SESSIONS'),
-    makeRow('clear', 'Clear diagnostic data', 'Clears browser reports only. Android reports are managed in Updates.',
+    makeRow('clear', 'Clear diagnostic data', 'Clears browser reports only. Settings, launch label and Android reports are unchanged.',
       'DELETE', 'YTARK_DIAGNOSTICS_CLEAR_CONFIRM'),
     makeRow('android', 'Android update diagnostics', 'Separate native recorder and report; this browser page cannot read its status.',
       'SYSTEM_UPDATE', 'YTARK_NATIVE_UPDATES_OPEN'),
   ];
   return {
     title: 'Diagnostics',
-    subtitle: 'On-device browser measurements · Android scope is separate',
+    subtitle: 'Opt-in local browser measurements · Android scope is separate',
     content: overlayPanelItemListRenderer(items, 2),
   };
 }

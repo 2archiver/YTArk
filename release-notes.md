@@ -1,13 +1,13 @@
-YTArk 3.4 — candidate, not published
+YTArk 3.7 — candidate, not published
 
-Cleaner About and settings, permission-ready Updates, and clearer release checks.
+Explicit Settings access, honest local startup comparisons, and retryable update checks.
 
-- Release checks distinguish offline, timeout, HTTP, metadata and runtime failures with sanitized diagnostics.
-- About and settings are cleaner; the row reads “YouTube Premium” and faster startup stays opt-in.
-- Updates asks for install authorization on entry; denial leaves a manual action and never blocks checks.
+- Guide-row Settings opens only on explicit OK/click; scrolling past the row no longer opens the panel.
+- Open Settings modals keep D-pad, OK, Back, and color shortcuts within the active panel.
+- Already-current update checks show installed/latest versions, clear prior errors, and remain retryable.
 
-The existing package identity, signing identity and TizenTubeCobalt v2.0.2 ARMv7 base remain unchanged. The s33 userscript endpoint becomes live only through the existing release publication workflow.
+The planned candidate is ARMv7 on the unchanged TizenTubeCobalt v2.0.2 base. Package identity and signing lineage remain unchanged. Planned identifiers are v3.7.0, versionCode 3070000, and userscript s38; this file is candidate information only, not a release or download notice.
 
-TV permission screens, startup speed, session-preserving upgrades and ARMv7 runtime remain unverified in this environment. A download does not continue across process death; a partial can resume only when its stored ETag still matches.
+Physical-TV behavior, update-permission return, clean install, in-place upgrade, playback, and Faster startup measurements are NOT RUN. The browser startup summary is a UI-bootstrap proxy and makes no performance claim.
 
-<!-- Package io.github.twoarchiver.ytark; 3.4.0; versionCode 3040000; base TizenTubeCobalt v2.0.2. -->
+<!-- Package io.github.twoarchiver.ytark; 3.7.0; versionCode 3070000; base TizenTubeCobalt v2.0.2. -->

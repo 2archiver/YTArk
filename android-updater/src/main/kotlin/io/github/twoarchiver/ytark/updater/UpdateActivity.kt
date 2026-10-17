@@ -578,7 +578,7 @@ class UpdateActivity : Activity() {
     private fun render(s: UpdateState) {
         val focused=currentFocus
         val checked=if(s.lastSuccess>0) DateFormat.getDateTimeInstance(DateFormat.SHORT,DateFormat.SHORT).format(Date(s.lastSuccess)) else "Not yet"
-        summary.text="Installed: $installed   •   Latest compatible: ${UpdatePresentation.latest(s)}\nLast successful check: $checked"
+        summary.text="Installed: $installed   •   ${UpdatePresentation.latestLabel(s)}: ${UpdatePresentation.latest(s)}\nLast successful check: $checked"
         val statusText=UpdatePresentation.status(s)
         if(status.text.toString()!=statusText) status.text=statusText
         // Download progress repaints the status line every tick; announcing
@@ -588,7 +588,12 @@ class UpdateActivity : Activity() {
         if(status.accessibilityLiveRegion!=liveRegion) status.accessibilityLiveRegion=liveRegion
         intervalButton.text="Automatically check: "+when(s.hours) { 0 -> "Never"; 3 -> "Every 3 hours"; else -> "Every 1 hour" }
         checkButton.isEnabled=!s.busy
-        checkButton.text=if(s.phase==UpdatePhase.Failed && (s.candidate==null || s.stage=="check")) "Retry check" else "Check for updates"
+        checkButton.text=when {
+            s.phase==UpdatePhase.Checking -> "Checking…"
+            s.phase==UpdatePhase.Failed && (s.candidate==null || s.stage=="check") -> "Check again"
+            s.phase==UpdatePhase.Idle && s.lastSuccess>0 -> "Check again"
+            else -> "Check for updates"
+        }
         primaryButton.text=when {
             s.verifiedPath!=null && s.phase==UpdatePhase.Failed -> "Retry install"
             s.verifiedPath!=null -> "Install update"

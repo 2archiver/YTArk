@@ -18,6 +18,7 @@ await initEnglish();
 const { configRead, configWrite, LEGACY_VERSION_MARKER } = await import('../config.js');
 const { YTARK_CHANGELOG } = await import('../assets/changelog.generated.js');
 const reader = await import('../ui/changelogReader.js');
+const ytUI = await import('../ui/ytUI.js');
 const whatsNew = await import('../features/whatsNew.js');
 const { numericVersionKey } = await import('../features/updateState.js');
 const resolve = await import('../resolveCommand.js');
@@ -25,11 +26,12 @@ resolve.patchResolveCommand();
 const resolveCommand = resolve.default;
 
 const PUBLISHED_TAGS = [
-  'v3.5.2', 'v3.5.1', 'v3.5.0', 'v3.4.0', 'v3.3.0', 'v3.2.0', 'v3.1.0', 'v3.0.0','v2.9.0', 'v2.8.0', 'v2.7.0', 'v2.6.0', 'v2.5.0', 'v2.4.0', 'v2.3.0', 'v2.2.0', 'v2.1.2', 'v2.1.1', 'v2.1.0', 'v2.0.4-ytark.17',
+  'v3.6.0', 'v3.5.2', 'v3.5.1', 'v3.5.0', 'v3.4.0', 'v3.3.0', 'v3.2.0', 'v3.1.0', 'v3.0.0','v2.9.0', 'v2.8.0', 'v2.7.0', 'v2.6.0', 'v2.5.0', 'v2.4.0', 'v2.3.0', 'v2.2.0', 'v2.1.2', 'v2.1.1', 'v2.1.0', 'v2.0.4-ytark.17',
   'v2.0.4-ytark.16', 'v2.0.3-ytark.15', 'v2.0.2-personal.14'];
 
 beforeEach(() => {
   recorded.length = 0;
+  ytUI.resetYtarkModalStateForTests();
 });
 
 describe('bundled changelog data', () => {
@@ -46,7 +48,7 @@ describe('bundled changelog data', () => {
       return 0;
     });
     assert.deepEqual(keys, sorted, 'newest first');
-    assert.equal(entries[0].version, '3.6.0');
+    assert.equal(entries[0].version, '3.7.0');
     assert.equal(entries[0].status, 'unreleased');
     assert.equal(entries[0].date, null, 'no invented date for unpublished work');
     const published = entries.filter(entry => entry.status === 'published');
@@ -71,6 +73,7 @@ describe('bundled changelog data', () => {
 describe('in-app reader', () => {
   it('shows the history newest first with the installed version marked and focused', () => {
     resolveCommand({ customAction: { action: 'YTARK_CHANGELOG_SHOW', parameters: {} } });
+    assert.equal(ytUI.hasVisibleYtarkSettingsPanel(), false, 'a changelog opened outside Settings does not claim its input scope');
     const modal = lastModal(recorded, reader.CHANGELOG_MODAL_ID);
     const titles = modalItems(modal).map(rowTitle);
     const versionRows = titles.filter(title => /^\d+\.\d/.test(title));
@@ -81,7 +84,7 @@ describe('in-app reader', () => {
       const expected = reader.headlineFor(entry) + (entry.version === '2.3.0' ? '  ·  Installed' : '');
       assert.equal(versionRows[i], expected);
     }
-    assert.equal(versionRows[0], '3.6 — Opt-in local diagnostics, safer startup, and reliable permission returns');
+    assert.equal(versionRows[0], '3.7 — Explicit Settings access, honest local startup comparisons, and retryable update checks');
     assert.equal(rowTitle(modalItems(modal)[selectedIndex(modal)]), versionRows.find(title => title.endsWith('  ·  Installed')));
     assert.match(rowSubtitle(findRow(modal, item => rowTitle(item).startsWith('2.2 — '))), /Published .*2026 · v2\.2\.0/);
     assert.match(header(modal).subtitle, /installed 2\.3\.0/);

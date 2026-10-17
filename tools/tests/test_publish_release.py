@@ -735,8 +735,8 @@ class PublicationTests(PublishReleaseTestCase):
             self.run_publish(None, scenario=scenario)
         self.assertIn("asset upload refused", str(caught.exception))
         version, code = publish_release.next_patch_version(CONFIG)
-        # The next patch above the configured 3.6.0 candidate.
-        self.assertEqual((version, code), ("3.6.1", 3060100))
+        # The next patch above the configured 3.7.0 candidate.
+        self.assertEqual((version, code), ("3.7.1", 3070100))
 
     def test_repair_refuses_a_rebuild_that_disagrees_with_published_checksums(self):
         published = release_payload(
@@ -750,7 +750,7 @@ class PublicationTests(PublishReleaseTestCase):
                 manifest=str(rebuilt.manifest), run_id=rebuilt.run_id,
             )
         self.assertIn("next patch version", str(caught.exception))
-        self.assertIn("3060100", str(caught.exception))
+        self.assertIn("3070100", str(caught.exception))
 
     def test_repair_guard_rejects_bytes_the_published_checksums_refuse(self):
         """The published checksum file decides whether a rebuild may repair an APK."""

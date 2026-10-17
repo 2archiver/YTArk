@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   BROWSER_DIAGNOSTICS_KEY, BROWSER_DIAGNOSTICS_DRAFT_KEY, BROWSER_DIAGNOSTICS_LIMITS,
-  BrowserDiagnosticRecorder, createDiagnosticClock, remoteKeyCategory,
+  BrowserDiagnosticRecorder, classifyStartupDestination, createDiagnosticClock, remoteKeyCategory,
 } from '../features/browserDiagnostics.js';
 
 class MemoryStorage {
@@ -85,6 +85,19 @@ function harness({ enabled = false, storage = new MemoryStorage(), frameCallback
     fireVideoFrame() { const callback = video.frameCallback; video.frameCallback = null; if (callback) callback(0); },
   };
 }
+
+test('startup comparison labels keep every allowlisted destination distinct', () => {
+  const destinations = [
+    ['FEtopics', 'home'], ['FEtopics_sports', 'sports'], ['FEtopics_news', 'news'],
+    ['FEtopics_music', 'music'], ['FEtopics_podcasts', 'podcasts'],
+    ['FEtopics_movies', 'movies'], ['FEtopics_gaming', 'gaming'], ['FEtopics_live', 'live'],
+    ['FEsubscriptions', 'subscriptions'], ['FElibrary', 'library'], ['FEtopics_more', 'more'],
+  ];
+  for (const [browseId, expected] of destinations) {
+    assert.equal(classifyStartupDestination(JSON.stringify({ browseEndpoint: { browseId } })), expected, browseId);
+  }
+  assert.equal(classifyStartupDestination('{"browseEndpoint":{"browseId":"FEshorts"}}'), 'invalid');
+});
 
 test('the default-off recorder does not read storage, install listeners or create timers', () => {
   const h = harness({ enabled: false });
@@ -214,8 +227,8 @@ test('throwing media-property reads stay contained and are reported as unsupport
   h.recorder.disable();
 });
 
-test('the active draft shares the ten-session retention cap with completed history', () => {
-  const prior = Array.from({ length: 10 }, (_, index) => ({
+test('the active draft shares the 20-session retention cap with completed history', () => {
+  const prior = Array.from({ length: 20 }, (_, index) => ({
     schema: 1, id: `saved-${index}`, capture: 'launch', status: 'complete',
     clockDomain: 'performance', clockQuality: 'monotonic', context: {}, events: [], truncated: false,
   }));
@@ -223,7 +236,7 @@ test('the active draft shares the ten-session retention cap with completed histo
     [BROWSER_DIAGNOSTICS_KEY]: JSON.stringify({ schema: 1, sessions: prior, evicted: 0 }),
   });
   const h = harness({ enabled: true, storage });
-  assert.equal(h.recorder.sessions.length, 9);
+  assert.equal(h.recorder.sessions.length, 19);
   assert.equal(h.recorder.evicted, 1);
   assert.equal(h.recorder.readRecentSessions().sessions.length, BROWSER_DIAGNOSTICS_LIMITS.sessions);
   h.runTimer(BROWSER_DIAGNOSTICS_LIMITS.draftBatchMs);
@@ -283,5 +296,6 @@ test('remote key mapping ignores text entry and only names fixed D-pad/OK/Back c
   assert.equal(remoteKeyCategory({ keyCode: 37, target: { tagName: 'DIV' } }), 'dpad-left');
   assert.equal(remoteKeyCategory({ keyCode: 13, target: { tagName: 'DIV' } }), 'ok');
   assert.equal(remoteKeyCategory({ keyCode: 10009, target: { tagName: 'DIV' } }), 'back');
+  assert.equal(remoteKeyCategory({ keyCode: 461, target: { tagName: 'DIV' } }), 'back');
   assert.equal(remoteKeyCategory({ keyCode: 37, target: { tagName: 'INPUT' } }), null);
 });

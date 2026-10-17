@@ -6,12 +6,14 @@
  */
 import { configRead, configWrite, lastPersistSucceeded } from '../config.js';
 import { YTARK_BUILD_INFO } from '../assets/buildInfo.generated.js';
+import { summarizeStartupSessions } from './browserDiagnosticsSummary.js';
+import { parseStartupDestination } from './startupDestination.js';
 
 export const BROWSER_DIAGNOSTICS_KEY = 'ytark-browser-diagnostics-v1';
 export const BROWSER_DIAGNOSTICS_DRAFT_KEY = 'ytark-browser-diagnostics-draft-v1';
 export const BROWSER_DIAGNOSTICS_SCHEMA = 1;
 export const BROWSER_DIAGNOSTICS_LIMITS = Object.freeze({
-  sessions: 10,
+  sessions: 20,
   eventsPerSession: 200,
   bytes: 256 * 1024,
   durationMs: 5 * 60 * 1000,
@@ -31,6 +33,10 @@ const EVENT_OUTCOMES = Object.freeze({
   'guide-refresh-timeout': ['timeout'],
   'startup-navigation-dispatched': ['explicit-destination', 'soft-reload', 'disabled'],
   'startup-navigation-failed': ['failed'],
+  'startup-navigation-cancelled': ['user-input'],
+  'startup-readiness-mode': [
+    'faster', 'normal-disabled', 'normal-interrupted', 'normal-storage-unavailable', 'normal-fallback',
+  ],
   'startup-readiness-complete': ['complete'],
   'startup-readiness-timeout': ['timeout'],
   'startup-readiness-interrupted': ['interrupted'],
@@ -47,7 +53,7 @@ const QUALITIES = new Set(['observed', 'proxy', 'degraded', 'unsupported']);
 const CLOCK_DOMAINS = new Set(['performance', 'date-fallback', 'unavailable']);
 const CAPTURES = new Set(['launch', 'partial']);
 const SESSION_STATUSES = new Set(['active', 'complete', 'interrupted', 'replaced', 'truncated']);
-const DESTINATIONS = new Set(['none', 'search', 'home', 'sports', 'news', 'music', 'podcasts', 'other', 'invalid']);
+const DESTINATIONS = new Set(['none', 'search', 'home', 'sports', 'news', 'music', 'podcasts', 'movies', 'gaming', 'live', 'subscriptions', 'library', 'more', 'other', 'invalid']);
 const MAX_CLOCK_STEP_MS = 60_000;
 const SAFE_VERSION = /^[0-9A-Za-z.+_-]{1,32}$/;
 const SAFE_TAG = /^s[0-9]{1,7}$/;
@@ -85,6 +91,8 @@ function sanitizeContext(value) {
   const baseTag = typeof source.baseTag === 'string' && SAFE_BASE.test(source.baseTag)
     ? source.baseTag : null;
   const startupDestination = DESTINATIONS.has(source.startupDestination) ? source.startupDestination : 'invalid';
+  const startupComparisonKind = ['unclassified', 'cold', 'warm'].includes(source.startupComparisonKind)
+    ? source.startupComparisonKind : 'unclassified';
   return {
     packageId: source.packageId === 'io.github.twoarchiver.ytark' ? source.packageId : null,
     bundleVersion: version,
@@ -96,6 +104,7 @@ function sanitizeContext(value) {
     reloadHomeOnStartup: typeof source.reloadHomeOnStartup === 'boolean' ? source.reloadHomeOnStartup : null,
     fasterStartup: typeof source.fasterStartup === 'boolean' ? source.fasterStartup : null,
     startupDestination,
+    startupComparisonKind,
   };
 }
 
@@ -208,21 +217,23 @@ function readDataset(storage) {
   return { sessions, draft, status: 'ready', evicted };
 }
 
-function classifyDestination(raw) {
+export function classifyStartupDestination(raw) {
   if (raw === null || raw === undefined || raw === '') return 'none';
-  let command;
-  try {
-    command = typeof raw === 'string' ? JSON.parse(raw) : raw;
-  } catch (_) { return 'invalid'; }
-  if (!isRecord(command)) return 'invalid';
-  if (isRecord(command.searchEndpoint)) return 'search';
+  const command = parseStartupDestination(raw);
+  if (!command) return 'invalid';
+  if (command.searchEndpoint) return 'search';
   const id = command.browseEndpoint && command.browseEndpoint.browseId;
   if (id === 'FEtopics') return 'home';
   if (id === 'FEtopics_sports') return 'sports';
   if (id === 'FEtopics_news') return 'news';
   if (id === 'FEtopics_music') return 'music';
   if (id === 'FEtopics_podcasts') return 'podcasts';
-  if (typeof id === 'string' && id.length <= 32) return 'other';
+  if (id === 'FEtopics_movies') return 'movies';
+  if (id === 'FEtopics_gaming') return 'gaming';
+  if (id === 'FEtopics_live') return 'live';
+  if (id === 'FEsubscriptions') return 'subscriptions';
+  if (id === 'FElibrary') return 'library';
+  if (id === 'FEtopics_more') return 'more';
   return 'invalid';
 }
 
@@ -230,9 +241,13 @@ function makeContext() {
   let reload = null;
   let faster = null;
   let destination = 'invalid';
+  let startupComparisonKind = 'unclassified';
   try { reload = configRead('reloadHomeOnStartup') === true; } catch (_) { /* unavailable */ }
   try { faster = configRead('fasterStartup') === true; } catch (_) { /* unavailable */ }
-  try { destination = classifyDestination(configRead('launchToOnStartup')); } catch (_) { /* unavailable */ }
+  try {
+    destination = reload === false ? 'none' : classifyStartupDestination(configRead('launchToOnStartup'));
+  } catch (_) { /* unavailable */ }
+  try { startupComparisonKind = configRead('startupDiagnosticRunKind') || 'unclassified'; } catch (_) { /* unavailable */ }
   return sanitizeContext({
     packageId: YTARK_BUILD_INFO && YTARK_BUILD_INFO.appId,
     bundleVersion: YTARK_BUILD_INFO && YTARK_BUILD_INFO.versionName,
@@ -241,6 +256,7 @@ function makeContext() {
     reloadHomeOnStartup: reload,
     fasterStartup: faster,
     startupDestination: destination,
+    startupComparisonKind,
   });
 }
 
@@ -421,7 +437,7 @@ export class BrowserDiagnosticRecorder {
   }
 
   _startSession(capture) {
-    // The active draft consumes one of the ten retained session slots too.
+    // The active draft consumes one of the twenty retained session slots too.
     // Evict deterministically before opening a new sample, not only at finish.
     while (this.sessions.length >= BROWSER_DIAGNOSTICS_LIMITS.sessions) {
       this.sessions.shift();
@@ -594,6 +610,18 @@ export class BrowserDiagnosticRecorder {
   recordNavigation(category) {
     const allowed = ['explicit-destination', 'soft-reload', 'disabled'].includes(category) ? category : 'disabled';
     return this.record('startup-navigation-dispatched', allowed, 'observed');
+  }
+
+  recordStartupReadinessMode(mode) {
+    const allowed = EVENT_OUTCOMES['startup-readiness-mode'].includes(mode) ? mode : null;
+    return allowed ? this.record('startup-readiness-mode', allowed, 'observed') : false;
+  }
+
+  startupSummary() {
+    const snapshot = browserDiagnosticSnapshot();
+    return summarizeStartupSessions({
+      sessions: snapshot.sessions, status: snapshot.storageState, evicted: snapshot.evicted,
+    });
   }
 
   beginRemoteHandler(category) {
@@ -877,7 +905,8 @@ export class BrowserDiagnosticRecorder {
       `Bundle: ${clean.context.bundleVersion || 'unavailable'} (${clean.context.bundleVersionSource})`,
       `Installed package version: ${clean.context.packageVersion || 'unavailable'} (${clean.context.packageVersionSource})`,
       `Script/base: ${clean.context.scriptTag || 'unavailable'} / ${clean.context.baseTag || 'unavailable'}`,
-      `Startup options: Home reload ${triBool(clean.context.reloadHomeOnStartup)}, faster-startup ${triBool(clean.context.fasterStartup)}, destination category ${clean.context.startupDestination}`,
+      `Saved startup options: Home reload ${triBool(clean.context.reloadHomeOnStartup)}, Faster startup preference ${triBool(clean.context.fasterStartup)}, destination ${clean.context.startupDestination}, user-labelled launch class ${clean.context.startupComparisonKind}`,
+      `Actual readiness polling mode: ${readinessModeDescription(clean.events)}`,
       'Times are relative to this browser sample only; they are never compared with Android elapsedRealtime or another session.',
       'Playing and video-frame callbacks are proxies, not input-to-photon or physical display latency. Handler-to-rAF is a rendering-opportunity proxy.',
       '',
@@ -905,6 +934,22 @@ export class BrowserDiagnosticRecorder {
   _getStorageState() { return this.storageStatus; }
 }
 
+function readinessModeDescription(events) {
+  const modes = (events || []).filter(event => event.event === 'startup-readiness-mode');
+  if (!modes.length) return 'not recorded / unavailable';
+  const first = modes[0].outcome;
+  if (first === 'faster') {
+    return modes.slice(1).some(event => event.outcome === 'normal-fallback')
+      ? 'Faster cadence initially, then normal fallback'
+      : 'Faster cadence selected';
+  }
+  if (first === 'normal-disabled') return 'normal cadence (Faster startup disabled)';
+  if (first === 'normal-interrupted') return 'normal cadence (prior accelerated launch was interrupted)';
+  if (first === 'normal-storage-unavailable') return 'normal cadence (startup storage unavailable)';
+  if (first === 'normal-fallback') return 'normal cadence after Faster startup fallback';
+  return 'unavailable';
+}
+
 function triBool(value) { return value === null ? 'unavailable' : value ? 'on' : 'off'; }
 function formatMs(value) { return Number(value).toFixed(1); }
 
@@ -925,7 +970,7 @@ export function remoteKeyCategory(event) {
   if (code === 39) return 'dpad-right';
   if (code === 40) return 'dpad-down';
   if (code === 13 || code === 32) return 'ok';
-  if (code === 27 || code === 8 || code === 10009) return 'back';
+  if (code === 27 || code === 8 || code === 10009 || code === 461) return 'back';
   return null;
 }
 

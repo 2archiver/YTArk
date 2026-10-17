@@ -2,7 +2,10 @@ import { configWrite, configRead } from './config.js';
 import { enablePip } from './features/pictureInPicture.js';
 import modernUI, { optionShow } from './ui/settings.js';
 import { speedSettings } from './ui/speedUI.js';
-import { showToast, buttonItem, showModal, QrCodeRenderer, overlayPanelItemListRenderer, overlayMessageRenderer } from './ui/ytUI.js';
+import {
+  showToast, buttonItem, showModal, QrCodeRenderer, overlayPanelItemListRenderer, overlayMessageRenderer,
+  noteYtarkModalCommand,
+} from './ui/ytUI.js';
 import { t } from 'i18next';
 import { requestNextAndNavigateChannel, getFeedbackPanelTokens, sendFeedbackToken } from './utils/innerTubeCalls.js';
 import qrcode from 'qrcode-npm';
@@ -69,8 +72,11 @@ export function patchResolveCommand() {
 
             const ogResolve = window._yttv[key].instance.resolveCommand;
             window._yttv[key].instance.resolveCommand = function (cmd, _) {
-                // An activation spent on any other command (a modal Back button,
-                // a browse endpoint, …) must not leak into the guide entry.
+                // Closing the currently visible YTArk modal releases its scoped
+                // remote-input owner before the dismissal continuation opens any
+                // parent panel. An activation spent elsewhere must not leak into
+                // the guide entry.
+                noteYtarkModalCommand(cmd);
                 noteResolverCommand(cmd);
                 if (cmd.setClientSettingEndpoint) {
                     // Command to change client settings. YTArk keys (no underscore)

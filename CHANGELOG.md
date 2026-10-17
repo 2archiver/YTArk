@@ -22,9 +22,34 @@ Conventions:
 - Capabilities inherited from TizenTube and TizenTubeCobalt are listed under
   "Upstream base and inherited capabilities", not as YTArk additions.
 
-## [3.6.0] — Unreleased
+## [3.7.0] — Unreleased
 
-> Not yet published. Planned tag `v3.6.0` · versionCode 3060000 · userscript `s37` · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.
+> Not yet published. Planned tag `v3.7.0` · versionCode 3070000 · userscript `s38` · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.
+
+Explicit Settings access, honest local startup comparisons, and retryable update checks.
+
+### Added
+- Startup summary reports the narrow userscript-module-to-controls interval and compares only complete, matched local samples.
+- Browser diagnostics retain at most 20 bounded local sessions; advanced event details remain separate from the concise summary.
+### Changed
+- About removes the inline What's New wall while retaining the full Changelog, Technical details, Credits & licenses, and Project link.
+- Faster startup remains opt-in; reports show the actual readiness mode and make no speedup promise.
+### Fixed
+- Guide-row Settings opens only on explicit OK/click; scrolling past the row no longer opens the panel.
+- Open Settings modals keep D-pad, OK, Back, and color shortcuts within the active panel.
+- Already-current update checks show installed/latest versions, clear prior errors, and remain retryable.
+- Startup routes are fixed and allowlisted, and delayed navigation cancels when the user starts navigating.
+### Known limitations
+- The browser interval is a UI-bootstrap proxy, not Android app start, full YouTube readiness, playback-ready, or first frame; no Faster startup benefit is claimed.
+- Physical-TV Settings access, guide activation, remote focus, normal playback, deliberate Shorts access, permission return, clean install, and in-place upgrade checks are NOT RUN.
+- Startup comparisons need at least three complete matched launches in each actual mode; five alternating pairs are recommended, without promising a benefit.
+### Validation
+- Node regression tests cover modal ownership, targeted guide activation, startup cancellation/readiness, diagnostics bounds/comparisons, About, and CSS scope.
+- Release/Android checks and physical-device evidence are recorded separately; mocks and static checks are not TV verification.
+
+## [3.6.0] — 2026-10-16
+
+> Published 2026-10-16 14:57 UTC as [YTArk 3.6](https://github.com/2archiver/YTArk/releases/tag/v3.6.0) · tag `v3.6.0` · versionCode 3060000 · userscript `s37` · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.
 
 Opt-in local diagnostics, safer startup, and reliable permission returns.
 

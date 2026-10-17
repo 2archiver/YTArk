@@ -212,9 +212,10 @@ export function keyEvent(type, keyCode, target, extra = {}) {
     repeat: false,
     defaultPrevented: false,
     propagationStopped: false,
+    immediatePropagationStopped: false,
     preventDefault() { this.defaultPrevented = true; },
     stopPropagation() { this.propagationStopped = true; },
-    stopImmediatePropagation() { this.propagationStopped = true; },
+    stopImmediatePropagation() { this.immediatePropagationStopped = true; this.propagationStopped = true; },
     ...extra,
   };
 }

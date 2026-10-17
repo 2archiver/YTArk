@@ -14,9 +14,9 @@ const { recorded, windowStub } = setupEnvironment({ version: '2.3.0' });
 await initEnglish();
 const { configRead, configWrite, configKeys, configDefault } = await import('../config.js');
 const registry = await import('../ui/settingsRegistry.js');
-const { YTARK_CHANGELOG } = await import('../assets/changelog.generated.js');
 const appVersion = await import('../features/appVersion.js');
 const updater = await import('../features/updater.js');
+const ytUI = await import('../ui/ytUI.js');
 const resolve = await import('../resolveCommand.js');
 resolve.patchResolveCommand();
 const resolveCommand = resolve.default;
@@ -50,6 +50,7 @@ function nodeTexts() {
 
 beforeEach(() => {
   recorded.length = 0;
+  ytUI.resetYtarkModalStateForTests();
 });
 
 describe('removed controls', () => {
@@ -155,7 +156,7 @@ describe('one authoritative control per behaviour', () => {
 });
 
 describe('About YTArk', () => {
-  it('shows one installed version line, at most three installed highlights and uncluttered routes', async () => {
+  it('shows one installed version line and uncluttered routes without a release-highlight wall', async () => {
     appVersion.resetVersionForTests();
     appVersion.startVersionResolution({ force: true, delays: [0] });
     await tick(20);
@@ -190,9 +191,9 @@ describe('About YTArk', () => {
     assert.ok(build.openPopupAction.popup.overlaySectionRenderer.overlay.overlayTwoPanelRenderer
       .actionPanel.overlayPanelRenderer.content.scrollPaneRenderer, 'D-pad scrollable');
     const details = modalItems(build).map(messageText).join('\n');
-    assert.match(details, /Build versionName: 3\.6\.0/);
-    assert.match(details, /versionCode: 3060000/);
-    assert.match(details, /YTArk userscript revision: s37/);
+    assert.match(details, /Build versionName: 3\.7\.0/);
+    assert.match(details, /versionCode: 3070000/);
+    assert.match(details, /YTArk userscript revision: s38/);
     assert.match(details, /Android engine\/base: v2\.0\.2/);
     assert.doesNotMatch(details, /YouTube frontend version: unavailable/i, 'no absent frontend placeholder');
 
@@ -229,7 +230,7 @@ describe('About YTArk', () => {
     delete windowStub.yt;
   });
 
-  it('uses this installed build for fallback highlights and keeps the full changelog one press away', async () => {
+  it('keeps About concise while retaining the separate changelog and legal/project routes', async () => {
     const bridge = windowStub.h5vcc;
     windowStub.h5vcc = null;
     appVersion.resetVersionForTests();
@@ -237,22 +238,19 @@ describe('About YTArk', () => {
     await tick(20);
     resolveCommand({ customAction: { action: 'YTARK_PANEL_SHOW', parameters: { id: 'about' } } });
     const panel = lastModal(recorded, 'ytark-panel-about');
-    assert.equal(header(panel).subtitle, 'YTArk 3.6 (build metadata)', "this build's own version, labelled by source");
+    assert.equal(ytUI.hasVisibleYtarkSettingsPanel(), true, 'About is still part of the YTArk Settings input scope');
+    assert.equal(header(panel).subtitle, 'YTArk 3.7 (build metadata)', "this build's own version, labelled by source");
     const lines = modalItems(panel).map(messageText).filter(Boolean);
-    const current = YTARK_CHANGELOG.entries.find(entry => entry.version === '3.6.0');
-    assert.ok(current && current.status === 'unreleased');
-    const expected = current.sections
-      .filter(section => !['Known limitations', 'Validation', 'Notes'].includes(section.heading))
-      .flatMap(section => section.items).slice(0, 3).map(item => `• ${item}`);
-    assert.deepEqual(lines.filter(line => line.startsWith('• ')), expected,
-      'installed highlights are sourced from 3.6.0, never the remote latest release');
-    assert.ok(expected.length <= 3);
-    assert.ok(!lines.some(line => line.includes('Known limitations')), 'full details stay behind an explicit action');
-    assert.ok(!lines.some(line => /packaging metadata|Version unknown|Unavailable/.test(line)),
-      'no debug wall or absent-metadata placeholders appear by default');
+    assert.ok(lines.some(line => /Independent enhancements for the YouTube TV app/.test(line)), 'identity remains concise');
+    assert.ok(!lines.some(line => /what.s new|^• /.test(line)), 'About has no release-highlight wall');
+    assert.ok(lines.length <= 2, 'only the short description and navigation rows are rendered');
+    assert.ok(findRow(panel, 'Changelog'), 'full release history remains a separate action');
+    assert.ok(findRow(panel, 'Credits & licenses'), 'legal attribution remains reachable');
+    assert.ok(findRow(panel, 'Project link'), 'project access remains reachable');
 
     await press(resolveCommand, findRow(panel, 'Changelog'));
     const picker = lastModal(recorded, 'ytark-changelog');
+    assert.equal(ytUI.hasVisibleYtarkSettingsPanel(), true, 'the About-owned changelog retains Settings input ownership');
     await press(resolveCommand, findRow(picker, item => rowTitle(item).startsWith('3.6 — ')));
     const fullNotes = modalItems(lastModal(recorded, 'ytark-changelog-version')).map(messageText).join('\n');
     assert.match(fullNotes, /Known limitations/);

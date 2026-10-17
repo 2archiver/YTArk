@@ -1,4 +1,5 @@
 // YTArk userscript configuration.
+import { isSafeStartupDestination } from './features/startupDestination.js';
 //
 // Every YTArk preference lives in one JSON object stored under
 // localStorage['ytaf-configuration']. The key name is inherited from TizenTube
@@ -24,9 +25,11 @@
 //                release is documented in docs/SETTINGS-3.5-AUDIT.md).
 //   6            Adds default-off browser diagnostic recording. Existing settings
 //                are merged missing-key-only; explicit user choices are retained.
+//   7            Adds a local cold/warm label for comparing future startup samples.
+//                It does not enable diagnostics or change any runtime setting.
 
 const CONFIG_KEY = 'ytaf-configuration';
-export const CONFIG_SCHEMA_VERSION = 6;
+export const CONFIG_SCHEMA_VERSION = 7;
 
 /**
  * Preferences that no longer exist, with the schema that retired them.
@@ -148,6 +151,8 @@ const defaultConfig = {
   // Browser-side startup/playback measurements. Default-off on fresh installs
   // and missing-key-only on upgrades; native updater diagnostics are separate.
   recordBrowserDiagnostics: false,
+  // Labels only future local samples; no cold/warm state is inferred from the browser.
+  startupDiagnosticRunKind: 'unclassified',
   // Automatic retries are an explicit opt-in because PlayerService.loadVideo is not a general recovery API.
   enablePlaybackRecovery: false,
   autoFrameRate: false,
@@ -206,15 +211,6 @@ function uniqueStrings(list, limit = 100, maxLength = 200) {
   return result;
 }
 
-function isJsonObjectString(value) {
-  if (typeof value !== 'string' || value.length > 4000) return false;
-  try {
-    return isPlainObject(JSON.parse(value));
-  } catch (_) {
-    return false;
-  }
-}
-
 export function sanitizeLayout(value) {
   const source = isPlainObject(value) ? value : {};
   return {
@@ -227,7 +223,10 @@ export function sanitizeLayout(value) {
 
 const SANITIZERS = {
   launchToOnStartup(value) {
-    return value === null || isJsonObjectString(value) ? value : null;
+    return value === null || isSafeStartupDestination(value) ? value : null;
+  },
+  startupDiagnosticRunKind(value) {
+    return ['unclassified', 'cold', 'warm'].includes(value) ? value : 'unclassified';
   },
   ytSettingsLayout(value) {
     return sanitizeLayout(value);

@@ -141,6 +141,10 @@ describe('malformed saved settings', () => {
     assert.equal(config.normalizeValue('preferredVideoQuality', 1080), 'auto');
     assert.equal(config.normalizeValue('launchToOnStartup', '{"browseEndpoint":{"browseId":"FEtopics"}}'),
       '{"browseEndpoint":{"browseId":"FEtopics"}}');
+    assert.equal(config.normalizeValue('launchToOnStartup', '{"browseEndpoint":{"browseId":"FEshorts"}}'), null,
+      'saved Shorts/watch destinations are rejected rather than dispatched at startup');
+    assert.equal(config.normalizeValue('launchToOnStartup', '{"browseEndpoint":{"browseId":"FEtopics","params":"unsafe"}}'), null,
+      'only the exact UI-supported command object is accepted');
     const migrated = config.migrateConfig(null, { hasLeanbackHistory: false });
     assert.equal(migrated.freshInstall, true);
     assert.equal(migrated.config.fasterStartup, false);
@@ -155,12 +159,28 @@ describe('browser diagnostics migration', () => {
     const missing = await loadConfig(propertyStorage({ [CONFIG_KEY]: JSON.stringify({ configSchemaVersion: 5, enableAdBlock: false }) }));
     assert.equal(missing.configRead('recordBrowserDiagnostics'), false);
     assert.equal(missing.configRead('enableAdBlock'), false);
-    assert.equal(missing.configRead('configSchemaVersion'), 6);
+    assert.equal(missing.configRead('configSchemaVersion'), 7);
+    assert.equal(missing.configRead('startupDiagnosticRunKind'), 'unclassified');
 
     const optedIn = await loadConfig(propertyStorage({ [CONFIG_KEY]: JSON.stringify({ configSchemaVersion: 5, recordBrowserDiagnostics: true }) }));
     assert.equal(optedIn.configRead('recordBrowserDiagnostics'), true);
     const optedOut = await loadConfig(propertyStorage({ [CONFIG_KEY]: JSON.stringify({ configSchemaVersion: 5, recordBrowserDiagnostics: false }) }));
     assert.equal(optedOut.configRead('recordBrowserDiagnostics'), false);
+  });
+
+  it('keeps explicit cold/warm labels local and repairs unsupported labels without enabling recording', async () => {
+    for (const kind of ['cold', 'warm']) {
+      const config = await loadConfig(propertyStorage({ [CONFIG_KEY]: JSON.stringify({
+        configSchemaVersion: 6, recordBrowserDiagnostics: false, startupDiagnosticRunKind: kind,
+      }) }));
+      assert.equal(config.configRead('startupDiagnosticRunKind'), kind);
+      assert.equal(config.configRead('recordBrowserDiagnostics'), false);
+    }
+    const invalid = await loadConfig(propertyStorage({ [CONFIG_KEY]: JSON.stringify({
+      configSchemaVersion: 6, recordBrowserDiagnostics: false, startupDiagnosticRunKind: 'guess',
+    }) }));
+    assert.equal(invalid.configRead('startupDiagnosticRunKind'), 'unclassified');
+    assert.equal(invalid.configRead('recordBrowserDiagnostics'), false);
   });
 });
 

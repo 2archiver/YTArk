@@ -143,6 +143,12 @@ public final class UpdateReliabilityTest {
         assertEquals(1, same.probes, "one redirect probe");
         assertEquals(0, same.metas, "probe hit does not call the API");
 
+        FakeSource limitedProbe = new FakeSource();
+        limitedProbe.probeError = new HttpFailure(429, now + 60_000L, "GitHub rate limit reached.", "rate_limit");
+        Discovery limitedProbeResult = new UpdateRepository(limitedProbe).discover(false, 1, now + 2 * ScheduleRules.HOUR, 0L, cache);
+        assertTrue(limitedProbeResult instanceof Discovery.RateLimited, "confirmed probe rate limit can use a saved cache");
+        assertEquals(429, ((Discovery.RateLimited) limitedProbeResult).httpStatus, "cached rate-limit state keeps the actual HTTP status");
+
         FakeSource forbiddenProbe = new FakeSource();
         forbiddenProbe.probeError = new HttpFailure(403, now + 60_000L, "GitHub HTTP 403.", "http");
         try {

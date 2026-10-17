@@ -1,4 +1,4 @@
-# Kotlin updater (YTArk 3.4 development)
+# Kotlin updater (YTArk 3.7 development)
 
 Production code is in `src/main/kotlin`. No Java updater implementation remains.
 The existing Java host assertions compile against the Kotlin policies; additional

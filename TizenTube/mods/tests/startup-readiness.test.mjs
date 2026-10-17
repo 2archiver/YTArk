@@ -6,8 +6,10 @@ function harness(enabled, interrupted = false, readyAt = 80, throws = false) {
   let time = 0, count = 0, next;
   const data = new Map(interrupted ? [['ytark-faster-startup-in-progress', '1']] : []);
   const delays = [];
+  const modes = [];
   const stop = startReadiness({ enabled,
     storage: { getItem: k => data.get(k), setItem: (k,v) => data.set(k,v), removeItem: k => data.delete(k) },
+    onMode: mode => modes.push(mode),
     now: () => time,
     later: (fn,ms) => { delays.push(ms); next = { fn, ms }; return count; },
     cancel: () => { next = null; },
@@ -15,20 +17,25 @@ function harness(enabled, interrupted = false, readyAt = 80, throws = false) {
   });
   const first = next.ms;
   while(next && count < 1000) { const task = next; next = null; time += task.ms; task.fn(); }
-  return { first, delays, count, time, data, stop };
+  return { first, delays, count, time, data, modes, stop };
 }
-test('normal startup retains readiness checks and its 250ms cadence', () => {
+test('normal startup retains readiness checks and records the actual normal mode', () => {
   const h = harness(false); assert.equal(h.first,250); assert.equal(h.time,250); assert.equal(h.count,1);
+  assert.deepEqual(h.modes, ['normal-disabled']);
 });
-test('opt in actually runs readiness earlier without inventing readiness', () => {
+test('opt in actually runs readiness earlier and records Faster mode without inventing readiness', () => {
   const h = harness(true); assert.equal(h.first,0); assert.equal(h.time,100); assert.equal(h.count,3); assert.equal(h.data.size,0);
+  assert.deepEqual(h.modes, ['faster']);
 });
-test('crashed accelerated launch falls back normally once', () => {
+test('crashed accelerated launch falls back normally once and exposes the interrupted mode', () => {
   const h = harness(true,true); assert.equal(h.first,250); assert.equal(h.data.size,0);
+  assert.deepEqual(h.modes, ['normal-interrupted']);
 });
-test('slow readiness and acceleration exceptions use bounded normal fallback', () => {
+test('slow readiness and acceleration exceptions use a recorded bounded normal fallback', () => {
   const h=harness(true,false,10000); assert.ok(h.delays.includes(250)); assert.equal(h.time,10000);
+  assert.deepEqual(h.modes, ['faster', 'normal-fallback']);
   const e=harness(true,false,10000,true); assert.equal(e.time,40000); assert.ok(e.count<170); assert.equal(e.data.size,0);
+  assert.deepEqual(e.modes, ['faster', 'normal-fallback']);
 });
 test('the bounded window reports give-up exactly once and success never does', () => {
   let giveUps = 0;

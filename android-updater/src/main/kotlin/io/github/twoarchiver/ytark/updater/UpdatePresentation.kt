@@ -2,16 +2,28 @@ package io.github.twoarchiver.ytark.updater
 
 /** Display-only interpretation of the existing state. Never drives update eligibility. */
 object UpdatePresentation {
-    private val current = Regex("^Installed version is current\\. Latest compatible: ([0-9]+\\.[0-9]+\\.[0-9]+)\\.$")
-    fun latest(s: UpdateState): String {
-        s.candidate?.let { return it.version }
-        if (s.latestVersion.isNotBlank()) return s.latestVersion
-        return current.matchEntire(s.message)?.groupValues?.get(1) ?: "Not available"
+    fun latest(s: UpdateState): String = when {
+        s.candidate != null -> s.candidate.version
+        s.latestVersion.isNotBlank() -> s.latestVersion
+        else -> "Not confirmed"
+    }
+
+    fun latestLabel(s: UpdateState): String {
+        val hasVersion = s.candidate != null || s.latestVersion.isNotBlank()
+        return when {
+            s.stale || s.latestVersionStale -> "Last known compatible stable"
+            hasVersion && (s.phase == UpdatePhase.Checking || s.phase == UpdatePhase.Failed || s.errorCategory.isNotBlank()) ->
+                "Last confirmed compatible stable"
+            hasVersion -> "Latest compatible stable"
+            else -> "Latest compatible stable (unconfirmed)"
+        }
     }
 
     fun status(s: UpdateState): String = when {
-        s.phase == UpdatePhase.Idle && s.candidate == null && s.latestVersion.isNotBlank() && s.errorCategory.isBlank() -> "Up to date"
-        current.matches(s.message) -> "Up to date"
+        s.phase == UpdatePhase.Idle && s.candidate == null && s.latestVersion.isNotBlank() && s.errorCategory.isBlank() && !s.stale ->
+            if (s.installedAhead) "Installed version is newer than the latest stable release." else "You're on the latest version."
+        s.latestVersion.isBlank() && s.phase == UpdatePhase.Idle && s.lastSuccess > 0 && s.message.startsWith("Installed version is current.") ->
+            "Saved check status cannot confirm the latest version. Check again."
         s.phase == UpdatePhase.Available && s.message == "YTArk ${s.candidate?.version} is available." -> "Update available"
         s.phase == UpdatePhase.Downloading -> progress(s.bytes, s.candidate?.size ?: 0, s.speedBps)
         s.phase == UpdatePhase.Validating -> "Verifying package…"
