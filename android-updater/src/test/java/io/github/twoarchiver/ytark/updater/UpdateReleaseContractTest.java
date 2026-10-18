@@ -7,7 +7,10 @@ import java.util.Properties;
 public final class UpdateReleaseContractTest {
     private static final String VERSION = "2.1.0";
     private static final String TAG = "v" + VERSION;
-    private static final String ARMV7_APK = "YTArk-v2.1.0-armv7.apk";
+    /** Current naming convention from 3.8.0 onwards. */
+    private static final String ARMV7_APK = "YTArk-v2.1.0-armeabi-v7a.apk";
+    /** Legacy naming convention used up to 3.7.x. */
+    private static final String LEGACY_ARMV7_APK = "YTArk-v2.1.0-armv7.apk";
     /** Published up to 2.1.1; it must never be selected as an update any more. */
     private static final String LEGACY_ARM64_APK = "YTArk-v2.1.1-arm64.apk";
     private static final String SHA256 =
@@ -49,28 +52,29 @@ public final class UpdateReleaseContractTest {
     }
 
     private static void onlyTheArmv7AssetNameIsGenerated() throws Exception {
-        equals(ARMV7_APK, UpdateReleaseContract.assetNameForVersion(VERSION, "armv7"),
-                "versioned ARMv7 asset name");
+        equals(ARMV7_APK, UpdateReleaseContract.assetNameForVersion(VERSION, "armeabi-v7a"),
+                "versioned ARMv7 asset name (current convention)");
+        equals(LEGACY_ARMV7_APK, UpdateReleaseContract.assetNameForVersion(VERSION, "armv7"),
+                "versioned ARMv7 asset name (legacy convention)");
         equals(2010000L, UpdateReleaseContract.parseVersionCode(
                 "# YTArk 2.1\nVersion 2.1 (2.1.0; versionCode 2010000)"),
                 "release notes versionCode");
         rejects(() -> UpdateReleaseContract.assetNameForVersion(VERSION, "arm64"),
                 "ARM64 is no longer a published release asset");
-        rejects(() -> UpdateReleaseContract.assetNameForVersion(VERSION, "armeabi-v7a"),
-                "ABI name passed instead of validated filename suffix");
-        rejects(() -> UpdateReleaseContract.assetNameForVersion("../other", "armv7"),
+        rejects(() -> UpdateReleaseContract.assetNameForVersion("../other", "armeabi-v7a"),
                 "path-like version");
     }
 
     private static void armv7OnlyAbiSelectionAndUnsupportedDeviceMessages() throws Exception {
         // A 64-bit-capable device that still runs 32-bit native code keeps its
         // ARMv7 path: the ARM64 entry in the same list is not preferred.
-        equals("armv7", NativeAbiContract.assetSuffixForSupportedAbis(
+        equals("armeabi-v7a", NativeAbiContract.assetSuffixForSupportedAbis(
                 new String[] { "arm64-v8a", "armeabi-v7a" }), "ARMv7 selected on a 64-bit-capable device");
-        equals("armv7", NativeAbiContract.assetSuffixForSupportedAbis(
+        equals("armeabi-v7a", NativeAbiContract.assetSuffixForSupportedAbis(
                 new String[] { "armeabi-v7a" }), "32-bit only device");
-        equals("armeabi-v7a", NativeAbiContract.nativeAbiForSuffix("armv7"), "ARMv7 ABI mapping");
-        equals("armv7", NativeAbiContract.assetSuffixForInstalledAbi("armeabi-v7a",
+        equals("armeabi-v7a", NativeAbiContract.nativeAbiForSuffix("armeabi-v7a"), "current ARMv7 ABI mapping");
+        equals("armeabi-v7a", NativeAbiContract.nativeAbiForSuffix("armv7"), "legacy ARMv7 suffix mapping");
+        equals("armeabi-v7a", NativeAbiContract.assetSuffixForInstalledAbi("armeabi-v7a",
                 new String[] { "arm64-v8a", "armeabi-v7a" }),
                 "keep the installed ARMv7 ABI on a 64-bit-capable device");
         rejectsWithMessage(() -> NativeAbiContract.assetSuffixForSupportedAbis(
@@ -85,13 +89,22 @@ public final class UpdateReleaseContractTest {
                 new String[] { "arm64-v8a" }), "installed ABI no longer supported by the userspace");
         rejects(() -> NativeAbiContract.assetSuffixForSupportedAbis(
                 new String[] { "x86_64", "x86" }), "unsupported device ABIs");
+        // Both suffixes are known ARMv7 variants.
+        assertTrue(NativeAbiContract.isKnownArmv7Suffix("armeabi-v7a"), "current suffix is known");
+        assertTrue(NativeAbiContract.isKnownArmv7Suffix("armv7"), "legacy suffix is known");
+        assertFalse(NativeAbiContract.isKnownArmv7Suffix("arm64"), "ARM64 is not a known ARMv7 suffix");
+        assertFalse(NativeAbiContract.isKnownArmv7Suffix(null), "null is not a known suffix");
     }
 
     private static void onlyExactOfficialReleaseAssetUrlsAreAccepted() throws Exception {
         String armv7Url = "https://github.com/2archiver/YTArk/releases/download/"
                 + TAG + "/" + ARMV7_APK;
+        String legacyArmv7Url = "https://github.com/2archiver/YTArk/releases/download/"
+                + TAG + "/" + LEGACY_ARMV7_APK;
         equals(armv7Url, UpdateReleaseContract.requireOfficialAssetUrl(armv7Url, TAG, ARMV7_APK),
-                "official ARMv7 URL");
+                "official ARMv7 URL (current naming)");
+        equals(legacyArmv7Url, UpdateReleaseContract.requireOfficialAssetUrl(legacyArmv7Url, TAG, LEGACY_ARMV7_APK),
+                "official ARMv7 URL (legacy naming)");
         equals("https://github.com/2archiver/YTArk/releases/download/" + TAG + "/SHA256SUMS.txt",
                 UpdateReleaseContract.requireOfficialAssetUrl(
                         "https://github.com/2archiver/YTArk/releases/download/" + TAG + "/SHA256SUMS.txt",
@@ -167,11 +180,11 @@ public final class UpdateReleaseContractTest {
         metadata.setProperty("url", "https://github.com/2archiver/YTArk/releases/download/" + TAG + "/" + ARMV7_APK);
         metadata.setProperty("sha256", SHA256.toUpperCase());
         metadata.setProperty("size", "4096");
-        // A resumed ARMv7 download records the ARMv7 ABI, not the legacy one.
+        // A resumed ARMv7 download records the ARMv7 ABI.
         metadata.setProperty("abi", "armeabi-v7a");
         assertTrue(UpdateResumeContract.metadataMatches(metadata, ARMV7_APK,
                 metadata.getProperty("url"), SHA256, 4096L, "armeabi-v7a"), "matching resume metadata");
-        assertFalse(UpdateResumeContract.metadataMatches(metadata, "YTArk-v2.1.1-armv7.apk",
+        assertFalse(UpdateResumeContract.metadataMatches(metadata, "YTArk-v2.1.1-armeabi-v7a.apk",
                 metadata.getProperty("url"), SHA256, 4096L, "armeabi-v7a"), "different asset rejects resume");
         assertFalse(UpdateResumeContract.metadataMatches(metadata, ARMV7_APK,
                 metadata.getProperty("url") + "?redirect=1", SHA256, 4096L, "armeabi-v7a"), "different URL rejects resume");

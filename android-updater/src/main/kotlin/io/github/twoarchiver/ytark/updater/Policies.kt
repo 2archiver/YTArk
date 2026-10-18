@@ -201,15 +201,22 @@ object InstallerResultPolicy {
     @JvmStatic fun shouldClearPendingRelease(pending: Long, confirmed: Long) = pending > 0 && confirmed > 0 && pending <= confirmed
 }
 object NativeAbiContract {
-    const val ARMV7_SUFFIX = "armv7"
+    /** The canonical asset suffix used in release filenames from 3.8.0 onwards. */
+    const val ARMV7_SUFFIX = "armeabi-v7a"
+    /** The legacy suffix used in release filenames up to 3.7.x. Accepted for backward compatibility only. */
+    const val LEGACY_ARMV7_SUFFIX = "armv7"
     const val ARMV7_ABI = "armeabi-v7a"
     const val LEGACY_ARM64_ABI = "arm64-v8a"
+    /** All accepted asset suffixes: current first, legacy for historical releases. */
+    @JvmStatic fun acceptedSuffixes(): List<String> = listOf(ARMV7_SUFFIX, LEGACY_ARMV7_SUFFIX)
+    /** Regex fragment matching any accepted suffix in asset names. */
+    const val SUFFIX_PATTERN = "(?:armeabi-v7a|armv7)"
     @JvmStatic @Throws(IOException::class) fun assetSuffixForSupportedAbis(abis: Array<String>?) : String {
         requireUpdate(abis?.contains(ARMV7_ABI) == true, "Android does not report armeabi-v7a. Check ro.product.cpu.abilist; a 64-bit CPU alone is insufficient.")
         return ARMV7_SUFFIX
     }
     @JvmStatic @Throws(IOException::class) fun nativeAbiForSuffix(suffix: String?): String {
-        requireUpdate(suffix == ARMV7_SUFFIX, "Unsupported architecture; ARMv7 only."); return ARMV7_ABI
+        requireUpdate(suffix == ARMV7_SUFFIX || suffix == LEGACY_ARMV7_SUFFIX, "Unsupported architecture; ARMv7 only."); return ARMV7_ABI
     }
     @JvmStatic @Throws(IOException::class) fun assetSuffixForNativeAbi(abi: String?): String {
         requireUpdate(abi == ARMV7_ABI, "This installation is not armeabi-v7a; cross-ABI updates are not supported."); return ARMV7_SUFFIX
@@ -218,6 +225,8 @@ object NativeAbiContract {
         val suffix = assetSuffixForNativeAbi(abi)
         requireUpdate(supported?.contains(abi) == true, "Installed ABI is not supported by this Android userspace."); return suffix
     }
+    /** Whether the given suffix is a recognized ARMv7 asset suffix (current or legacy). */
+    @JvmStatic fun isKnownArmv7Suffix(suffix: String?): Boolean = suffix == ARMV7_SUFFIX || suffix == LEGACY_ARMV7_SUFFIX
 }
 object NativeRoutePolicy {
     @JvmStatic fun screenForRoute(raw: String?): String? = try {
@@ -257,8 +266,8 @@ object UpdateReleaseContract {
     @JvmStatic @Throws(IOException::class) fun assetNameForVersion(v: String, suffix: String): String { expectedVersionCodeForVersion(v); NativeAbiContract.nativeAbiForSuffix(suffix); return "YTArk-v$v-$suffix.apk" }
     @JvmStatic @Throws(IOException::class) fun requireOfficialAssetUrl(url: String?, tag: String?, name: String?): String {
         requireUpdate(tag?.startsWith("v") == true, "Invalid release tag.")
-        val expected = assetNameForVersion(tag!!.substring(1), "armv7")
-        requireUpdate(name == expected || name == "SHA256SUMS.txt", "Invalid release asset.")
+        val accepted = NativeAbiContract.acceptedSuffixes().map { assetNameForVersion(tag!!.substring(1), it) }
+        requireUpdate(name in accepted || name == "SHA256SUMS.txt", "Invalid release asset.")
         val official = "https://github.com/2archiver/YTArk/releases/download/$tag/$name"
         requireUpdate(url == official, "Untrusted release asset URL."); return official
     }
@@ -285,7 +294,7 @@ object UpdateRedirectPolicy {
     }
     @JvmStatic fun isTrustedReleaseAssetUrl(s: String?): Boolean {
         val u = parse(s) ?: return false
-        return secure(u) && u.host.equals("github.com", true) && u.path.matches(Regex("/2archiver/YTArk/releases/download/v(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)/(?:YTArk-v(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)-armv7\\.apk|SHA256SUMS\\.txt)"))
+        return secure(u) && u.host.equals("github.com", true) && u.path.matches(Regex("/2archiver/YTArk/releases/download/v(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)/(?:YTArk-v(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)-(?:armeabi-v7a|armv7)\\.apk|SHA256SUMS\\.txt)"))
     }
     @JvmStatic fun isAllowedRedirect(initial: String?, target: String?, api: Boolean): Boolean {
         if (api) return isTrustedReleaseApiUrl(initial) && isTrustedReleaseApiUrl(target)
@@ -302,7 +311,7 @@ object UpdateGuards {
     @JvmStatic fun hasEnoughFreeSpace(available: Long, size: Long, partial: Long) = size > 0 && available >= requiredFreeBytes(size, partial)
     @JvmStatic @Throws(IOException::class) fun isWithinCacheRoot(root: File?, f: File?) = root != null && f != null && (f.canonicalFile == root.canonicalFile || f.canonicalPath.startsWith(root.canonicalPath + File.separator))
     @JvmStatic fun retainCacheFile(modified: Long, cutoff: Long) = modified <= 0 || modified >= cutoff
-    @JvmStatic fun isStaleUpdateFile(name: String?, vararg keep: String?): Boolean = name != null && name.matches(Regex("YTArk-v(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)-armv7\\.apk(?:\\.part(?:\\.properties)?)?")) && keep.none { !it.isNullOrEmpty() && (name == it || name.startsWith("$it.")) }
+    @JvmStatic fun isStaleUpdateFile(name: String?, vararg keep: String?): Boolean = name != null && name.matches(Regex("YTArk-v(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)-(?:armeabi-v7a|armv7)\\.apk(?:\\.part(?:\\.properties)?)?")) && keep.none { !it.isNullOrEmpty() && (name == it || name.startsWith("$it.")) }
     @JvmStatic @Throws(IOException::class) fun isSafeUpdateDirectory(files: File?, dir: File?) = files != null && dir != null && files.canonicalFile == files.absoluteFile && dir.canonicalFile == dir.absoluteFile && dir.canonicalFile.parentFile == files.canonicalFile
     @JvmStatic @Throws(IOException::class) fun isSafeUpdateFile(dir: File?, f: File?) = dir != null && f != null && dir.canonicalFile == dir.absoluteFile && f.canonicalFile == f.absoluteFile && f.canonicalFile.parentFile == dir.canonicalFile
     @JvmStatic fun deviceMeetsMinSdk(min: Int, sdk: Int) = min <= 0 || sdk >= min

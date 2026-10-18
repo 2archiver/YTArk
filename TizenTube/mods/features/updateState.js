@@ -97,10 +97,16 @@ export function displayVersion(version) {
  * on a `compatible` verdict (see features/abiEvidence.js): a missing, delayed,
  * empty, malformed or 64-bit-only report is missing information (`unknown`)
  * and never a categorical "unsupported device" result.
+ *
+ * From 3.8.0 the filename suffix is `armeabi-v7a`; the legacy `armv7` suffix
+ * is accepted only as a historical compatibility match during validation.
  */
 export function assetSuffixForArchitecture(architecture) {
-  return architecture === 'armeabi-v7a' ? 'armv7' : null;
+  return architecture === 'armeabi-v7a' ? 'armeabi-v7a' : null;
 }
+
+/** Legacy filename suffix used in releases up to 3.7.x. */
+export const LEGACY_ASSET_SUFFIX = 'armv7';
 
 /** Status line for the unknown-ABI case: missing information, not a verdict. */
 export function unknownArchitectureMessage(evidence) {
@@ -255,16 +261,23 @@ export function validateReleasePayload(payload, { installedVersion, architecture
     // verified release metadata and the manual route instead.
     return { release: baseRelease };
   }
-  const assetName = `YTArk-v${version}-${assetSuffixForArchitecture(architecture)}.apk`;
+  const primarySuffix = assetSuffixForArchitecture(architecture);
+  // Accept both the current naming convention (armeabi-v7a) and the legacy
+  // name (armv7) for backward compatibility with older releases.
+  const acceptedNames = [
+    `YTArk-v${version}-${primarySuffix}.apk`,
+    `YTArk-v${version}-${LEGACY_ASSET_SUFFIX}.apk`,
+  ].filter((name, index, self) => self.indexOf(name) === index);
   const assets = Array.isArray(payload.assets) ? payload.assets : [];
-  const matches = assets.filter(asset => isPlainObject(asset) && asset.name === assetName);
+  const matches = assets.filter(asset => isPlainObject(asset) && acceptedNames.includes(asset.name));
   if (matches.length !== 1) {
     return {
-      error: `The release has ${matches.length} assets named ${assetName}; expected exactly one. `
+      error: `The release has ${matches.length} matching ARMv7 assets; expected exactly one. `
         + 'No arm64, unsigned, source or first-asset fallback is ever selected.',
     };
   }
   const asset = matches[0];
+  const assetName = asset.name;
   const expectedUrl = `${RELEASE_ASSET_PREFIX}${tag}/${assetName}`;
   if (asset.browser_download_url !== expectedUrl) {
     return { error: 'The release asset URL does not match the official YTArk release metadata.' };

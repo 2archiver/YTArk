@@ -4,57 +4,54 @@ export const YTARK_CHANGELOG = {
   "schema": 1,
   "source": "CHANGELOG.md",
   "summaryFallback": "No short highlights available for this version.",
-  "sourceSha256": "3d68b15980b0e5f114e4a88e78fa30c53668e0ad146829d9dfb2802681b2058c",
+  "sourceSha256": "3f5659ec983a55497639e60824ccae5302b749e4944ccf0732f8fb0e0caae5c7",
   "entries": [
     {
-      "version": "3.7.0",
-      "display": "3.7",
+      "version": "3.8.0",
+      "display": "3.8",
       "status": "unreleased",
       "date": null,
       "publishedAt": null,
-      "tag": "v3.7.0",
-      "versionCode": 3070000,
-      "scriptTag": "s38",
-      "title": "YTArk 3.7",
+      "tag": "v3.8.0",
+      "versionCode": 3080000,
+      "scriptTag": "s39",
+      "title": "YTArk 3.8",
       "releaseUrl": null,
-      "facts": "Not yet published. Planned tag v3.7.0 · versionCode 3070000 · userscript s38 · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.",
-      "summary": "Explicit Settings access, honest local startup comparisons, and retryable update checks.",
+      "facts": "Not yet published. Planned tag v3.8.0 · versionCode 3080000 · userscript s39 · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.",
+      "summary": "Reliable updater error reporting, one ARMv7 APK per release, and clear upgrade paths.",
       "sections": [
         {
           "heading": "Added",
           "items": [
-            "Startup summary reports the narrow userscript-module-to-controls interval and compares only complete, matched local samples.",
-            "Browser diagnostics retain at most 20 bounded local sessions; advanced event details remain separate from the concise summary."
+            "Updater errors now classify TLS/SSL failures, network timeouts, rate limits and metadata issues with specific messages and reference codes instead of a generic \"Unexpected error\"."
           ]
         },
         {
           "heading": "Changed",
           "items": [
-            "About removes the inline What's New wall while retaining the full Changelog, Technical details, Credits & licenses, and Project link.",
-            "Faster startup remains opt-in; reports show the actual readiness mode and make no speedup promise."
+            "Release asset filename uses the full ABI name (armeabi-v7a); the legacy armv7 suffix is still accepted for backward compatibility with older releases.",
+            "Each stable release attaches exactly one downloadable ARMv7 APK; source-code archives remain GitHub-generated and are never considered update candidates."
           ]
         },
         {
           "heading": "Fixed",
           "items": [
-            "Guide-row Settings opens only on explicit OK/click; scrolling past the row no longer opens the panel.",
-            "Open Settings modals keep D-pad, OK, Back, and color shortcuts within the active panel.",
-            "Already-current update checks show installed/latest versions, clear prior errors, and remain retryable.",
-            "Startup routes are fixed and allowlisted, and delayed navigation cancels when the user starts navigating."
+            "Update checks that previously showed \"Unexpected error\" now display a specific, actionable message with Retry (TLS failure, timeout, rate limit, missing checksum, incompatible APK).",
+            "The release parser accepts both current and historical asset names, so older clients and newer releases interoperate during the transition.",
+            "Missing or malformed checksums produce a clear \"metadata\" error instead of falling through to the generic unexpected-error path."
           ]
         },
         {
           "heading": "Known limitations",
           "items": [
-            "The browser interval is a UI-bootstrap proxy, not Android app start, full YouTube readiness, playback-ready, or first frame; no Faster startup benefit is claimed.",
-            "Physical-TV Settings access, guide activation, remote focus, normal playback, deliberate Shorts access, permission return, clean install, and in-place upgrade checks are NOT RUN.",
-            "Startup comparisons need at least three complete matched launches in each actual mode; five alternating pairs are recommended, without promising a benefit."
+            "Upgrading from 3.7 or earlier may require a manual APK install if the installed updater cannot reach the fixed release endpoint.",
+            "Physical-TV update-check, download, permission-return, playback and Shorts/settings checks are NOT RUN in this candidate."
           ]
         },
         {
           "heading": "Validation",
           "items": [
-            "Node regression tests cover modal ownership, targeted guide activation, startup cancellation/readiness, diagnostics bounds/comparisons, About, and CSS scope.",
+            "Kotlin and Node regression tests cover version comparison, error classification, asset selection with mixed historical names, and metadata parsing.",
             "Release/Android checks and physical-device evidence are recorded separately; mocks and static checks are not TV verification."
           ]
         }

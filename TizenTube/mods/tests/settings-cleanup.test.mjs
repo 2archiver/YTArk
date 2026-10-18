@@ -191,9 +191,9 @@ describe('About YTArk', () => {
     assert.ok(build.openPopupAction.popup.overlaySectionRenderer.overlay.overlayTwoPanelRenderer
       .actionPanel.overlayPanelRenderer.content.scrollPaneRenderer, 'D-pad scrollable');
     const details = modalItems(build).map(messageText).join('\n');
-    assert.match(details, /Build versionName: 3\.7\.0/);
-    assert.match(details, /versionCode: 3070000/);
-    assert.match(details, /YTArk userscript revision: s38/);
+    assert.match(details, /Build versionName: 3\.8\.0/);
+    assert.match(details, /versionCode: 3080000/);
+    assert.match(details, /YTArk userscript revision: s39/);
     assert.match(details, /Android engine\/base: v2\.0\.2/);
     assert.doesNotMatch(details, /YouTube frontend version: unavailable/i, 'no absent frontend placeholder');
 
@@ -239,7 +239,7 @@ describe('About YTArk', () => {
     resolveCommand({ customAction: { action: 'YTARK_PANEL_SHOW', parameters: { id: 'about' } } });
     const panel = lastModal(recorded, 'ytark-panel-about');
     assert.equal(ytUI.hasVisibleYtarkSettingsPanel(), true, 'About is still part of the YTArk Settings input scope');
-    assert.equal(header(panel).subtitle, 'YTArk 3.7 (build metadata)', "this build's own version, labelled by source");
+    assert.equal(header(panel).subtitle, 'YTArk 3.8 (build metadata)', "this build's own version, labelled by source");
     const lines = modalItems(panel).map(messageText).filter(Boolean);
     assert.ok(lines.some(line => /Independent enhancements for the YouTube TV app/.test(line)), 'identity remains concise');
     assert.ok(!lines.some(line => /what.s new|^• /.test(line)), 'About has no release-highlight wall');

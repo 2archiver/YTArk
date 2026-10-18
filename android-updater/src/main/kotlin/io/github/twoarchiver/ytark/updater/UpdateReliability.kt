@@ -56,7 +56,7 @@ class CachedRelease(
         val version = tag.removePrefix("v")
         tag == "v$version"
             && code == UpdateReleaseContract.expectedVersionCodeForVersion(version)
-            && asset == UpdateReleaseContract.assetNameForVersion(version, "armv7")
+            && NativeAbiContract.acceptedSuffixes().any { asset == UpdateReleaseContract.assetNameForVersion(version, it) }
             && UpdateReleaseContract.requireOfficialAssetUrl(url, tag, asset) == url
             && UpdateReleaseContract.parseSha256Digest(sha256) == sha256
             && size in 1..512L * 1024 * 1024
@@ -369,6 +369,12 @@ object InstallStatusContract {
 }
 
 object UpdateErrorMapper {
+    /** Short reference code for the unexpected-error fallback; helps users report issues. */
+    private fun refCode(category: String, httpStatus: Int): String {
+        val code = if (httpStatus > 0) "E${httpStatus}" else category.take(8).uppercase(Locale.US)
+        return "[$code]"
+    }
+
     @JvmStatic fun map(error: Throwable, stage: String, now: Long, tag: String): MappedError {
         val chain = ArrayList<Throwable>(4)
         var cursor: Throwable? = error
@@ -400,12 +406,19 @@ object UpdateErrorMapper {
         }
 
         val hasLinkageFailure = chain.any { it is LinkageError || it is ClassNotFoundException }
+        // TLS/SSL failures: any class in the javax.net.ssl or java.security.cert package chain
+        val hasTlsFailure = chain.any {
+            val cn = it.javaClass.name
+            cn.startsWith("javax.net.ssl.") || cn.startsWith("java.security.cert.")
+        } || lower.contains("ssl handshake") || lower.contains("certificate") || lower.contains("certpath") || lower.contains("trust anchor")
         val category = when {
             http?.status == 403 -> "forbidden"
             http?.status == 404 -> "no_release"
             http != null && http.status in 500..599 -> "server"
             hasLinkageFailure -> "runtime"
             chain.any { it is ReleaseMetadataFailure } -> "metadata"
+            // TLS/SSL failures are distinct from plain connection errors.
+            hasTlsFailure -> "tls"
             // Name-resolution and connect-refusal failures are network
             // availability problems, not timeouts.
             names.contains("UnknownHost") || names.contains("NoRouteToHost") -> "offline"
@@ -414,11 +427,14 @@ object UpdateErrorMapper {
             lower.contains("release metadata") || lower.contains("invalid release tag")
                 || lower.contains("missing versioncode metadata") || lower.contains("versioncode disagrees")
                 || lower.contains("not explicitly published stable") || lower.contains("untrusted release source")
-                || lower.contains("untrusted release asset") || lower.contains("checksum asset") -> "metadata"
+                || lower.contains("untrusted release asset") || lower.contains("checksum asset")
+                || lower.contains("no verifiable apk checksum") || lower.contains("no trusted apk checksum")
+                || lower.contains("malformed release digest") -> "metadata"
             lower.contains("no compatible") || lower.contains("armeabi-v7a") || lower.contains("no unique compatible") -> "no_compatible_apk"
             lower.contains("not enough storage") || lower.contains("no space") || lower.contains("enospc") -> "storage"
             lower.contains("signer is incompatible") || lower.contains("signature mismatch") || lower.contains("signatures do not match") -> "signature_mismatch"
-            lower.contains("checksum") || lower.contains("signature verification") || lower.contains("corrupt apk") || lower.contains("malformed apk") || names.contains("ApkFormat") || names.contains("ZipException") -> "verification"
+            lower.contains("apk checksum failed") || lower.contains("corrupt apk") || lower.contains("malformed apk") || names.contains("ApkFormat") || names.contains("ZipException") -> "verification"
+            lower.contains("signature verification") -> "verification"
             lower.contains("install permission") || lower.contains("unknown apps") -> "permission"
             lower.contains("installation cancelled") || lower.contains("install cancelled") -> "install_cancelled"
             lower.contains("download cancelled") -> "cancelled"
@@ -430,6 +446,7 @@ object UpdateErrorMapper {
             "timeout" -> "Connection timed out. Check the network and retry."
             "offline" -> "Network unavailable. Check the connection and retry."
             "connection" -> "Could not connect to the update service. Check the network and retry."
+            "tls" -> "The connection could not be secured (TLS error). Check the network and retry."
             "forbidden" -> "The update service denied this request (HTTP 403). It was not confirmed as a rate limit; retry later."
             "no_release" -> "No stable YTArk release is published yet. Check again later."
             "server" -> "The update service is temporarily unavailable (HTTP ${http?.status ?: 0}). Retry later."
@@ -444,7 +461,7 @@ object UpdateErrorMapper {
             "cancelled" -> "Download cancelled. Retry when ready."
             "download_interrupted" -> "Download interrupted. Retry to continue the download."
             "http" -> "The update service returned HTTP ${http?.status ?: 0}. Try again later."
-            else -> "The update stopped because of an unexpected error. Your installed app is unchanged."
+            else -> "The update stopped unexpectedly ${refCode(category, http?.status ?: 0)}. Your installed app is unchanged. Retry or report this code."
         }
         val retry = http?.retryAt?.takeIf { it > 0 } ?: (now + 60_000L)
         return MappedError(category, message, detail, retry, http?.status ?: 0, stage)
@@ -536,13 +553,12 @@ object ReleaseMetadataParser {
         val draft = root["draft"]?.asBoolean() ?: false
         val pre = root["prerelease"]?.asBoolean() ?: false
         UpdateReleaseContract.requirePublishedStable(hasDraft, draft, hasPre, pre)
-        val tag = root["tag_name"]?.asString() ?: throw IOException("Invalid release tag.")
+        val tag = root["tag_name"]?.asString() ?: throw ReleaseMetadataFailure("Invalid release tag.")
         requireUpdate(tag.startsWith("v"), "Invalid release tag.")
         val version = tag.removePrefix("v")
         val code = UpdateReleaseContract.expectedVersionCodeForVersion(version)
         val body = root["body"]?.asString() ?: ""
         requireUpdate(UpdateReleaseContract.parseVersionCode(body) == code, "Release versionCode disagrees with tag.")
-        val expected = UpdateReleaseContract.assetNameForVersion(version, "armv7")
         val assets = root["assets"]?.asArray() ?: emptyList()
         val remote = assets.map { item ->
             val obj = item.asObject()
@@ -554,7 +570,7 @@ object ReleaseMetadataParser {
                 obj["content_type"]?.asString() ?: ""
             )
         }
-        val apk = select(remote, expected, tag)
+        val apk = select(remote, tag)
         val url = UpdateReleaseContract.requireOfficialAssetUrl(apk.url, tag, apk.name)
         var digest = UpdateReleaseContract.parseSha256Digest(apk.digest)
         requireUpdate(apk.digest.isEmpty() || apk.digest == "null" || digest != null, "Malformed release digest.")
@@ -562,21 +578,37 @@ object ReleaseMetadataParser {
         requireUpdate(sumsAssets.size <= 1, "Duplicate checksum asset.")
         val sumsUrl = if (sumsAssets.isEmpty()) "" else UpdateReleaseContract.requireOfficialAssetUrl(sumsAssets[0].url, tag, "SHA256SUMS.txt")
         if (sums != null && sumsUrl.isNotEmpty()) {
-            val published = UpdateReleaseContract.checksumForAsset(sums, expected)
+            val published = UpdateReleaseContract.checksumForAsset(sums, apk.name)
             requireUpdate(digest == null || digest == published, "Release checksums disagree.")
             digest = published
         }
-        requireUpdate(digest != null, "Release has no trusted APK checksum.")
+        requireUpdate(digest != null, "The release has no verifiable APK checksum. The update cannot proceed safely.")
         val notes = body.substringBefore("<!--").lineSequence().filter { !it.contains("http") }.take(12).joinToString("\n").take(1800)
-        val candidate = Candidate(tag, code, expected, url, apk.size, digest!!, notes)
+        val candidate = Candidate(tag, code, apk.name, url, apk.size, digest!!, notes)
         return ParsedRelease(candidate, sumsUrl, sums == null && sumsUrl.isNotEmpty())
     }
 
-    private fun select(assets: List<RemoteAsset>, expected: String, tag: String): RemoteAsset {
-        val named = assets.filter { it.name == expected }
+    /**
+     * Select exactly one valid ARMv7 APK from the release assets.
+     * Accepts both the current naming convention (armeabi-v7a) and the
+     * legacy name (armv7) for backward compatibility with older releases.
+     * Rejects zero matches, multiple matches, empty APKs and non-APK content types.
+     * Never falls back to assets[0] or picks an incompatible architecture.
+     */
+    private fun select(assets: List<RemoteAsset>, tag: String): RemoteAsset {
+        val accepted = NativeAbiContract.acceptedSuffixes().map { suffix ->
+            UpdateReleaseContract.assetNameForVersion(tag.removePrefix("v"), suffix)
+        }
+        val named = assets.filter { it.name in accepted }
         if (named.isEmpty()) {
-            val other = assets.any { it.name.endsWith(".apk") }
-            throw IOException(if (other) "No compatible APK found. Release $tag has no ARMv7 package for this device." else "No compatible APK found. Release $tag has no YTArk ARMv7 package.")
+            val otherApk = assets.any { it.name.endsWith(".apk") }
+            val otherArch = assets.any { it.name.contains("arm64") || it.name.contains("x86") || it.name.contains("universal") }
+            val baseMsg = when {
+                otherApk && otherArch -> "No compatible APK found. Release $tag has no ARMv7 package for this device."
+                otherApk -> "No compatible APK found. Release $tag has no ARMv7 package for this device."
+                else -> "No compatible APK found. Release $tag has no YTArk ARMv7 package."
+            }
+            throw IOException(baseMsg)
         }
         if (named.size > 1) throw IOException("No compatible APK found. Release $tag publishes more than one ARMv7 APK.")
         val apk = named[0]
