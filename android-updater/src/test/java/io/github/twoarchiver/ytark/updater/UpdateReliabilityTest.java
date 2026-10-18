@@ -245,17 +245,23 @@ public final class UpdateReliabilityTest {
     }
 
     private static void assetSelectionRejectsMissingAmbiguousEmptyAndForeignApks() throws Exception {
-        ParsedRelease ok = ReleaseMetadataParser.parse(releaseJson("3.3.0", 3030000L, HASH, 1200, true), HASH + "  YTArk-v3.3.0-armv7.apk\n");
-        assertEquals("YTArk-v3.3.0-armv7.apk", ok.candidate.getAsset(), "selects the ARMv7 asset");
+        // Current naming convention (armeabi-v7a)
+        ParsedRelease ok = ReleaseMetadataParser.parse(releaseJson("3.3.0", 3030000L, HASH, 1200, true), HASH + "  YTArk-v3.3.0-armeabi-v7a.apk\n");
+        assertEquals("YTArk-v3.3.0-armeabi-v7a.apk", ok.candidate.getAsset(), "selects the ARMv7 asset (current naming)");
         assertEquals(HASH, ok.candidate.getSha256(), "checksum cross-check");
         assertFalse(ok.needsSums, "sums already applied");
+        // Legacy naming convention (armv7) still accepted
+        String legacyJson = releaseJson("3.3.0", 3030000L, HASH, 1200, false).replace("armeabi-v7a", "armv7");
+        ParsedRelease legacyOk = ReleaseMetadataParser.parse(legacyJson, null);
+        assertEquals("YTArk-v3.3.0-armv7.apk", legacyOk.candidate.getAsset(), "selects the ARMv7 asset (legacy naming)");
+        // Mixed: both current and legacy in one release -> multiple matches rejected
+        rejects(() -> ReleaseMetadataParser.parse(releaseJson("3.3.0", 3030000L, HASH, 10, false).replace("\"assets\":[",
+                "\"assets\":[{\"name\":\"YTArk-v3.3.0-armv7.apk\",\"browser_download_url\":\"https://github.com/2archiver/YTArk/releases/download/v3.3.0/YTArk-v3.3.0-armv7.apk\",\"size\":10,\"digest\":\"sha256:" + HASH + "\"},"), null), "more than one");
         rejects(() -> ReleaseMetadataParser.parse(releaseJson("3.3.0", 3030000L, HASH, 0, false), null), "empty");
-        rejects(() -> ReleaseMetadataParser.parse(releaseJson("3.3.0", 3030000L, HASH, 10, false).replace("YTArk-v3.3.0-armv7.apk", "YTArk-v3.3.0-arm64.apk"), null), "No compatible APK found");
-        String doubled = releaseJson("3.3.0", 3030000L, HASH, 10, false).replace("\"assets\":[", "\"assets\":[{\"name\":\"YTArk-v3.3.0-armv7.apk\",\"browser_download_url\":\"https://github.com/2archiver/YTArk/releases/download/v3.3.0/YTArk-v3.3.0-armv7.apk\",\"size\":10,\"digest\":\"sha256:" + HASH + "\"},");
-        rejects(() -> ReleaseMetadataParser.parse(doubled, null), "more than one");
+        rejects(() -> ReleaseMetadataParser.parse(releaseJson("3.3.0", 3030000L, HASH, 10, false).replace("armeabi-v7a", "arm64"), null), "No compatible APK found");
         rejects(() -> ReleaseMetadataParser.parse(releaseJson("3.3.0", 3030000L, HASH, 10, false).replace("\"prerelease\":false", "\"prerelease\":true"), null), "published stable");
         rejects(() -> ReleaseMetadataParser.parse(releaseJson("3.3.0", 3010000L, HASH, 10, false), null), "versionCode");
-        rejects(() -> ReleaseMetadataParser.parse(releaseJson("3.3.0", 3030000L, OTHER, 10, true), HASH + "  YTArk-v3.3.0-armv7.apk\n"), "disagree");
+        rejects(() -> ReleaseMetadataParser.parse(releaseJson("3.3.0", 3030000L, OTHER, 10, true), HASH + "  YTArk-v3.3.0-armeabi-v7a.apk\n"), "disagree");
     }
 
     private static void redirectsAndPartialDownloadsUseTheLocalServer() throws Exception {
@@ -367,9 +373,17 @@ public final class UpdateReliabilityTest {
         assertMapped(new IOException("APK signer is incompatible with the installed app."), "signature_mismatch", "App signature mismatch");
         assertMapped(new IOException("Install permission required."), "permission", "Install permission required");
         assertMapped(new IOException("Installation cancelled."), "install_cancelled", "Installation cancelled");
+        // TLS/SSL errors are classified distinctly from generic connection failures
+        assertMapped(new javax.net.ssl.SSLHandshakeException("Connection reset by peer"), "tls", "The connection could not be secured");
+        assertMapped(new javax.net.ssl.SSLException("Read error"), "tls", "The connection could not be secured");
+        assertMapped(new IOException("SSL handshake aborted", new javax.net.ssl.SSLException("certpath")), "tls", "The connection could not be secured");
+        // Missing-checksum metadata errors map to metadata, not verification
+        assertMapped(new IOException("The release has no verifiable APK checksum. The update cannot proceed safely."), "metadata", "The release response was incomplete");
+        assertMapped(new IOException("Malformed release digest."), "metadata", "The release response was incomplete");
         MappedError unexpected = UpdateErrorMapper.map(new IllegalStateException("https://secret.example/token=abc /data/user/0/io.github.twoarchiver.ytark/files/update.apk"), "check", now, "v3.4.0");
         assertEquals("unexpected", unexpected.category, "unknown category stays honest");
-        assertTrue(unexpected.message.contains("unexpected error"), unexpected.message);
+        assertTrue(unexpected.message.contains("unexpectedly"), unexpected.message);
+        assertTrue(unexpected.message.contains("[EUNEXPECTED]"), "unexpected error includes a reference code: " + unexpected.message);
         assertFalse(unexpected.message.equals("Download failed"), unexpected.message);
         assertFalse(unexpected.detail.contains("secret.example"), unexpected.detail);
         assertFalse(unexpected.detail.contains("/data/user/0"), unexpected.detail);
@@ -488,13 +502,13 @@ public final class UpdateReliabilityTest {
     }
 
     private static CachedRelease cache(long fetchedAt, String tag, long code) {
-        return new CachedRelease(fetchedAt, "etag", "modified", tag, code, "YTArk-" + tag + "-armv7.apk",
-                "https://github.com/2archiver/YTArk/releases/download/" + tag + "/YTArk-" + tag + "-armv7.apk",
+        return new CachedRelease(fetchedAt, "etag", "modified", tag, code, "YTArk-" + tag + "-armeabi-v7a.apk",
+                "https://github.com/2archiver/YTArk/releases/download/" + tag + "/YTArk-" + tag + "-armeabi-v7a.apk",
                 1000L, HASH, "notes", true);
     }
 
     private static String releaseJson(String version, long code, String hash, long size, boolean sums) {
-        String asset = "{\"name\":\"YTArk-v" + version + "-armv7.apk\",\"browser_download_url\":\"https://github.com/2archiver/YTArk/releases/download/v" + version + "/YTArk-v" + version + "-armv7.apk\",\"size\":" + size + ",\"digest\":\"sha256:" + hash + "\",\"content_type\":\"application/vnd.android.package-archive\"}";
+        String asset = "{\"name\":\"YTArk-v" + version + "-armeabi-v7a.apk\",\"browser_download_url\":\"https://github.com/2archiver/YTArk/releases/download/v" + version + "/YTArk-v" + version + "-armeabi-v7a.apk\",\"size\":" + size + ",\"digest\":\"sha256:" + hash + "\",\"content_type\":\"application/vnd.android.package-archive\"}";
         String sumsAsset = sums ? ",{\"name\":\"SHA256SUMS.txt\",\"browser_download_url\":\"https://github.com/2archiver/YTArk/releases/download/v" + version + "/SHA256SUMS.txt\",\"size\":80,\"digest\":\"\",\"content_type\":\"text/plain\"}" : "";
         return "{\"draft\":false,\"prerelease\":false,\"tag_name\":\"v" + version + "\",\"body\":\"versionCode " + code + "\\nShort notes\",\"assets\":[" + asset + sumsAsset + "]}";
     }

@@ -150,14 +150,14 @@ describe('stable release validation', () => {
 
   test('refuses missing, duplicated and mismatched assets', () => {
     const missing = validateReleasePayload(releaseFixture({ assets: [] }), context);
-    assert.match(missing.error, /0 assets named/);
+    assert.match(missing.error, /0 matching ARMv7 assets/);
     const duplicated = validateReleasePayload(
       releaseFixture({
         assets: [releaseFixture().assets[0], releaseFixture().assets[0]],
       }),
       context,
     );
-    assert.match(duplicated.error, /2 assets named/);
+    assert.match(duplicated.error, /2 matching ARMv7 assets/);
     const foreign = validateReleasePayload(
       releaseFixture({
         assets: [{
@@ -219,7 +219,7 @@ describe('stable release validation', () => {
       ],
     });
     const { error } = validateReleasePayload(fixture, context);
-    assert.match(error, /assets named YTArk-v2\.1\.2-armv7\.apk/);
+    assert.match(error, /0 matching ARMv7 assets/);
   });
 
   test('treats an x86 report without a verdict as unknown and malformed payloads as errors', () => {

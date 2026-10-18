@@ -1,13 +1,11 @@
-YTArk 3.7 — candidate, not published
+YTArk 3.8 — candidate, not published
 
-Explicit Settings access, honest local startup comparisons, and retryable update checks.
+Reliable updater error reporting, one ARMv7 APK per release, and clear upgrade paths.
 
-- Guide-row Settings opens only on explicit OK/click; scrolling past the row no longer opens the panel.
-- Open Settings modals keep D-pad, OK, Back, and color shortcuts within the active panel.
-- Already-current update checks show installed/latest versions, clear prior errors, and remain retryable.
+- Update checks no longer show a generic "Unexpected error"; specific messages cover TLS, timeout, rate limit and metadata failures with Retry.
+- Each release attaches exactly one ARMv7 APK with the full ABI name (`armeabi-v7a`); older `armv7` assets remain accepted.
+- Guide-row Settings, D-pad ownership and Shorts/settings interaction remain fixed from 3.7.
 
-The planned candidate is ARMv7 on the unchanged TizenTubeCobalt v2.0.2 base. Package identity and signing lineage remain unchanged. Planned identifiers are v3.7.0, versionCode 3070000, and userscript s38; this file is candidate information only, not a release or download notice.
+Requires Android support for armeabi-v7a. Install over your existing YTArk app; your data is preserved. Upgrading from 3.7 may require a manual APK install if the installed updater cannot reach the fixed release endpoint.
 
-Physical-TV behavior, update-permission return, clean install, in-place upgrade, playback, and Faster startup measurements are NOT RUN. The browser startup summary is a UI-bootstrap proxy and makes no performance claim.
-
-<!-- Package io.github.twoarchiver.ytark; 3.7.0; versionCode 3070000; base TizenTubeCobalt v2.0.2. -->
+<!-- Package io.github.twoarchiver.ytark; 3.8.0; versionCode 3080000; base TizenTubeCobalt v2.0.2. -->

@@ -48,7 +48,7 @@ describe('bundled changelog data', () => {
       return 0;
     });
     assert.deepEqual(keys, sorted, 'newest first');
-    assert.equal(entries[0].version, '3.7.0');
+    assert.equal(entries[0].version, '3.8.0');
     assert.equal(entries[0].status, 'unreleased');
     assert.equal(entries[0].date, null, 'no invented date for unpublished work');
     const published = entries.filter(entry => entry.status === 'published');
@@ -84,7 +84,7 @@ describe('in-app reader', () => {
       const expected = reader.headlineFor(entry) + (entry.version === '2.3.0' ? '  ·  Installed' : '');
       assert.equal(versionRows[i], expected);
     }
-    assert.equal(versionRows[0], '3.7 — Explicit Settings access, honest local startup comparisons, and retryable update checks');
+    assert.equal(versionRows[0], '3.8 — Reliable updater error reporting, one ARMv7 APK per release, and clear upgrade paths');
     assert.equal(rowTitle(modalItems(modal)[selectedIndex(modal)]), versionRows.find(title => title.endsWith('  ·  Installed')));
     assert.match(rowSubtitle(findRow(modal, item => rowTitle(item).startsWith('2.2 — '))), /Published .*2026 · v2\.2\.0/);
     assert.match(header(modal).subtitle, /installed 2\.3\.0/);
