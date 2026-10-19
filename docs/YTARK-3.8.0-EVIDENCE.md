@@ -20,8 +20,10 @@ Status: **fix PR for the merged 3.8.0 candidate work (PR #65)**. The base is
   SHA-256 `8e724f1ca62e739ad74d92e1b30bb36137f82029e272c7878b81cef9fee02823`).
   PR #65's statement that 3.7 was never published was false; the legitimate
   3.7.0 changelog history is restored from the live release record.
-- No `v3.8.0` tag/release and no `s39` tag exist; no draft release exists.
-  3.8.0 / 3080000 / s39 is therefore still the correct unpublished target.
+- No `v3.8.0` tag/release and no `s39` tag exist; no draft release exists
+  (state at the time of inspection, 2026-10-18). 3.8.0 / 3080000 / s39
+  was therefore the correct unpublished target; the publication that
+  followed is recorded in the "Publication record" section below.
 
 The error-classification changes in #65 do **not** prove TLS caused the
 user's original update-check failure. TLS remains an unconfirmed hypothesis;
@@ -172,17 +174,72 @@ Video, usability and release presentation
 - [x] Compatibility and material limitations remain clear; no unverified fix claims.
 
 PR, merge and publication
-- [ ] Fix PR opened with problem, changes, evidence and this checklist.
-- [ ] Final PR head passes required source CI AND signed candidate build.
-- [ ] Review feedback/conflicts resolved; final changed state rechecked.
-- [ ] PR merged normally, without force/admin bypass.
-- [ ] Required CI succeeds on the exact merged main SHA.
-- [ ] Trusted release workflow builds/publishes the intended merged source.
-- [ ] Public target release is stable, latest, and has exactly one attached APK.
-- [ ] Public APK downloaded and compared with expected hash/package/signer/ABI/version.
-- [ ] Latest-release API and updater parser consume the actual public metadata.
-- [ ] Final report links PR, merge, passing runs, release and outstanding device tests.
+- [x] Fix PR opened with problem, changes, evidence and this checklist
+  (PR #66, opened 2026-10-19 from `arena/0f47c982-ytark`).
+- [x] Final PR head passes required source CI AND signed candidate build
+  (head `37576a5`: CI run 39189426773 success; candidate run 39189426782
+  success, signed artefact `ytark-3.8.0-armv7-candidate-37576a5…`).
+- [x] Review feedback/conflicts resolved; final changed state rechecked
+  (candidate workflow-file failure 39187118249 diagnosed and fixed in
+  `37576a5`: artifact-name key indentation; all three workflow files
+  re-parsed as valid YAML, workflow policy OK, 252 Python tests pass).
+- [x] PR merged normally, without force/admin bypass
+  (`gh pr merge 66 --merge`, merge commit `59d3a2d`, 2026-10-19 02:32:25 UTC).
+- [x] Required CI succeeds on the exact merged main SHA
+  (build-apk run 39190444475 job "Require successful exact-source CI
+  validation" waited for and confirmed CI success on `59d3a2d`).
+- [x] Trusted release workflow builds/publishes the intended merged source
+  (run 39190444475 on `main` @ `59d3a2d`, all four jobs success).
+- [x] Public target release is stable, latest, and has exactly one
+  attached APK (see publication record below).
+- [ ] Public APK downloaded and compared with expected hash/package/signer/
+  ABI/version from this sandbox — NOT DONE HERE: the sandbox egress
+  allowlist blocks release-assets.githubusercontent.com, so the APK bytes
+  cannot be downloaded locally. This verification WAS performed inside
+  the publication workflow itself (steps "Verify alignment, sign the
+  ARMv7 APK and validate the compiled package" and "Publish… from the
+  verified bytes", which re-downloads and re-verifies the published
+  asset with apksigner/aapt, all success). Recorded as CI-verified,
+  not sandbox-reproduced; no local tick claimed.
+- [x] Latest-release API and updater parser consume the actual public
+  metadata (`GET /releases/latest` returns tag v3.8.0; the release
+  record carries the `ytark-release-identity/v1` block the updater
+  parsers are tested against).
+- [x] Final report links PR, merge, passing runs, release and outstanding
+  device tests (publication record below; device checks remain open).
 
-Items marked `[x]` above are backed by the local command results in this
-document; items still `[ ]` require the CI runs, the signed candidate
-build, the merge and the publication that follow this PR.
+Items marked `[x]` above are backed by the local command results and the
+live GitHub API records cited in this document.
+
+## Publication record (live, 2026-10-19)
+
+- PR #66 merged 2026-10-19T02:32:25Z; merge commit
+  `59d3a2de699a396c5331e3bd1e31ccb2f74e78f2` on `main`.
+- Pre-merge gates on head `37576a5`: CI run 39189426773 (success) and
+  signed candidate run 39189426782 (success; artefact
+  `ytark-3.8.0-armv7-candidate-37576a50c974b75ee77fa5e08c584e8a83faa3e3`,
+  58,758,931 bytes).
+- Publication run 39190444475 (build-apk.yml, push to `main` @
+  `59d3a2d`): all four jobs success — classify release state, require
+  exact-source CI validation, build and package-check the ARMv7 APK,
+  publish the verified ARMv7 APK as the stable release.
+- Release `v3.8.0` ("YTArk 3.8"), published 2026-10-19T02:38:54Z,
+  exactly one attached asset:
+  `YTArk-v3.8.0-armeabi-v7a.apk`, 98,446,550 bytes, GitHub asset
+  digest `sha256:da475dcbd8e69c310cfb2e104b1ae8c9283066f09b6cbbf5655c5263e9841dc1`
+  — equal to the release-body identity block `apk_sha256`.
+- Identity block `ytark-release-identity/v1`: package
+  `io.github.twoarchiver.ytark`, version 3.8.0, versionCode 3080000,
+  base TizenTubeCobalt v2.0.2, script tag `s39`, commit `59d3a2d`
+  (the exact merged source), run 39190444475, user_script_sha256
+  `3ccdc612571888be88e0a3192d940eae65c4558d82b601e21a9105dfd2ec8293`
+  (independently recomputed from `userScript.js` at tag `s39` — match;
+  the immutable userscript tag exists at commit `6b0273e8`,
+  "YTArk userscript s39", file size 869,305 bytes).
+- `GET /releases/latest` returns tag v3.8.0. No draft releases remain.
+  The v3.7.0 release is untouched (published 2026-10-17T02:59:11Z,
+  its original five assets intact).
+- Outstanding, unchanged: physical-TV update-check, download,
+  permission-return, playback and Shorts/settings checks (no hardware
+  in this environment); the original device TLS report remains an
+  unconfirmed hypothesis.
