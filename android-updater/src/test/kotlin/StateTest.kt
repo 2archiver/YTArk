@@ -231,7 +231,7 @@ fun main() {
     check(structured.stage.isBlank() && structured.httpStatus==0 && structured.retryAt==0L)
     val installedAhead = UpdateStates.upToDate(UpdateState(), "3.3.0", 6L, installedAhead=true)
     check(installedAhead.installedAhead)
-    check(UpdatePresentation.status(installedAhead)=="Installed version is newer than the latest stable release.")
+    check(UpdatePresentation.status(installedAhead)=="Installed version is newer than the latest stable release — v3.3.0.")
     check(UpdatePresentation.latest(installedAhead)=="3.3.0")
     val priorFailure = UpdateStates.failed(UpdateState(latestVersion="3.3.0",lastSuccess=5L), MappedError("http","HTTP error","",100L,403,"check"), "v3.3.0")
     check(UpdatePresentation.status(priorFailure)=="HTTP error")
