@@ -25,9 +25,11 @@ object UpdatePresentation {
             else "You're up to date — v${s.latestVersion}."
         s.latestVersion.isBlank() && s.phase == UpdatePhase.Idle && s.lastSuccess > 0 && s.message.startsWith("Installed version is current.") ->
             "Saved check status cannot confirm the latest version. Check again."
-        s.phase == UpdatePhase.Available && s.candidate != null && s.errorCategory.isBlank() ->
+        s.phase == UpdatePhase.Available && s.candidate != null && s.errorCategory.isBlank() &&
+            s.message == "YTArk ${s.candidate.version} is available." ->
             "Newer version available — v${s.candidate.version}."
-        s.phase == UpdatePhase.Ready && s.candidate != null && s.errorCategory.isBlank() ->
+        s.phase == UpdatePhase.Ready && s.candidate != null && s.errorCategory.isBlank() &&
+            s.message == "Update ready. Select Install update; Android will ask for confirmation." ->
             "Verified update ready — v${s.candidate.version}. Select Install update."
         s.phase == UpdatePhase.Downloading -> progress(s.bytes, s.candidate?.size ?: 0, s.speedBps)
         s.phase == UpdatePhase.Validating -> "Verifying package…"
