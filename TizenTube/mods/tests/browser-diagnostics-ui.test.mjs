@@ -1,8 +1,8 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  setupEnvironment, initEnglish, lastModal, modalItems, messageText, rowTitle, rowCommands,
-  findRow, header, selectedIndex, tick,
+  setupEnvironment, initEnglish, lastModal, modalItems, messageText, rowTitle, rowSubtitle, rowCommands,
+  findRow, header, selectedIndex, tick, press,
 } from './helpers/ytlr-harness.mjs';
 
 const { recorded, localStorage } = setupEnvironment({ storage: {
@@ -22,8 +22,13 @@ function actionFromRow(row) {
   return rowCommands(row).find(command => command.customAction)?.customAction;
 }
 
-describe('About diagnostics navigation and scopes', () => {
-  it('exposes a default-off browser panel and separate native updater route', async () => {
+function dismissalCommands(modal) {
+  const dismiss = modal.openPopupAction.popup.overlaySectionRenderer.dismissalCommand;
+  return dismiss.commandExecutorCommand?.commands || [];
+}
+
+describe('About diagnostics navigation, four-row scope and focus restoration', () => {
+  it('shows exactly four primary rows in order and keeps Android updater separate', async () => {
     assert.equal(config.configRead('recordBrowserDiagnostics'), false);
     assert.equal(registry.findNode(registry.buildSettingsTree(), 'about.diagnostics').type, 'panel');
     actions.handleYtarkAction('YTARK_PANEL_SHOW', { id: 'about' });
@@ -32,128 +37,158 @@ describe('About diagnostics navigation and scopes', () => {
     actions.handleYtarkAction('YTARK_PANEL_SHOW', { id: 'about.diagnostics' });
     const panel = lastModal(recorded, 'ytark-panel-about.diagnostics');
     assert.equal(header(panel).title, 'Diagnostics');
-    assert.equal(selectedIndex(panel), 2, 'D-pad selection starts on the recording control');
-    const titles = modalItems(panel).map(rowTitle).filter(Boolean);
-    assert.deepEqual(titles, [
-      'Enable / start recording', 'Leave launches unclassified', 'Label launches as cold starts',
-      'Label launches as warm starts', 'View startup summary', 'Start new partial sample',
-      'Advanced event report', 'View recent sessions', 'Clear diagnostic data', 'Android update diagnostics',
+    assert.equal(selectedIndex(panel), 1, 'D-pad selection starts on Recording');
+    const rows = modalItems(panel);
+    assert.deepEqual(rows.map(rowTitle), [
+      'Android updater', 'Recording', 'Startup summary', 'Clear diagnostic data',
     ]);
-    const descriptions = modalItems(panel).map(messageText).filter(Boolean).join('\n');
-    assert.match(descriptions, /nothing is sent automatically/i);
-    assert.match(descriptions, /next complete browser launch/i);
-    assert.match(descriptions, /separate/i);
-    const coldLabel = findRow(panel, 'Label launches as cold starts');
-    const labelCommands = rowCommands(coldLabel);
-    assert.equal(labelCommands[0].setClientSettingEndpoint.settingDatas[0].clientSettingEnum.item, 'startupDiagnosticRunKind');
-    assert.equal(labelCommands[0].setClientSettingEndpoint.settingDatas[0].stringValue, 'cold');
-    assert.equal(labelCommands[1].customAction.action, 'YTARK_PANEL_SHOW');
-    const summaryAction = actionFromRow(findRow(panel, 'View startup summary'));
-    assert.equal(summaryAction.action, 'YTARK_DIAGNOSTICS_STARTUP_SUMMARY');
-    const native = actionFromRow(findRow(panel, 'Android update diagnostics'));
-    assert.equal(native.action, 'YTARK_NATIVE_UPDATES_OPEN');
-    const clearConfirmRow = actionFromRow(findRow(panel, 'Clear diagnostic data'));
-    assert.equal(clearConfirmRow.action, 'YTARK_DIAGNOSTICS_CLEAR_CONFIRM');
+    assert.deepEqual(rows.map(row => row.compactLinkRenderer.itemId), [
+      'ytark-diagnostics-android', 'ytark-diagnostics-recording',
+      'ytark-diagnostics-startup-summary', 'ytark-diagnostics-clear',
+    ]);
+    assert.match(rowSubtitle(findRow(panel, 'Recording')), /^Off/);
+    assert.match(rowSubtitle(findRow(panel, 'Startup summary')), /No sample/);
+    assert.match(rowSubtitle(findRow(panel, 'Startup summary')), /unavailable/i);
+    assert.equal(actionFromRow(findRow(panel, 'Android updater')).action, 'YTARK_NATIVE_UPDATES_OPEN');
+    assert.equal(actionFromRow(findRow(panel, 'Recording')).action, 'YTARK_DIAGNOSTICS_SET');
+    assert.equal(actionFromRow(findRow(panel, 'Startup summary')).action, 'YTARK_DIAGNOSTICS_STARTUP_SUMMARY');
+    assert.equal(actionFromRow(findRow(panel, 'Clear diagnostic data')).action, 'YTARK_DIAGNOSTICS_CLEAR_CONFIRM');
     assert.equal(browser.status, 'off');
-  });
-
-  it('enables partial capture, displays a scrollable report, and clears only recorder keys', async () => {
-    config.configWrite('enableAdBlock', false);
-    config.configWrite('reloadHomeOnStartup', false);
-    actions.handleYtarkAction('YTARK_DIAGNOSTICS_SET', { enabled: true });
-    await tick(5);
-    assert.equal(config.configRead('recordBrowserDiagnostics'), true);
-    assert.equal(browser.status, 'recording');
-    assert.equal(browser.active.capture, 'partial', 'an enable action is not mislabelled as a launch capture');
-    assert.equal(browser.record('playback-playing', 'initial', 'proxy'), true);
-    assert.equal(browser.record('raw-video-id', 'secret'), false);
-    browser._persist({ draft: browser._plainSession(browser.active) });
-    assert.ok(localStorage[recorderModule.BROWSER_DIAGNOSTICS_DRAFT_KEY]);
-
-    actions.handleYtarkAction('YTARK_DIAGNOSTICS_STARTUP_SUMMARY', {});
-    const summary = lastModal(recorded, 'ytark-browser-startup-summary');
-    const summaryText = modalItems(summary).map(messageText).join('\n');
-    assert.match(summaryText, /Measured interval: userscript module evaluation/);
-    assert.match(summaryText, /partial sample/i);
-    assert.doesNotMatch(summaryText, /0\.0 ms|Median interval|Observed difference/);
-
-    actions.handleYtarkAction('YTARK_DIAGNOSTICS_LATEST', {});
-    const report = lastModal(recorded, 'ytark-browser-diagnostics-report');
-    assert.equal(report.openPopupAction.popup.overlaySectionRenderer.overlay.overlayTwoPanelRenderer
-      .actionPanel.overlayPanelRenderer.content.scrollPaneRenderer !== undefined, true);
-    const reportText = modalItems(report).map(messageText).join('\n');
-    assert.match(reportText, /partial sample started in this session/i);
-    assert.match(reportText, /browser scope/i);
-    assert.match(reportText, /nothing is sent automatically/i);
-    assert.doesNotMatch(reportText, /raw-video-id|account-sentinel|private\.invalid|should-not-be-read/i);
-
-    actions.handleYtarkAction('YTARK_DIAGNOSTICS_CLEAR', {});
-    assert.equal(localStorage[recorderModule.BROWSER_DIAGNOSTICS_KEY], undefined);
-    assert.equal(localStorage[recorderModule.BROWSER_DIAGNOSTICS_DRAFT_KEY], undefined);
-    assert.equal(browser.status, 'recording', 'clear starts a new partial sample while enabled');
-    assert.equal(browser.active.capture, 'partial');
-    assert.equal(config.configRead('enableAdBlock'), false);
-    assert.equal(config.configRead('reloadHomeOnStartup'), false);
-    assert.equal(localStorage['yt.leanback.default::auth'], 'account-sentinel');
-    assert.equal(localStorage['unrelated-app-cache'], 'must-survive');
-
-    actions.handleYtarkAction('YTARK_DIAGNOSTICS_SET', { enabled: false });
-    assert.equal(browser.status, 'off', 'disable stops collection immediately');
     assert.equal(config.configRead('recordBrowserDiagnostics'), false);
     assert.equal(localStorage['yt.leanback.default::auth'], 'account-sentinel');
   });
 
-  it('explicit report actions can read retained sessions while collection is off', () => {
-    actions.handleYtarkAction('YTARK_DIAGNOSTICS_SET', { enabled: false });
-    browser.storage = null;
-    localStorage[recorderModule.BROWSER_DIAGNOSTICS_KEY] = JSON.stringify({
-      schema: 1, evicted: 0, sessions: [{
-        schema: 1, id: 'saved-session', capture: 'launch', status: 'complete',
-        clockDomain: 'performance', clockQuality: 'monotonic',
-        context: {}, truncated: false,
-        events: [{ source: 'browser', clock: 'performance', relativeMs: 0,
-          event: 'recording-started', outcome: 'launch', quality: 'observed', valueMs: null }],
-      }],
-    });
-    actions.handleYtarkAction('YTARK_DIAGNOSTICS_LATEST', {});
-    const report = lastModal(recorded, 'ytark-browser-diagnostics-report');
-    const reportText = modalItems(report).map(messageText).join('\n');
-    assert.match(reportText, /Capture: launch capture from userscript bootstrap/);
-    actions.handleYtarkAction('YTARK_DIAGNOSTICS_STARTUP_SUMMARY', {});
+  it('toggles local recording and opens a bounded summary that returns focus to its row', async () => {
+    const initial = lastModal(recorded, 'ytark-panel-about.diagnostics')
+      || (actions.handleYtarkAction('YTARK_PANEL_SHOW', { id: 'about.diagnostics' }), lastModal(recorded, 'ytark-panel-about.diagnostics'));
+    const recording = findRow(initial, 'Recording');
+    const recordingAction = actionFromRow(recording);
+    assert.deepEqual(recordingAction.parameters, { enabled: true, returnFocusIndex: 1 });
+    actions.handleYtarkAction(recordingAction.action, recordingAction.parameters);
+    await tick(10);
+    assert.equal(config.configRead('recordBrowserDiagnostics'), true);
+    assert.equal(browser.status, 'recording');
+    assert.equal(browser.active.capture, 'partial', 'turning recording on mid-session never claims a launch capture');
+    const enabledPanel = lastModal(recorded, 'ytark-panel-about.diagnostics');
+    assert.match(rowSubtitle(findRow(enabledPanel, 'Recording')), /^On/);
+
+    const summaryRow = findRow(enabledPanel, 'Startup summary');
+    const summaryAction = actionFromRow(summaryRow);
+    assert.deepEqual(summaryAction.parameters, { returnFocusIndex: 2 });
+    actions.handleYtarkAction(summaryAction.action, summaryAction.parameters);
     const summary = lastModal(recorded, 'ytark-browser-startup-summary');
-    const summaryText = modalItems(summary).map(messageText).join('\n');
-    assert.match(summaryText, /Latest sample:/, 'the concise summary reads existing local history while off');
-    assert.doesNotMatch(summaryText, /Local browser diagnostic storage is unavailable/);
-    assert.equal(browser.status, 'off', 'opening a report does not enable collection');
+    const content = summary.openPopupAction.popup.overlaySectionRenderer.overlay.overlayTwoPanelRenderer
+      .actionPanel.overlayPanelRenderer.content;
+    assert.ok(content.scrollPaneRenderer, 'summary uses the native scroll-pane renderer');
+    const summaryRows = modalItems(summary).map(messageText);
+    assert.ok(summaryRows.length <= 24, 'native summary row count is bounded');
+    assert.ok(summaryRows.every(line => line.length <= 88), 'long native text is word-wrapped without CSS');
+    const summaryText = summaryRows.join('\n');
+    assert.match(summaryText, /Recording: On/);
+    assert.match(summaryText, /Latest sample: Partial · active/);
+    assert.match(summaryText, /Latest result: Sample is still recording/);
+    assert.match(summaryText, /Actual readiness mode:/);
+    assert.match(summaryText, /not Android app start/);
+    const back = dismissalCommands(summary);
+    assert.equal(back[0].signalAction.signal, 'POPUP_BACK');
+    assert.equal(back[1].customAction.action, 'YTARK_DEFERRED');
+    assert.deepEqual(back[1].customAction.parameters.parameters, {
+      id: 'about.diagnostics', update: true, focusIndex: 2,
+    });
+    await resolve.default(summary.openPopupAction.popup.overlaySectionRenderer.dismissalCommand);
+    await tick(10);
+    assert.equal(selectedIndex(lastModal(recorded, 'ytark-panel-about.diagnostics')), 2,
+      'Back restores focus to Startup summary');
   });
 
-  it('Clear can remove old local reports while collection is off without touching other data', () => {
-    assert.equal(browser.status, 'off');
-    localStorage[recorderModule.BROWSER_DIAGNOSTICS_KEY] = JSON.stringify({ schema: 1, sessions: [], evicted: 0 });
-    localStorage[recorderModule.BROWSER_DIAGNOSTICS_DRAFT_KEY] = JSON.stringify({ schema: 1, session: {} });
-    actions.handleYtarkAction('YTARK_DIAGNOSTICS_CLEAR', {});
-    assert.equal(localStorage[recorderModule.BROWSER_DIAGNOSTICS_KEY], undefined);
-    assert.equal(localStorage[recorderModule.BROWSER_DIAGNOSTICS_DRAFT_KEY], undefined);
-    assert.equal(localStorage['yt.leanback.default::auth'], 'account-sentinel');
-    assert.equal(localStorage['unrelated-app-cache'], 'must-survive');
-    assert.equal(browser.status, 'off');
-  });
-
-  it('uses Back-friendly clear confirmation and never exposes a clipboard or export command', async () => {
+  it('reads old valid samples while recording is Off and ignores retired launch labels', async () => {
+    actions.handleYtarkAction('YTARK_DIAGNOSTICS_SET', { enabled: false });
+    const oldSample = {
+      schema: 1, id: 'saved-launch', capture: 'launch', status: 'complete',
+      clockDomain: 'performance', clockQuality: 'monotonic', truncated: false,
+      context: {
+        bundleVersion: '3.8.0', scriptTag: 's39', baseTag: 'v2.0.2',
+        reloadHomeOnStartup: true, fasterStartup: false, startupDestination: 'home',
+        startupComparisonKind: 'warm',
+      },
+      events: [
+        { source: 'browser', clock: 'performance', relativeMs: 0,
+          event: 'recording-started', outcome: 'launch', quality: 'observed', valueMs: null },
+        { source: 'browser', clock: 'performance', relativeMs: 5,
+          event: 'startup-readiness-mode', outcome: 'normal-disabled', quality: 'observed', valueMs: null },
+        { source: 'browser', clock: 'performance', relativeMs: 10,
+          event: 'ui-module-evaluated', outcome: 'observed', quality: 'proxy', valueMs: null },
+        { source: 'browser', clock: 'performance', relativeMs: 155.2,
+          event: 'startup-readiness-complete', outcome: 'complete', quality: 'observed', valueMs: null },
+        { source: 'browser', clock: 'performance', relativeMs: 155.2,
+          event: 'controls-ready', outcome: 'observed', quality: 'observed', valueMs: null },
+        { source: 'browser', clock: 'performance', relativeMs: 155.2,
+          event: 'recording-ended', outcome: 'complete', quality: 'observed', valueMs: null },
+      ],
+    };
+    localStorage[recorderModule.BROWSER_DIAGNOSTICS_KEY] = JSON.stringify({
+      schema: 1, evicted: 0, sessions: [oldSample],
+    });
+    browser.storage = null;
     actions.handleYtarkAction('YTARK_PANEL_SHOW', { id: 'about.diagnostics' });
     const panel = lastModal(recorded, 'ytark-panel-about.diagnostics');
-    await resolve.default({ customAction: { action: 'YTARK_DIAGNOSTICS_CLEAR_CONFIRM' } });
+    const startupRow = findRow(panel, 'Startup summary');
+    assert.match(rowSubtitle(startupRow), /Launch · complete/);
+    assert.match(rowSubtitle(startupRow), /145\.2 ms/);
+    const startupAction = actionFromRow(startupRow);
+    actions.handleYtarkAction(startupAction.action, startupAction.parameters);
+    const summary = modalItems(lastModal(recorded, 'ytark-browser-startup-summary')).map(messageText).join(' ');
+    assert.match(summary, /Recording: Off/);
+    assert.match(summary, /Valid startup duration for latest sample: 145\.2 ms/);
+    assert.match(summary, /Faster startup preference: Off/);
+    assert.match(summary, /Actual readiness mode: Normal cadence \(Faster startup off\)/);
+    assert.doesNotMatch(summary, /startupComparisonKind|cold|warm|comparison/i);
+    assert.equal(browser.status, 'off', 'opening a summary never enables collection');
+  });
+
+  it('Clear has confirmation, restores focus on Cancel, and removes only browser samples on confirmation', async () => {
+    assert.equal(browser.status, 'off');
+    localStorage[recorderModule.BROWSER_DIAGNOSTICS_DRAFT_KEY] = JSON.stringify({ schema: 1, session: {} });
+    const panel = lastModal(recorded, 'ytark-panel-about.diagnostics')
+      || (actions.handleYtarkAction('YTARK_PANEL_SHOW', { id: 'about.diagnostics' }), lastModal(recorded, 'ytark-panel-about.diagnostics'));
+    const clearAction = actionFromRow(findRow(panel, 'Clear diagnostic data'));
+    assert.deepEqual(clearAction.parameters, { returnFocusIndex: 3 });
+    actions.handleYtarkAction(clearAction.action, clearAction.parameters);
     const confirm = lastModal(recorded, 'ytark-browser-diagnostics-clear-confirm');
     assert.ok(confirm);
-    assert.match(header(confirm).subtitle, /Android reports are cleared separately/i);
-    const items = modalItems(confirm);
-    const clear = findRow(confirm, 'Clear browser diagnostic data');
-    const commands = rowCommands(clear);
-    assert.equal(commands[0].signalAction.signal, 'POPUP_BACK');
-    assert.equal(commands[1].customAction.action, 'YTARK_DEFERRED');
-    const allActions = [...modalItems(panel), ...items].flatMap(item => item?.compactLinkRenderer?.serviceEndpoint?.commandExecutorCommand?.commands || []);
-    assert.equal(allActions.some(command => /clipboard|export|download/i.test(JSON.stringify(command))), false);
-    // Stop any recorder/timers left by a previous row or action in this process.
-    actions.handleYtarkAction('YTARK_DIAGNOSTICS_SET', { enabled: false });
+    assert.equal(header(confirm).subtitle, 'Only local browser samples are removed');
+    assert.match(messageText(modalItems(confirm)[0]), /Settings, cookies, accounts, playback state/);
+    assert.match(messageText(modalItems(confirm)[0]), /Android updater data are not changed/);
+    const cancel = findRow(confirm, 'Cancel');
+    await press(resolve.default, cancel);
+    const afterCancel = lastModal(recorded, 'ytark-panel-about.diagnostics');
+    assert.equal(selectedIndex(afterCancel), 3, 'Cancel restores focus to Clear diagnostic data');
+    assert.ok(localStorage[recorderModule.BROWSER_DIAGNOSTICS_DRAFT_KEY], 'Cancel preserves saved content');
+
+    actions.handleYtarkAction('YTARK_DIAGNOSTICS_SET', { enabled: true });
+    await tick(10);
+    localStorage[recorderModule.BROWSER_DIAGNOSTICS_KEY] = JSON.stringify({ schema: 1, evicted: 0, sessions: [] });
+    const enabledPanel = lastModal(recorded, 'ytark-panel-about.diagnostics');
+    actions.handleYtarkAction('YTARK_DIAGNOSTICS_CLEAR_CONFIRM', { returnFocusIndex: 3 });
+    const clearConfirm = lastModal(recorded, 'ytark-browser-diagnostics-clear-confirm');
+    const confirmCommands = rowCommands(findRow(clearConfirm, 'Clear diagnostic data'));
+    assert.equal(confirmCommands[0].signalAction.signal, 'POPUP_BACK');
+    assert.equal(confirmCommands[1].customAction.action, 'YTARK_DEFERRED');
+    assert.deepEqual(confirmCommands[1].customAction.parameters.parameters, { returnFocusIndex: 3 });
+    await press(resolve.default, findRow(clearConfirm, 'Clear diagnostic data'));
+    await tick(10);
+    assert.equal(localStorage[recorderModule.BROWSER_DIAGNOSTICS_KEY], undefined);
+    assert.equal(localStorage[recorderModule.BROWSER_DIAGNOSTICS_DRAFT_KEY], undefined);
+    assert.equal(browser.status, 'recording', 'Clear restarts a new partial sample only when recording is On');
+    assert.equal(browser.active.capture, 'partial');
+    assert.equal(config.configRead('enableAdBlock'), true);
+    assert.equal(localStorage['yt.leanback.default::auth'], 'account-sentinel');
+    assert.equal(localStorage['unrelated-app-cache'], 'must-survive');
+    assert.equal(selectedIndex(lastModal(recorded, 'ytark-panel-about.diagnostics')), 3);
+    assert.ok(enabledPanel);
+    actions.handleYtarkAction('YTARK_DIAGNOSTICS_SET', { enabled: false, returnFocusIndex: 1 });
+    await tick(10);
+    assert.equal(browser.status, 'off');
+    assert.equal(config.configRead('recordBrowserDiagnostics'), false);
   });
 });

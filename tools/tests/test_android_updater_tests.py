@@ -297,7 +297,7 @@ class CurrentUpdateResultTests(unittest.TestCase):
         self.assertIn('verifiedPath = if (s.candidate?.identity == candidate.identity)', states)
         self.assertIn('installedAhead = installedAhead', states)
         self.assertIn('"You\'re on the latest version."', states)
-        self.assertIn('"Installed version is newer than the latest stable release."', presentation)
+        self.assertIn('"Installed version is newer than the latest stable release — v${s.latestVersion}."', presentation)
         self.assertIn('s.latestVersion.isNotBlank()', presentation)
         self.assertNotRegex(presentation, r'Regex\([^\n]*Installed version is current')
         self.assertIn('candidate.code <= installedCode', coordinator)

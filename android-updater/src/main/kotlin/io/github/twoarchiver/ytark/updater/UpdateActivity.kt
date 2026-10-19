@@ -40,15 +40,29 @@ class UpdateActivity : Activity() {
     private var freshEntryPending=false
     private var permissionEntryAttempted=false
     private var recoverMissingPermissionRoute=true
+    private var textDialog: AlertDialog?=null
+    private var nativeDiagnosticsWritePending=false
+    private var permissionRouteStorageReady=false
+    private var permissionRouteStorageUnavailable=false
+    private var pendingPermissionActivityResult: Int?=null
+    private var initialPermissionDetourSnapshot: PermissionDetourSnapshot?=null
     private lateinit var permissionDetours: PermissionDetourCoordinator
     private val permissionRouteInFlight: Boolean
         get() = permissionDetours.current?.let { it.launched && !it.returned } == true
-    private val observer: (UpdateState)->Unit = { s -> render(s); installer.stateChanged(s); reconcileMissingPermissionRoute(s) }
+    private val observer: (UpdateState)->Unit = { s ->
+        render(s)
+        renderNativeDiagnosticsControls()
+        if(permissionRouteStorageReady) {
+            installer.stateChanged(s)
+            reconcileMissingPermissionRoute(s)
+        }
+    }
     override fun onCreate(saved: Bundle?) {
         setTheme(android.R.style.Theme_Material_NoActionBar)
         super.onCreate(saved)
         updates=UpdateCoordinator.get(this)
-        permissionDetours=PermissionDetourCoordinator(readPermissionDetourSnapshot(saved))
+        initialPermissionDetourSnapshot=readPermissionDetourSnapshot(saved)
+        permissionDetours=PermissionDetourCoordinator(initialPermissionDetourSnapshot ?: PermissionDetourSnapshot())
         recoverMissingPermissionRoute=permissionDetours.current==null
         installer=InstallCoordinator(this,updates)
         installed=try { packageManager.getPackageInfo(packageName,0).versionName ?: "Unknown" } catch (_: Exception) { "Unknown" }
@@ -120,22 +134,33 @@ class UpdateActivity : Activity() {
         text(14f,true).text="Android updater diagnostics are separate from browser diagnostics. Native collection defaults off, stays on this device, and can be viewed or cleared here. No installer, download or permission decision is automated by reports."
         nativeDiagnosticsToggleButton=button(109,"Enable Android updater diagnostics") {
             val next=!AndroidDiagnostics.enabled()
-            val persisted=AndroidDiagnostics.setEnabled(next)
+            nativeDiagnosticsWritePending=true
             renderNativeDiagnosticsControls()
-            val message=when {
-                persisted && next -> "Native updater events start now. Startup milestones are not reconstructed; relaunch with diagnostics on to capture them."
-                persisted -> "Native diagnostics stopped. Saved reports remain until cleared."
-                !next -> "Native diagnostics stopped immediately, but the off choice could not be saved and may not survive an app restart."
-                else -> "Native diagnostics could not be started or saved; collection remains off. Check local storage and retry."
-            }
-            Toast.makeText(this,message,Toast.LENGTH_LONG).show()
+            AndroidDiagnostics.setEnabledAsync(next) { persisted -> runOnUiThread {
+                nativeDiagnosticsWritePending=false
+                if(isFinishing || isDestroyed) return@runOnUiThread
+                renderNativeDiagnosticsControls()
+                val message=when {
+                    persisted && next -> "Native updater events start now. Startup milestones are not reconstructed; relaunch with diagnostics on to capture them."
+                    persisted -> "Native diagnostics stopped. Saved reports remain until cleared."
+                    !next -> "Native diagnostics stopped immediately, but the off choice could not be saved and may not survive an app restart."
+                    else -> "Native diagnostics could not be started or saved; collection remains off. Check local storage and retry."
+                }
+                Toast.makeText(this,message,Toast.LENGTH_LONG).show()
+            } }
         }
         nativeDiagnosticsReportButton=button(110,"View Android updater diagnostics") { showNativeDiagnosticsReport() }
         nativeDiagnosticsClearButton=button(111,"Clear Android updater diagnostics") { confirmClearNativeDiagnostics() }
         val width=minOf(resources.displayMetrics.widthPixels,dp(760))
         scroll.addView(body,FrameLayout.LayoutParams(width,-2,Gravity.CENTER_HORIZONTAL)); setContentView(scroll)
         renderNativeDiagnosticsControls()
+        AndroidDiagnostics.initialize(applicationContext) {
+            runOnUiThread {
+                if(!isFinishing && !isDestroyed) renderNativeDiagnosticsControls()
+            }
+        }
         renderInstallPermissionState()
+        loadPermissionDetourState()
     }
     /** State drawables apply immediately, including disabled-before-first-focus and touch press. */
     private fun styleButton(button: Button) {
@@ -158,42 +183,127 @@ class UpdateActivity : Activity() {
             NativeThemePolicy.disabledText(),NativeThemePolicy.onFocus(),NativeThemePolicy.onFocus(),NativeThemePolicy.primaryText())))
     }
     private fun showNotes(title: String,body: String,source: Button) {
+        if (textDialog?.isShowing == true) return
+        val contentText=TextView(this).apply {
+            text=body.take(4000)
+            textSize=16f
+            setTextColor(NativeThemePolicy.primaryText())
+            setPadding(dp(20),dp(14),dp(20),dp(14))
+            gravity=Gravity.TOP or Gravity.START
+            isFocusable=false
+        }
+        val content=ScrollView(this).apply {
+            isFillViewport=false
+            isFocusable=true
+            isFocusableInTouchMode=true
+            addView(contentText,ScrollView.LayoutParams(-1,-2))
+        }
         val dialog=AlertDialog.Builder(this,android.R.style.Theme_Material_Dialog_Alert)
-            .setTitle(title).setMessage(body).setPositiveButton("Back",null).create()
-        dialog.setOnDismissListener { if(source.isEnabled && source.visibility==View.VISIBLE) source.requestFocus() else intervalButton.requestFocus() }
+            .setTitle(title).setView(content).setPositiveButton("Back",null).create()
+        textDialog=dialog
+        var backButton: Button?=null
+        content.setOnKeyListener { _, keyCode, event ->
+            if (event.action!=android.view.KeyEvent.ACTION_DOWN) return@setOnKeyListener false
+            when (keyCode) {
+                android.view.KeyEvent.KEYCODE_DPAD_DOWN -> {
+                    if (content.canScrollVertically(1)) content.smoothScrollBy(0,dp(64)) else backButton?.requestFocus()
+                    true
+                }
+                android.view.KeyEvent.KEYCODE_DPAD_UP -> {
+                    if (content.canScrollVertically(-1)) content.smoothScrollBy(0,-dp(64)) else backButton?.requestFocus()
+                    true
+                }
+                android.view.KeyEvent.KEYCODE_DPAD_CENTER,
+                android.view.KeyEvent.KEYCODE_ENTER,
+                android.view.KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                    backButton?.performClick()
+                    true
+                }
+                else -> false
+            }
+        }
+        dialog.setOnDismissListener {
+            if (textDialog===dialog) textDialog=null
+            if (!isFinishing && !isDestroyed) window?.decorView?.post {
+                if (source.isEnabled && source.visibility==View.VISIBLE) source.requestFocus()
+                else requestFallbackFocus()
+            }
+        }
         dialog.show()
-        styleButton(dialog.getButton(AlertDialog.BUTTON_POSITIVE))
+        val width=minOf(resources.displayMetrics.widthPixels-dp(48),dp(720)).coerceAtLeast(dp(240))
+        val height=(resources.displayMetrics.heightPixels-dp(96)).coerceAtLeast(dp(240))
+        dialog.window?.setLayout(width,height)
+        backButton=dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+        styleButton(backButton!!)
+        content.requestFocus()
     }
     private fun renderNativeDiagnosticsControls() {
         val enabled=AndroidDiagnostics.enabled()
         nativeDiagnosticsToggleButton.text=if(enabled) "Disable Android updater diagnostics" else "Enable Android updater diagnostics"
         nativeDiagnosticsToggleButton.contentDescription=if(enabled) "Stop native updater diagnostics collection" else "Start opt-in native updater diagnostics collection"
-        nativeDiagnosticsReportButton.isEnabled=true
-        nativeDiagnosticsClearButton.isEnabled=true
+        nativeDiagnosticsToggleButton.isEnabled=!nativeDiagnosticsWritePending
+        nativeDiagnosticsReportButton.isEnabled=!nativeDiagnosticsWritePending
+        nativeDiagnosticsClearButton.isEnabled=!nativeDiagnosticsWritePending
     }
 
     private fun showNativeDiagnosticsReport() {
+        if(textDialog?.isShowing==true) return
         val body=TextView(this).apply {
-            text=AndroidDiagnostics.report()
+            text=AndroidDiagnostics.report().take(NativeDiagnosticsPolicy.MAX_REPORT_CHARS)
             textSize=14f
             setTextColor(NativeThemePolicy.primaryText())
             setPadding(dp(20),dp(12),dp(20),dp(12))
+            gravity=Gravity.TOP or Gravity.START
             isFocusable=false
         }
         val content=ScrollView(this).apply {
-            isFillViewport=true
+            isFillViewport=false
             isFocusable=true
             isFocusableInTouchMode=true
-            addView(body)
+            isVerticalScrollBarEnabled=true
+            addView(body,ScrollView.LayoutParams(-1,-2))
         }
         val dialog=AlertDialog.Builder(this,android.R.style.Theme_Material_Dialog_Alert)
             .setTitle("Android updater diagnostics")
             .setView(content)
             .setPositiveButton("Back",null)
             .create()
-        dialog.setOnDismissListener { if(nativeDiagnosticsReportButton.isEnabled) nativeDiagnosticsReportButton.requestFocus() }
+        textDialog=dialog
+        var backButton: Button?=null
+        content.setOnKeyListener { _, keyCode, event ->
+            if(event.action!=android.view.KeyEvent.ACTION_DOWN) return@setOnKeyListener false
+            when(keyCode) {
+                android.view.KeyEvent.KEYCODE_DPAD_DOWN -> {
+                    if(content.canScrollVertically(1)) content.smoothScrollBy(0,dp(64)) else backButton?.requestFocus()
+                    true
+                }
+                android.view.KeyEvent.KEYCODE_DPAD_UP -> {
+                    if(content.canScrollVertically(-1)) content.smoothScrollBy(0,-dp(64)) else backButton?.requestFocus()
+                    true
+                }
+                android.view.KeyEvent.KEYCODE_DPAD_CENTER,
+                android.view.KeyEvent.KEYCODE_ENTER,
+                android.view.KeyEvent.KEYCODE_NUMPAD_ENTER -> {
+                    backButton?.performClick()
+                    true
+                }
+                else -> false
+            }
+        }
+        dialog.setOnDismissListener {
+            if(textDialog===dialog) textDialog=null
+            if(!isFinishing && !isDestroyed) window?.decorView?.post {
+                if(nativeDiagnosticsReportButton.isEnabled && nativeDiagnosticsReportButton.visibility==View.VISIBLE)
+                    nativeDiagnosticsReportButton.requestFocus()
+                else requestFallbackFocus()
+            }
+        }
         dialog.show()
-        styleButton(dialog.getButton(AlertDialog.BUTTON_POSITIVE))
+        val width=minOf(resources.displayMetrics.widthPixels-dp(48),dp(720)).coerceAtLeast(dp(240))
+        val height=(resources.displayMetrics.heightPixels-dp(96)).coerceAtLeast(dp(240))
+        dialog.window?.setLayout(width,height)
+        backButton=dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+        styleButton(backButton!!)
         content.requestFocus()
     }
 
@@ -202,9 +312,17 @@ class UpdateActivity : Activity() {
             .setTitle("Clear Android updater diagnostics?")
             .setMessage("Only the local Android updater diagnostic events will be cleared. The enable choice, update settings, accounts, cookies, downloaded or staged APKs, and browser diagnostics are not changed.")
             .setPositiveButton("Clear") { _, _ ->
-                val cleared=AndroidDiagnostics.clear()
+                nativeDiagnosticsWritePending=true
                 renderNativeDiagnosticsControls()
-                Toast.makeText(this,if(cleared) "Android updater diagnostic events cleared." else "Android updater diagnostic storage could not confirm clearing; check local storage and retry.",Toast.LENGTH_LONG).show()
+                AndroidDiagnostics.clearAsync { cleared -> runOnUiThread {
+                    nativeDiagnosticsWritePending=false
+                    if(isFinishing || isDestroyed) return@runOnUiThread
+                    renderNativeDiagnosticsControls()
+                    Toast.makeText(this,if(cleared) "Android updater diagnostic events cleared." else "Android updater diagnostic storage could not confirm clearing; check local storage and retry.",Toast.LENGTH_LONG).show()
+                    if(nativeDiagnosticsClearButton.visibility==View.VISIBLE && nativeDiagnosticsClearButton.isEnabled)
+                        nativeDiagnosticsClearButton.requestFocus()
+                    else requestFallbackFocus()
+                } }
             }
             .setNegativeButton("Back",null)
             .create()
@@ -220,6 +338,8 @@ class UpdateActivity : Activity() {
         val diagnose = InstallAuthorizationAccess.diagnose(this)
         val canHold = InstallAuthorizationAccess.canHoldAuthorization(this)
         installPermissionInfo.text = message ?: when {
+            !permissionRouteStorageReady && permissionRouteStorageUnavailable -> "Saved Android install-permission state could not be read. Reopen Updates to retry; checks and release notes remain available."
+            !permissionRouteStorageReady -> "Restoring saved Android install-permission state… This does not start a download or install."
             permissionDetours.current?.returned == true -> "Returned from Android install settings. YTArk is rechecking authorization and the same update; it will not install without Android's approval."
             permissionRouteInFlight -> "Android install settings are open. Choose Allow for YTArk or press Back. Nothing is downloaded or installed by this request."
             permissionDetours.current != null -> "An Android install-authorization request is being prepared. No update is downloaded or installed by this request."
@@ -234,7 +354,7 @@ class UpdateActivity : Activity() {
                 if (granted == false) InstallAuthorizationAccess.appOpNote(this) else ""
         }
         allowInstallsButton.visibility = if (allowed) View.GONE else View.VISIBLE
-        allowInstallsButton.isEnabled = permissionDetours.current == null
+        allowInstallsButton.isEnabled = permissionRouteStorageReady && permissionDetours.current == null
         allowInstallsButton.contentDescription = if (allowed) "Install authorization already allowed for YTArk" else "Allow YTArk to request Android's install-unknown-apps authorization"
         // When the Allow button disappears on a grant, keep the remote on an
         // enabled, visible action instead of letting focus fall nowhere.
@@ -250,10 +370,47 @@ class UpdateActivity : Activity() {
         target.requestFocus()
     }
 
-    private val detourPrefs by lazy { getSharedPreferences("ytark_permission_detour", MODE_PRIVATE) }
+    private var permissionRouteLoadInFlight=false
+
+    private fun loadPermissionDetourState() {
+        if(permissionRouteStorageReady || permissionRouteLoadInFlight) return
+        permissionRouteLoadInFlight=true
+        PermissionDetourStore.load(applicationContext) { persisted ->
+            permissionRouteLoadInFlight=false
+            if(isFinishing || isDestroyed) return@load
+            if(persisted==null) {
+                permissionRouteStorageUnavailable=true
+                renderInstallPermissionState()
+                return@load
+            }
+            val current=permissionDetours.snapshot()
+            val selected=PermissionDetourSnapshot.mostRecent(persisted,current)
+            val restored=PermissionDetourCoordinator(selected)
+            val normalized=restored.snapshot()
+            permissionDetours=restored
+            permissionRouteStorageReady=true
+            permissionRouteStorageUnavailable=false
+            recoverMissingPermissionRoute=permissionDetours.current==null
+            if(normalized!=persisted) PermissionDetourStore.save(applicationContext,normalized)
+            render(updates.state)
+            renderInstallPermissionState()
+            pendingPermissionActivityResult?.let { request ->
+                pendingPermissionActivityResult=null
+                observePermissionReturn(request,fromActivityResult=true)
+                if(request==ENTRY_PERMISSION) finishEntryPermissionReturn()
+            }
+            if(visible) {
+                observePermissionReturn()
+                reconcileMissingPermissionRoute(updates.state)
+                finishEntryPermissionReturn()
+                beginFreshPageEntry()
+                installer.stateChanged(updates.state)
+            }
+        }
+    }
 
     private fun reconcileMissingPermissionRoute(state: UpdateState) {
-        if (!recoverMissingPermissionRoute) return
+        if (!permissionRouteStorageReady || !recoverMissingPermissionRoute) return
         if (permissionDetours.current != null) {
             recoverMissingPermissionRoute=false
             return
@@ -269,22 +426,15 @@ class UpdateActivity : Activity() {
         }
     }
 
-    private fun readPermissionDetourSnapshot(saved: Bundle?): PermissionDetourSnapshot {
-        val persisted = permissionDetourSnapshot(
-            detourPrefs.getLong("next_id", 1L), detourPrefs.getLong("revision", 0L),
-            detourPrefs.getBoolean("active", false), detourPrefs.getLong("id", 0L),
-            detourPrefs.getString("owner", null), detourPrefs.getString("candidate", null),
-            detourPrefs.getBoolean("launched", false), detourPrefs.getBoolean("departed", false),
-            detourPrefs.getBoolean("returned", false), detourPrefs.getBoolean("accepted", false),
-        )
-        val restored = if (saved != null && saved.containsKey("detour_revision")) permissionDetourSnapshot(
-            saved.getLong("detour_next_id", 1L), saved.getLong("detour_revision", 0L),
-            saved.getBoolean("detour_active", false), saved.getLong("detour_id", 0L),
+    private fun readPermissionDetourSnapshot(saved: Bundle?): PermissionDetourSnapshot? {
+        if(saved==null || !saved.containsKey("detour_revision")) return null
+        return permissionDetourSnapshot(
+            saved.getLong("detour_next_id",1L), saved.getLong("detour_revision",0L),
+            saved.getBoolean("detour_active",false), saved.getLong("detour_id",0L),
             saved.getString("detour_owner"), saved.getString("detour_candidate"),
-            saved.getBoolean("detour_launched", false), saved.getBoolean("detour_departed", false),
-            saved.getBoolean("detour_returned", false), saved.getBoolean("detour_accepted", false),
-        ) else null
-        return PermissionDetourSnapshot.mostRecent(persisted, restored)
+            saved.getBoolean("detour_launched",false), saved.getBoolean("detour_departed",false),
+            saved.getBoolean("detour_returned",false), saved.getBoolean("detour_accepted",false),
+        )
     }
 
     private fun permissionDetourSnapshot(
@@ -301,33 +451,23 @@ class UpdateActivity : Activity() {
         )
     }
 
-    private fun persistPermissionDetourState(out: Bundle? = null) {
-        val snapshot = permissionDetours.snapshot()
-        val route = snapshot.current
-        val editor = detourPrefs.edit().putLong("next_id", snapshot.nextRequestId)
-            .putLong("revision", snapshot.revision).putBoolean("active", route != null)
-        if (route != null) {
-            editor.putLong("id", route.requestId).putString("owner", route.owner.name)
-                .putString("candidate", route.candidateIdentity ?: "")
-                .putBoolean("launched", route.launched).putBoolean("departed", route.departed)
-                .putBoolean("returned", route.returned).putBoolean("accepted", route.continuationAccepted)
-        } else {
-            editor.remove("id").remove("owner").remove("candidate").remove("launched")
-                .remove("departed").remove("returned").remove("accepted")
-        }
-        editor.commit()
-        if (out != null) {
-            out.putLong("detour_next_id", snapshot.nextRequestId)
-            out.putLong("detour_revision", snapshot.revision)
-            out.putBoolean("detour_active", route != null)
-            if (route != null) {
-                out.putLong("detour_id", route.requestId)
-                out.putString("detour_owner", route.owner.name)
-                out.putString("detour_candidate", route.candidateIdentity)
-                out.putBoolean("detour_launched", route.launched)
-                out.putBoolean("detour_departed", route.departed)
-                out.putBoolean("detour_returned", route.returned)
-                out.putBoolean("detour_accepted", route.continuationAccepted)
+    private fun persistPermissionDetourState(out: Bundle? = null, completed: ((Boolean) -> Unit)? = null) {
+        val snapshot=permissionDetours.snapshot()
+        if(permissionRouteStorageReady) PermissionDetourStore.save(applicationContext,snapshot,completed)
+        else completed?.invoke(false)
+        val route=snapshot.current
+        if(out!=null) {
+            out.putLong("detour_next_id",snapshot.nextRequestId)
+            out.putLong("detour_revision",snapshot.revision)
+            out.putBoolean("detour_active",route!=null)
+            if(route!=null) {
+                out.putLong("detour_id",route.requestId)
+                out.putString("detour_owner",route.owner.name)
+                out.putString("detour_candidate",route.candidateIdentity)
+                out.putBoolean("detour_launched",route.launched)
+                out.putBoolean("detour_departed",route.departed)
+                out.putBoolean("detour_returned",route.returned)
+                out.putBoolean("detour_accepted",route.continuationAccepted)
             }
         }
     }
@@ -361,6 +501,7 @@ class UpdateActivity : Activity() {
     }
 
     internal fun reserveInstallPermissionRoute(candidateIdentity: String): PermissionDetourStart {
+        if(!permissionRouteStorageReady) return PermissionDetourStart(PermissionDetourStartKind.BLOCKED,null)
         val result = permissionDetours.beginInstall(candidateIdentity)
         persistPermissionDetourState()
         when (result.kind) {
@@ -371,34 +512,63 @@ class UpdateActivity : Activity() {
         return result
     }
 
-    /** Launches only a reserved route; joining an entry route never opens another Settings screen. */
-    internal fun launchReservedInstallPermissionRoute(requestId: Long): String? {
-        val route = permissionDetours.current ?: return InstallAuthorizationAccess.OPEN_BLOCKED
-        if (route.requestId != requestId) return InstallAuthorizationAccess.OPEN_BLOCKED
-        if (route.owner == PermissionDetourOwner.ENTRY && route.launched) return null
-        if (route.launched) return null
-        if (!visible || isFinishing || !InstallAuthorizationAccess.canHoldAuthorization(this)) {
+    /** Launches only a durably reserved route; a joined entry route never opens a second Settings screen. */
+    internal fun launchReservedInstallPermissionRoute(requestId: Long, completed: (String?) -> Unit) {
+        val route = permissionDetours.current
+        if(!permissionRouteStorageReady || route==null || route.requestId!=requestId) {
+            completed(InstallAuthorizationAccess.OPEN_BLOCKED)
+            return
+        }
+        if(route.launched) {
+            completed(null)
+            return
+        }
+        if(!visible || isFinishing || !InstallAuthorizationAccess.canHoldAuthorization(this)) {
             permissionDetours.markLaunchFailed(requestId)
             persistPermissionDetourState()
-            return if (visible) InstallAuthorizationAccess.OPEN_BLOCKED else InstallAuthorizationAccess.OPEN_UNAVAILABLE
+            completed(if(visible) InstallAuthorizationAccess.OPEN_BLOCKED else InstallAuthorizationAccess.OPEN_UNAVAILABLE)
+            return
         }
-        val requestCode = if (route.owner == PermissionDetourOwner.ENTRY) ENTRY_PERMISSION else InstallCoordinator.PERMISSION
-        val outcome = InstallAuthorizationAccess.openSettings(this, requestCode)
-        if (outcome == null) {
-            permissionDetours.markLaunched(requestId)
-            persistPermissionDetourState()
-            AndroidDiagnostics.permissionRoute("launched", route.owner, "install")
-            return null
+        persistPermissionDetourState { saved ->
+            val latest=permissionDetours.current
+            if(!saved) {
+                permissionDetours.markLaunchFailed(requestId)
+                persistPermissionDetourState()
+                AndroidDiagnostics.permissionRoute("failed",route.owner,"unavailable")
+                completed(InstallAuthorizationAccess.OPEN_STORAGE_UNAVAILABLE)
+                return@persistPermissionDetourState
+            }
+            if(latest?.requestId==requestId && latest.launched) {
+                completed(null)
+                return@persistPermissionDetourState
+            }
+            if(!visible || isFinishing || latest?.requestId!=requestId) {
+                permissionDetours.markLaunchFailed(requestId)
+                persistPermissionDetourState()
+                AndroidDiagnostics.permissionRoute("failed",route.owner,"unavailable")
+                completed(InstallAuthorizationAccess.OPEN_UNAVAILABLE)
+                return@persistPermissionDetourState
+            }
+            val requestCode = if (route.owner == PermissionDetourOwner.ENTRY) ENTRY_PERMISSION else InstallCoordinator.PERMISSION
+            val outcome = InstallAuthorizationAccess.openSettings(this, requestCode)
+            if(outcome==null) {
+                permissionDetours.markLaunched(requestId)
+                persistPermissionDetourState()
+                AndroidDiagnostics.permissionRoute("launched",route.owner,"install")
+                completed(null)
+            } else {
+                permissionDetours.markLaunchFailed(requestId)
+                persistPermissionDetourState()
+                AndroidDiagnostics.permissionRoute("failed",route.owner,
+                    if(outcome==InstallAuthorizationAccess.OPEN_UNAVAILABLE) "unavailable" else "blocked")
+                completed(outcome)
+            }
         }
-        permissionDetours.markLaunchFailed(requestId)
-        persistPermissionDetourState()
-        AndroidDiagnostics.permissionRoute("failed", route.owner, if (outcome == InstallAuthorizationAccess.OPEN_UNAVAILABLE) "unavailable" else "blocked")
-        return outcome
     }
 
     /** One automatic authorization route for a deliberate fresh page entry only. */
     private fun beginFreshPageEntry() {
-        if (!freshEntryPending) return
+        if (!permissionRouteStorageReady || !freshEntryPending) return
         freshEntryPending = false
         val granted = InstallAuthorizationAccess.granted(this)
         val shouldRequest = InstallAuthorizationAccess.canHoldAuthorization(this) &&
@@ -416,6 +586,7 @@ class UpdateActivity : Activity() {
         updates.state.phase == UpdatePhase.AwaitingPermission || updates.state.phase == UpdatePhase.AwaitingInstaller
 
     private fun allowInstallAuthorization() {
+        if(!permissionRouteStorageReady) { renderInstallPermissionState(); return }
         val granted = InstallAuthorizationAccess.granted(this) == true
         if (!InstallPermissionEntryPolicy.shouldOpenFromAction(granted, permissionRouteInFlight)
             || permissionDetours.current != null) {
@@ -427,36 +598,48 @@ class UpdateActivity : Activity() {
     }
 
     private fun launchInstallAuthorizationSettings() {
-        if (!visible || permissionRouteInFlight || permissionDetours.current != null) return
-        if (InstallAuthorizationAccess.granted(this) == true) {
-            renderInstallPermissionState(); focusId = 101; checkButton.requestFocus(); return
+        if(!permissionRouteStorageReady || !visible || permissionRouteInFlight || permissionDetours.current!=null) return
+        if(InstallAuthorizationAccess.granted(this)==true) {
+            renderInstallPermissionState(); focusId=101; checkButton.requestFocus(); return
         }
-        if (!InstallAuthorizationAccess.canHoldAuthorization(this)) {
+        if(!InstallAuthorizationAccess.canHoldAuthorization(this)) {
             renderInstallPermissionState(InstallAuthorizationAccess.explanation(this))
-            allowInstallsButton.isEnabled = true
             return
         }
-        if (installerRouteOwnsSettings()) { renderInstallPermissionState(); return }
-        val start = permissionDetours.beginEntry()
-        if (start.kind != PermissionDetourStartKind.STARTED || start.route == null) return
-        persistPermissionDetourState()
-        AndroidDiagnostics.permissionRoute("requested", PermissionDetourOwner.ENTRY, "entry")
+        if(installerRouteOwnsSettings()) { renderInstallPermissionState(); return }
+        val start=permissionDetours.beginEntry()
+        if(start.kind!=PermissionDetourStartKind.STARTED || start.route==null) return
+        val requestId=start.route.requestId
+        AndroidDiagnostics.permissionRoute("requested",PermissionDetourOwner.ENTRY,"entry")
         renderInstallPermissionState()
-        val outcome = InstallAuthorizationAccess.openSettings(this, ENTRY_PERMISSION)
-        if (outcome == null) {
-            permissionDetours.markLaunched(start.route.requestId)
+        persistPermissionDetourState { saved ->
+            if(!saved) {
+                permissionDetours.markLaunchFailed(requestId)
+                persistPermissionDetourState()
+                AndroidDiagnostics.permissionRoute("failed",PermissionDetourOwner.ENTRY,"unavailable")
+                renderInstallPermissionState("YTArk could not save the Android install-authorization request. No Settings screen was opened; select Allow installs to retry.")
+                return@persistPermissionDetourState
+            }
+            if(!visible || isFinishing || permissionDetours.current?.requestId!=requestId) {
+                permissionDetours.markLaunchFailed(requestId)
+                persistPermissionDetourState()
+                return@persistPermissionDetourState
+            }
+            val outcome=InstallAuthorizationAccess.openSettings(this,ENTRY_PERMISSION)
+            if(outcome==null) {
+                permissionDetours.markLaunched(requestId)
+                persistPermissionDetourState()
+                AndroidDiagnostics.permissionRoute("launched",PermissionDetourOwner.ENTRY,"entry")
+                return@persistPermissionDetourState
+            }
+            permissionDetours.markLaunchFailed(requestId)
             persistPermissionDetourState()
-            AndroidDiagnostics.permissionRoute("launched", PermissionDetourOwner.ENTRY, "entry")
-            return
+            AndroidDiagnostics.permissionRoute("failed",PermissionDetourOwner.ENTRY,
+                if(outcome==InstallAuthorizationAccess.OPEN_UNAVAILABLE) "unavailable" else "blocked")
+            renderInstallPermissionState(if(outcome==InstallAuthorizationAccess.OPEN_UNAVAILABLE)
+                "This Android version has no supported install-authorization screen. Check this TV's Security settings; update checks and release notes remain available."
+            else "Android could not open the install-authorization screen. Check this TV's Security settings, then select Allow installs to retry.")
         }
-        permissionDetours.markLaunchFailed(start.route.requestId)
-        persistPermissionDetourState()
-        AndroidDiagnostics.permissionRoute("failed", PermissionDetourOwner.ENTRY,
-            if (outcome == InstallAuthorizationAccess.OPEN_UNAVAILABLE) "unavailable" else "blocked")
-        renderInstallPermissionState(if (outcome == InstallAuthorizationAccess.OPEN_UNAVAILABLE)
-            "This Android version has no supported install-authorization screen. Check this TV's Security settings; update checks and release notes remain available."
-        else "Android could not open the install-authorization screen. Check this TV's Security settings, then select Allow installs to retry.")
-        allowInstallsButton.isEnabled = true
     }
 
     private fun observePermissionReturn(requestCode: Int? = null, fromActivityResult: Boolean = false) {
@@ -515,12 +698,15 @@ class UpdateActivity : Activity() {
         super.onResume()
         visible=true
         AndroidDiagnostics.record("page_visible")
-        observePermissionReturn()
+        if(!permissionRouteStorageReady) loadPermissionDetourState()
         updates.observe(observer)
         consumeInstallStatus(intent)
-        reconcileMissingPermissionRoute(updates.state)
-        finishEntryPermissionReturn()
-        beginFreshPageEntry()
+        if(permissionRouteStorageReady) {
+            observePermissionReturn()
+            reconcileMissingPermissionRoute(updates.state)
+            finishEntryPermissionReturn()
+            beginFreshPageEntry()
+        }
         renderInstallPermissionState()
         if(updates.state.phase==UpdatePhase.AwaitingInstaller) window?.decorView?.postDelayed({ if(visible) updates.reconcileInstallerReturn() }, 1200)
         (findViewById<View>(focusId) ?: checkButton).let { if(it.isEnabled && it.visibility==View.VISIBLE) it.requestFocus() else requestFallbackFocus() }
@@ -534,6 +720,14 @@ class UpdateActivity : Activity() {
         }
         visible=false; updates.remove(observer); super.onPause()
     }
+    override fun onDestroy() {
+        textDialog?.let { dialog ->
+            dialog.setOnDismissListener(null)
+            dialog.dismiss()
+        }
+        textDialog=null
+        super.onDestroy()
+    }
     override fun onSaveInstanceState(out: Bundle) {
         out.putInt("focus",currentFocus?.id ?: focusId)
         out.putBoolean("fresh_entry_pending",freshEntryPending)
@@ -544,14 +738,14 @@ class UpdateActivity : Activity() {
     override fun onActivityResult(request: Int,result: Int,data: Intent?) {
         super.onActivityResult(request,result,data)
         when (request) {
-            ENTRY_PERMISSION -> {
-                observePermissionReturn(ENTRY_PERMISSION, fromActivityResult=true)
-                finishEntryPermissionReturn()
-                installer.stateChanged(updates.state)
-            }
-            InstallCoordinator.PERMISSION -> {
-                observePermissionReturn(InstallCoordinator.PERMISSION, fromActivityResult=true)
-                installer.stateChanged(updates.state)
+            ENTRY_PERMISSION, InstallCoordinator.PERMISSION -> {
+                if(!permissionRouteStorageReady) {
+                    pendingPermissionActivityResult=request
+                } else {
+                    observePermissionReturn(request, fromActivityResult=true)
+                    if(request==ENTRY_PERMISSION) finishEntryPermissionReturn()
+                    installer.stateChanged(updates.state)
+                }
             }
             InstallCoordinator.INSTALLER -> {
                 installer.result(request)
@@ -600,8 +794,12 @@ class UpdateActivity : Activity() {
             s.phase==UpdatePhase.Failed && s.stage!="check" && s.candidate!=null -> "Retry download"
             else -> "Download & install"
         }
-        primaryButton.isEnabled=!s.busy && s.candidate!=null
-        primaryButton.contentDescription=if(s.candidate==null) "Download update unavailable. No compatible newer release found." else primaryButton.text
+        primaryButton.isEnabled=!s.busy && s.candidate!=null && (s.verifiedPath==null || permissionRouteStorageReady)
+        primaryButton.contentDescription=when {
+            s.candidate==null -> "Download update unavailable. No compatible newer release found."
+            s.verifiedPath!=null && !permissionRouteStorageReady -> "Install update is waiting for saved Android permission-route state to load."
+            else -> primaryButton.text
+        }
         cancelButton.visibility=if(s.phase==UpdatePhase.Downloading) View.VISIBLE else View.GONE
         progress.visibility=if(s.phase in setOf(UpdatePhase.Downloading,UpdatePhase.Validating)) View.VISIBLE else View.GONE
         progress.isIndeterminate=s.phase==UpdatePhase.Validating || (s.phase==UpdatePhase.Downloading && (s.candidate?.size ?: 0L)<=0L)

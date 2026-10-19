@@ -142,16 +142,16 @@ describe('stable release validation', () => {
       body: 'YTArk 3.8\n\nAndroid versionCode: 3080000\n',
       assets: [{
         name: asset,
-        size: 98442454,
+        size: 98446550,
         browser_download_url:
           `https://github.com/2archiver/YTArk/releases/download/v3.8.0/${asset}`,
-        digest: `sha256:${'ef'.repeat(32)}`,
+        digest: 'sha256:da475dcbd8e69c310cfb2e104b1ae8c9283066f09b6cbbf5655c5263e9841dc1',
       }],
     }), { installedVersion: '3.7.0', architecture: 'armeabi-v7a' });
     assert.equal(error, undefined);
     assert.equal(release.version, '3.8.0');
     assert.equal(release.assetName, asset);
-    assert.equal(release.sha256Published, 'ef'.repeat(32));
+    assert.equal(release.sha256Published, 'da475dcbd8e69c310cfb2e104b1ae8c9283066f09b6cbbf5655c5263e9841dc1');
     assert.equal(release.newer, true);
   });
 

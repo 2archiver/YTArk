@@ -22,9 +22,36 @@ Conventions:
 - Capabilities inherited from TizenTube and TizenTubeCobalt are listed under
   "Upstream base and inherited capabilities", not as YTArk additions.
 
-## [3.8.0] — Unreleased
+## [3.9.0] — Unreleased
 
-> Not yet published. Planned tag `v3.8.0` · versionCode 3080000 · userscript `s39` · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.
+> Not yet published. Planned tag `v3.9.0` · versionCode 3090000 · userscript `s40` · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.
+
+Reliable updates, simpler profiles, compact diagnostics.
+
+### Added
+- Android updater storage recovery is serialized and retryable; a failed optional cleanup no longer blocks release metadata checks.
+- The official single-APK ARMv7 release digest is validated directly; a checksum sidecar is optional when GitHub publishes the digest.
+### Changed
+- One Off/On setting preserves manual account flows.
+  - Off suppresses only automatic profile prompts; manual account and sign-in flows remain available.
+- Four Diagnostics rows show recording, real startup mode, and result.
+  - The startup summary also reports a bounded valid duration; native details scroll and restore Back/focus.
+### Fixed
+- Checks survive storage outages; transfers and installs require usable storage.
+  - Failures are explicit and retryable; no secondary uninitialized-controller error is thrown.
+- Native diagnostics I/O moved off the UI thread.
+### Removed
+- Removed the guest sign-in reminder preference/runtime behavior and the retired diagnostic labels, session browser, advanced reports, and commands.
+### Known limitations
+- Android updater compilation, signed-candidate inspection, TV permission-return, in-place upgrade, playback, and Google TV behavior remain UNVERIFIED until their recorded checks run.
+- If the 3.8 updater cannot recover, install the signed 3.9 APK manually over the existing app once; do not uninstall or clear app data.
+### Validation
+- Regression coverage is added for storage recovery/wiring, release digest fallback, account-setting migration, reversible automatic-prompt suppression, and the four-row diagnostics UI.
+- Executed host-test results and unavailable Android/device checks are recorded in `docs/YTARK-3.9.0-EVIDENCE.md`.
+
+## [3.8.0] — 2026-10-19
+
+> Published 2026-10-19 02:38 UTC as [YTArk 3.8](https://github.com/2archiver/YTArk/releases/tag/v3.8.0) · tag `v3.8.0` · versionCode 3080000 · userscript `s39` · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.
 
 Reliable updater errors, one ARMv7 APK, clear upgrades.
 

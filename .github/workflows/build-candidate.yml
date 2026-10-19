@@ -325,7 +325,7 @@ jobs:
       - name: Upload the ARMv7 candidate artefact (not a release)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ytark-3.8.0-armv7-candidate-${{ github.event.pull_request.head.sha || github.sha }}
+          name: ytark-3.9.0-armv7-candidate-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             release-assets/*
             update-smoke/eligibility.properties

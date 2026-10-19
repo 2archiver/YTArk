@@ -86,7 +86,7 @@ function harness({ enabled = false, storage = new MemoryStorage(), frameCallback
   };
 }
 
-test('startup comparison labels keep every allowlisted destination distinct', () => {
+test('safe launch destinations are reduced to fixed categories', () => {
   const destinations = [
     ['FEtopics', 'home'], ['FEtopics_sports', 'sports'], ['FEtopics_news', 'news'],
     ['FEtopics_music', 'music'], ['FEtopics_podcasts', 'podcasts'],
@@ -128,17 +128,19 @@ test('launch capture writes only allowlisted local fields and names a launch ori
   assert.equal(saved.context.packageVersion, null);
   assert.equal(saved.context.startupDestination, 'home', 'the startup destination is reduced to a category');
   assert.equal(saved.context.reloadHomeOnStartup, true);
+  assert.equal(saved.context.startupComparisonKind, undefined, 'retired user launch labels are neither stored nor displayed');
   assert.equal(saved.events[0].clock, 'performance');
-  assert.ok(h.recorder.report().includes('not Android process start'));
-  assert.ok(h.recorder.report().includes('not input-to-photon'));
-  assert.match(h.recorder.report(), /nothing is sent automatically/i);
+  const summary = h.recorder.startupSummary();
+  assert.match(summary, /Scope: userscript evaluation/);
+  assert.match(summary, /not Android app start/);
+  assert.doesNotMatch(summary, /remote-handler|account|private\\.invalid|should-not-be-read|cold|warm/i);
   h.recorder.disable();
 });
 
-test('partial capture, interruption, report retention and Clear are separate bounded operations', () => {
+test('partial capture, interrupted-draft recovery, retention and Clear are separate bounded operations', () => {
   const storage = new MemoryStorage();
-  const first = harness({ enabled: true, storage });
-  first.recorder.startNewSample();
+  const first = harness({ enabled: false, storage });
+  first.recorder.enable({ capture: 'partial' });
   assert.equal(first.recorder.active.capture, 'partial');
   first.recorder.record('controls-ready', 'observed', 'observed');
   first.recorder._persist({ draft: first.recorder._plainSession(first.recorder.active) });
@@ -146,28 +148,29 @@ test('partial capture, interruption, report retention and Clear are separate bou
 
   // A new userscript instance sees an unfinished draft as interrupted, not as a completed sample.
   const restarted = harness({ enabled: true, storage });
-  const recent = restarted.recorder.readRecentSessions();
-  assert.equal(recent.sessions[1].status, 'interrupted');
-  assert.equal(recent.sessions[1].capture, 'partial');
-  assert.equal(recent.sessions[0].capture, 'launch');
+  assert.equal(restarted.recorder.sessions[0].status, 'interrupted');
+  assert.equal(restarted.recorder.sessions[0].capture, 'partial');
+  assert.equal(restarted.recorder.active.capture, 'launch');
+  assert.match(restarted.recorder.startupSummary(), /Latest sample: Launch · active/);
   restarted.recorder._finish('complete');
   restarted.runNextTimer(); // final persistence
   const historyBeforeDisable = storage.getItem(BROWSER_DIAGNOSTICS_KEY);
   assert.ok(historyBeforeDisable);
   assert.equal(storage.getItem(BROWSER_DIAGNOSTICS_DRAFT_KEY), null);
-  restarted.recorder.startNewSample();
-  restarted.recorder._persist({ draft: restarted.recorder._plainSession(restarted.recorder.active) });
-  restarted.recorder.disable();
+
+  const unfinished = harness({ enabled: true, storage });
+  unfinished.recorder._persist({ draft: unfinished.recorder._plainSession(unfinished.recorder.active) });
+  unfinished.recorder.disable();
   assert.equal(storage.getItem(BROWSER_DIAGNOSTICS_DRAFT_KEY), null, 'disable immediately discards the unfinished draft');
-  assert.equal(storage.getItem(BROWSER_DIAGNOSTICS_KEY), historyBeforeDisable, 'disable preserves completed report history');
-  assert.equal(restarted.recorder.record('controls-ready'), false, 'no events are collected after disable');
-  restarted.recorder.clear();
+  assert.equal(storage.getItem(BROWSER_DIAGNOSTICS_KEY), historyBeforeDisable, 'disable preserves completed local samples');
+  assert.equal(unfinished.recorder.record('controls-ready'), false, 'no events are collected after disable');
+  unfinished.recorder.clear();
   assert.equal(storage.getItem(BROWSER_DIAGNOSTICS_KEY), null);
   assert.equal(storage.getItem(BROWSER_DIAGNOSTICS_DRAFT_KEY), null);
-  assert.equal(restarted.recorder.status, 'off');
+  assert.equal(unfinished.recorder.status, 'off');
 });
 
-test('Clear while enabled clears old reports and begins a new partial sample', () => {
+test('Clear while enabled removes saved samples and begins a new partial sample', () => {
   const storage = new MemoryStorage({
     [BROWSER_DIAGNOSTICS_KEY]: JSON.stringify({ schema: 1, sessions: [], evicted: 0 }),
     [BROWSER_DIAGNOSTICS_DRAFT_KEY]: '{"schema":1}',
@@ -187,7 +190,7 @@ test('a later monotonic-clock rollback degrades the sample-level clock label', (
   h.setTime(9);
   assert.equal(h.recorder.record('controls-ready', 'observed', 'observed'), true);
   assert.equal(h.recorder.active.clockQuality, 'degraded');
-  assert.match(h.recorder.report(), /Clock: performance \(degraded\)/);
+  assert.match(h.recorder.startupSummary(), /Valid startup duration for latest sample: unavailable/);
   h.recorder.disable();
 });
 
@@ -238,7 +241,9 @@ test('the active draft shares the 20-session retention cap with completed histor
   const h = harness({ enabled: true, storage });
   assert.equal(h.recorder.sessions.length, 19);
   assert.equal(h.recorder.evicted, 1);
-  assert.equal(h.recorder.readRecentSessions().sessions.length, BROWSER_DIAGNOSTICS_LIMITS.sessions);
+  assert.equal(h.recorder.sessions.length, BROWSER_DIAGNOSTICS_LIMITS.sessions - 1,
+    'the active draft reserves one slot even though session browsing is no longer exposed');
+  assert.ok(h.recorder.active, 'the one remaining slot belongs to the active sample');
   h.runTimer(BROWSER_DIAGNOSTICS_LIMITS.draftBatchMs);
   const history = JSON.parse(storage.getItem(BROWSER_DIAGNOSTICS_KEY));
   const draft = JSON.parse(storage.getItem(BROWSER_DIAGNOSTICS_DRAFT_KEY));
@@ -280,8 +285,9 @@ test('remote and playback events are explicit proxies; unavailable frame callbac
   const opportunity = h.recorder.active.events.find(event => event.event === 'remote-handler-render-opportunity');
   assert.equal(opportunity.outcome, 'dpad-up');
   assert.equal(opportunity.quality, 'proxy');
-  assert.ok(h.recorder.report().includes('rendering-opportunity proxy'));
-  assert.ok(h.recorder.report().includes('not input-to-photon'));
+  const summary = h.recorder.startupSummary();
+  assert.doesNotMatch(summary, /remote-handler-sync-duration|first-video-frame-callback|account|video ID/i,
+    'advanced event browsing and identifiers are not exposed in the startup summary');
   h.recorder.disable();
 
   const noFrame = harness({ enabled: true, frameCallbacks: false });

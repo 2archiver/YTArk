@@ -28,6 +28,7 @@ const now = Date.now();
 mockLocalStorage['ytaf-configuration'] = JSON.stringify({
   enableWhoIsWatchingMenu: false,
 });
+mockLocalStorage['yt.leanback.default::identity'] = 'account-data-sentinel';
 mockLocalStorage['yt.leanback.default::recurring_actions'] = JSON.stringify({
   data: { data: {
     'startup-screen-account-selector-with-guest': { lastFired: now + 7 * 24 * 60 * 60 * 1000 },
@@ -41,8 +42,9 @@ const { removeAdSlotRenderers } = await import('../features/adRendererPolicy.js'
 const {
   retirementState, retireUserAgentOverride, RETIRED_MARKER_KEY, LEGACY_APPLIED_KEY, LEGACY_UA_KEY,
 } = await import('../features/userAgentRetirement.js');
-const { restoreGuestAccountSelector, restoreLegacyAccountActions } =
-  await import('../ui/disableWhosWatching.js');
+const {
+  restoreLegacyAccountActions, applyAutomaticProfilePickerPolicy,
+} = await import('../ui/disableWhosWatching.js');
 
 class FakeStyle {
   constructor() { this.values = new Map(); }
@@ -90,7 +92,7 @@ class FakeElement {
   }
 }
 
-describe('guest/sign-in renderer preservation', () => {
+describe('guest/sign-in renderer preservation and legacy scheduler repair', () => {
   it('removes ad slots without removing YouTube guest or account actions', () => {
     const guestFeedNudge = { feedNudgeRenderer: { text: 'Sign in', button: 'Continue as guest' } };
     const guestAlert = { alertWithActionsRenderer: { actions: ['Sign in', 'Continue as guest'] } };
@@ -104,25 +106,77 @@ describe('guest/sign-in renderer preservation', () => {
     assert.equal(removeAdSlotRenderers(null), null);
   });
 
-  it('restores legacy Continue as guest and sign-in actions once without rescheduling them', () => {
+  it('uses a reversible, one-shot policy for automatic profile prompts only', () => {
+    const actions = { data: { data: {
+      'startup-screen-account-selector-with-guest': { lastFired: 123 },
+      'startup-screen-signed-out-welcome-back': {},
+      whos_watching_fullscreen_zero_accounts: { lastFired: '456' },
+      unrelated: { lastFired: 789, opaque: 'must-survive' },
+    } } };
+    const off = applyAutomaticProfilePickerPolicy(actions, false);
+    assert.equal(off.changed, true);
+    assert.equal(off.markerChanged, true);
+    assert.equal(actions.data.data['startup-screen-account-selector-with-guest'].lastFired, 253402300799999);
+    assert.equal(actions.data.data['startup-screen-signed-out-welcome-back'].lastFired, 253402300799999);
+    assert.equal(actions.data.data.whos_watching_fullscreen_zero_accounts.lastFired, 253402300799999);
+    assert.deepEqual(actions.data.data.unrelated, { lastFired: 789, opaque: 'must-survive' });
+    const repeated = applyAutomaticProfilePickerPolicy(actions, false, off.marker);
+    assert.equal(repeated.changed, false);
+    assert.equal(repeated.markerChanged, false, 'Off is idempotent; there is no timer or recurring write');
+
+    // If YouTube updates its scheduler while Off, On preserves that newer value
+    // instead of overwriting it with the stale value from our marker.
+    actions.data.data['startup-screen-account-selector-with-guest'].lastFired = 999;
+    const on = applyAutomaticProfilePickerPolicy(actions, true, repeated.marker);
+    assert.equal(on.marker, null);
+    assert.equal(actions.data.data['startup-screen-account-selector-with-guest'].lastFired, 999);
+    assert.equal(Object.hasOwn(actions.data.data['startup-screen-signed-out-welcome-back'], 'lastFired'), false);
+    assert.equal(actions.data.data.whos_watching_fullscreen_zero_accounts.lastFired, '456');
+    assert.deepEqual(actions.data.data.unrelated, { lastFired: 789, opaque: 'must-survive' });
+  });
+
+  it('restores only legacy automatic selector scheduling once, without touching account data', () => {
     const signedOutWelcome = now + 7 * 24 * 60 * 60 * 1000;
     const previouslySuppressed = { data: { data: {
       'startup-screen-account-selector-with-guest': { lastFired: signedOutWelcome },
       'startup-screen-signed-out-welcome-back': { lastFired: signedOutWelcome },
+      whos_watching_fullscreen_zero_accounts: { lastFired: signedOutWelcome },
     } } };
     assert.deepEqual(restoreLegacyAccountActions(previouslySuppressed, now), [
       'startup-screen-account-selector-with-guest',
       'startup-screen-signed-out-welcome-back',
+      'whos_watching_fullscreen_zero_accounts',
     ]);
     assert.equal(previouslySuppressed.data.data['startup-screen-account-selector-with-guest'].lastFired, 0);
     assert.equal(previouslySuppressed.data.data['startup-screen-signed-out-welcome-back'].lastFired, 0);
-    assert.equal(restoreGuestAccountSelector(previouslySuppressed, now), false);
+    assert.equal(previouslySuppressed.data.data.whos_watching_fullscreen_zero_accounts.lastFired, 0);
     assert.deepEqual(restoreLegacyAccountActions(previouslySuppressed, now), []);
 
-    const persisted = JSON.parse(mockLocalStorage['yt.leanback.default::recurring_actions']);
+    const SUPPRESSED = 253402300799999;
+    let persisted = JSON.parse(mockLocalStorage['yt.leanback.default::recurring_actions']);
+    for (const action of [
+      persisted.data.data['startup-screen-account-selector-with-guest'],
+      persisted.data.data['startup-screen-signed-out-welcome-back'],
+      persisted.data.data.whos_watching_fullscreen_zero_accounts,
+    ]) assert.equal(action.lastFired, SUPPRESSED, 'Off suppresses only known automatic profile screens without a timer loop');
+    assert.equal(mockLocalStorage['ytark-account-selector-unthrottled-v2'], '1');
+    assert.equal(mockLocalStorage['yt.leanback.default::identity'], 'account-data-sentinel');
+    assert.equal(configRead('showAutomaticProfilePicker'), false);
+    assert.equal(configRead('enableWhoIsWatchingMenu'), undefined);
+
+    configWrite('showAutomaticProfilePicker', true);
+    persisted = JSON.parse(mockLocalStorage['yt.leanback.default::recurring_actions']);
     assert.equal(persisted.data.data['startup-screen-account-selector-with-guest'].lastFired, 0);
     assert.equal(persisted.data.data['startup-screen-signed-out-welcome-back'].lastFired, 0);
-    assert.equal(mockLocalStorage['ytark-account-flow-preserved-v1'], '1');
+    assert.equal(persisted.data.data.whos_watching_fullscreen_zero_accounts.lastFired, 0);
+    assert.equal(mockLocalStorage['ytark-automatic-profile-picker-state-v1'], undefined);
+    configWrite('showAutomaticProfilePicker', false);
+    const onceOff = mockLocalStorage['yt.leanback.default::recurring_actions'];
+    configWrite('showAutomaticProfilePicker', false);
+    assert.equal(mockLocalStorage['yt.leanback.default::recurring_actions'], onceOff,
+      'reapplying Off is idempotent and does not create recurring storage writes');
+    configWrite('showAutomaticProfilePicker', true);
+    assert.equal(mockLocalStorage['yt.leanback.default::identity'], 'account-data-sentinel');
   });
 });
 

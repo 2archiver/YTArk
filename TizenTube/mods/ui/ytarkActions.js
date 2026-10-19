@@ -8,10 +8,10 @@ import { configRead, resetConfigKeys } from '../config.js';
 import { showToast } from './ytUI.js';
 import {
   showSettingsMenu, showPanel, showResetConfirm, resetScope,
-  showBrowserStartupSummary, showBrowserDiagnosticsReport, showBrowserDiagnosticSessions, showBrowserDiagnosticsClearConfirm,
+  showBrowserStartupSummary, showBrowserDiagnosticsClearConfirm,
 } from './settings.js';
 import {
-  setBrowserDiagnosticsEnabled, startBrowserDiagnosticSample, clearBrowserDiagnosticData,
+  setBrowserDiagnosticsEnabled, clearBrowserDiagnosticData,
 } from '../features/browserDiagnostics.js';
 import { buildSettingsTree, findNode } from './settingsRegistry.js';
 import { showChangelog, showChangelogVersion, showChangelogNote, showReleaseQr } from './changelogReader.js';
@@ -65,7 +65,7 @@ export function handleYtarkAction(action, parameters) {
       const message = result.enabled
         ? (result.preferenceSaved
           ? (result.storageState === 'unavailable'
-            ? 'Browser diagnostics enabled, but local storage is unavailable so reports may not persist. A full launch capture starts on the next launch.'
+            ? 'Browser diagnostics enabled, but local storage is unavailable so samples may not persist. A full launch capture starts on the next launch.'
             : 'Browser diagnostics enabled. Measurements stay on this device; a full browser launch capture starts on the next launch.')
           : (result.storageState === 'unavailable'
             ? 'Recording started for this session, but the enable choice could not be saved and local storage is unavailable.'
@@ -74,38 +74,17 @@ export function handleYtarkAction(action, parameters) {
           'Browser diagnostics stopped immediately; the unfinished sample was discarded.',
           ...(result.preferenceSaved ? [] : ['The opt-out could not be saved and may not survive an app restart.']),
           ...(result.storageState === 'unavailable' ? ['The recorder could not confirm removal of the unfinished sample.'] : []),
-          'Completed reports remain until cleared.',
+          'Saved samples remain until cleared.',
         ].join(' ');
       showToast('YTArk Diagnostics', message);
-      defer(() => showPanel('about.diagnostics', { update: true }));
-      return true;
-    }
-    case 'YTARK_DIAGNOSTICS_NEW_SAMPLE': {
-      const result = startBrowserDiagnosticSample();
-      showToast('YTArk Diagnostics', result.preferenceSaved === false
-        ? 'A partial sample started, but recording could not be saved as enabled for the next launch.'
-        : result.storageState === 'unavailable'
-          ? 'A partial sample started in memory, but local storage is unavailable so it may not persist.'
-          : 'A new partial browser sample started. Earlier events were not reconstructed.');
-      defer(() => showPanel('about.diagnostics', { update: true }));
+      defer(() => showPanel('about.diagnostics', { update: true, focusIndex: p.returnFocusIndex }));
       return true;
     }
     case 'YTARK_DIAGNOSTICS_STARTUP_SUMMARY':
-      showBrowserStartupSummary();
+      showBrowserStartupSummary(p);
       return true;
-    case 'YTARK_DIAGNOSTICS_LATEST':
-      showBrowserDiagnosticsReport();
-      return true;
-    case 'YTARK_DIAGNOSTICS_SESSIONS':
-      showBrowserDiagnosticSessions();
-      return true;
-    case 'YTARK_DIAGNOSTICS_REPORT': {
-      const index = Number(p.index);
-      showBrowserDiagnosticsReport(Number.isInteger(index) && index >= 0 ? index : null);
-      return true;
-    }
     case 'YTARK_DIAGNOSTICS_CLEAR_CONFIRM':
-      showBrowserDiagnosticsClearConfirm();
+      showBrowserDiagnosticsClearConfirm(p);
       return true;
     case 'YTARK_DIAGNOSTICS_CLEAR': {
       const cleared = clearBrowserDiagnosticData();
@@ -114,15 +93,15 @@ export function handleYtarkAction(action, parameters) {
         ? (enabled
           ? 'Browser diagnostic data cleared. Recording restarted as a new partial sample.'
           : 'Browser diagnostic data cleared. Other settings and app data were not changed.')
-        : 'In-memory browser data was cleared, but local storage could not confirm removal of saved reports. Other settings and app data were not changed.');
-      defer(() => showPanel('about.diagnostics', { update: true }));
+        : 'In-memory browser data was cleared, but local storage could not confirm removal of saved samples. Other settings and app data were not changed.');
+      defer(() => showPanel('about.diagnostics', { update: true, focusIndex: p.returnFocusIndex }));
       return true;
     }
     case 'YTARK_MENU_SHOW':
       showSettingsMenu(p.menuId || 'root', { focusId: p.focusId, update: !!p.update });
       return true;
     case 'YTARK_PANEL_SHOW':
-      showPanel(p.id, { update: !!p.update });
+      showPanel(p.id, { update: !!p.update, focusIndex: p.focusIndex });
       return true;
     case 'YTARK_VERSION_REREAD':
       // Ask the platform for the installed package metadata again and show the

@@ -30,6 +30,73 @@ import java.util.concurrent.atomic.AtomicReference
 
 class HttpFailure(val status: Int, val retryAt: Long, message: String, val category: String) : IOException(message)
 class ReleaseMetadataFailure @JvmOverloads constructor(message: String, cause: Throwable? = null) : IOException(message, cause)
+class UpdateStorageFailure @JvmOverloads constructor(message: String, cause: Throwable? = null) : IOException(message, cause)
+
+/** A retryable, synchronized dependency gate shared by initialization and later operations. */
+sealed class DependencyResult<out T> {
+    data class Ready<T>(val value: T) : DependencyResult<T>()
+    data class Unavailable(val cause: Throwable) : DependencyResult<Nothing>()
+}
+
+class RetryableDependency<T>(
+    private val create: () -> T,
+    private val prepare: (T) -> Unit,
+) {
+    private val lock = Any()
+    private var value: T? = null
+    private var ready = false
+    private var failure: Throwable? = null
+
+    fun acquire(): DependencyResult<T> = synchronized(lock) {
+        try {
+            val current = value ?: create().also { value = it }
+            if (!ready) {
+                prepare(current)
+                ready = true
+            }
+            failure = null
+            DependencyResult.Ready(current)
+        } catch (error: Throwable) {
+            if (error is VirtualMachineError || error is ThreadDeath) throw error
+            if (error is InterruptedException) Thread.currentThread().interrupt()
+            failure = error
+            DependencyResult.Unavailable(error)
+        }
+    }
+
+    fun readyValue(): T? = synchronized(lock) { value.takeIf { ready } }
+    fun lastFailure(): Throwable? = synchronized(lock) { failure }
+}
+
+/**
+ * Separates optional updater work (metadata checks/cleanup) from actions that
+ * require app-private storage (download/validation/install). Optional callers
+ * receive an explicit unavailable result and can continue non-storage work;
+ * required callers get a typed, visible failure.
+ */
+class UpdateStorageAccess<T>(
+    private val dependency: RetryableDependency<T>,
+    private val ensureAvailable: (T) -> Unit,
+) {
+    fun optional(): DependencyResult<T> = when (val acquired = dependency.acquire()) {
+        is DependencyResult.Unavailable -> acquired
+        is DependencyResult.Ready -> try {
+            ensureAvailable(acquired.value)
+            acquired
+        } catch (error: Throwable) {
+            if (error is VirtualMachineError || error is ThreadDeath) throw error
+            if (error is InterruptedException) Thread.currentThread().interrupt()
+            DependencyResult.Unavailable(error)
+        }
+    }
+
+    fun required(): T = when (val result = optional()) {
+        is DependencyResult.Ready -> result.value
+        is DependencyResult.Unavailable -> throw UpdateStorageFailure(
+            "Update storage is unavailable. Free space or restore app storage access, then retry.", result.cause,
+        )
+    }
+}
 
 class RemoteAsset @JvmOverloads constructor(
     @JvmField val name: String,
@@ -120,9 +187,14 @@ object UpdateTexts {
     private val privatePath = Regex("(?i)(?<![A-Za-z0-9])/(?:data|storage|sdcard|mnt|home|tmp|private|var|proc|root|system|vendor|users|android)/[^\\s\"'<>]+")
     private val windowsPath = Regex("(?i)\\b[A-Z]:[\\\\/][^\\s\"'<>]+")
 
-    @JvmStatic fun sanitize(raw: String?): String {
-        if (raw.isNullOrBlank()) return ""
-        var text = raw
+    @JvmStatic fun sanitize(raw: String?): String = sanitizeBounded(raw, 240)
+
+    /** Same redactions with a caller-selected, hard-capped output budget. */
+    @JvmStatic fun sanitizeBounded(raw: String?, maxChars: Int): String {
+        if (raw.isNullOrBlank() || maxChars <= 0) return ""
+        // Normalize separators before secret matching so split Authorization /\nBearer
+        // values cannot escape merely because an old saved record wrapped a line.
+        var text = raw.replace(Regex("[\\r\\n\\t]+"), " ")
         text = authHeader.replace(text, "$1=[redacted]")
         text = bearerCred.replace(text, "authorization=[redacted]")
         text = secretPair.replace(text, "$1=[redacted]")
@@ -131,8 +203,9 @@ object UpdateTexts {
         text = privatePath.replace(text, "[path]")
         text = windowsPath.replace(text, "[path]")
         text = Regex("\\b\\d{1,3}(?:\\.\\d{1,3}){3}\\b").replace(text, "[ip]")
-        text = text.replace(Regex("[\\r\\n\\t]+"), " ").trim()
-        return if (text.length <= 240) text else text.take(237) + "..."
+        text = text.trim()
+        val limit = maxChars.coerceAtMost(16_384)
+        return if (text.length <= limit) text else if (limit <= 3) text.take(limit) else text.take(limit - 3) + "..."
     }
 
     @JvmStatic fun age(millis: Long): String {
@@ -294,6 +367,9 @@ class CheckDeduper {
         false
     }
 
+    /** Clear all joined work if the executor rejects the first queued check. */
+    fun abort() = synchronized(lock) { running = false; queuedManual = false }
+
     fun running(): Boolean = synchronized(lock) { running }
 }
 
@@ -399,10 +475,7 @@ object UpdateErrorMapper {
         val raw = chain.joinToString(" ") { it.message ?: "" }
         val lower = raw.lowercase(Locale.US)
         val detail = buildString {
-            append("Stage: ").append(if (stage.isBlank()) "updater" else stage)
-            if (tag.isNotBlank()) append("\nRelease: ").append(tag.take(32))
-            if (http != null) append("\nHTTP status: ").append(http.status)
-            append("\nCause chain:")
+            append("Cause chain:")
             chain.forEachIndexed { index, cause ->
                 append("\n").append(index + 1).append(". ")
                     .append(cause.javaClass.simpleName.ifBlank { "UnknownThrowable" })
@@ -429,6 +502,7 @@ object UpdateErrorMapper {
             http != null && http.status in 500..599 -> "server"
             hasLinkageFailure -> "runtime"
             chain.any { it is ReleaseMetadataFailure } -> "metadata"
+            chain.any { it is UpdateStorageFailure } -> "storage"
             // TLS/SSL failures are distinct from plain connection errors.
             hasTlsFailure -> "tls"
             // Name-resolution and connect-refusal failures are network
@@ -465,7 +539,7 @@ object UpdateErrorMapper {
             "metadata" -> "The release response was incomplete or invalid. Your installed app is unchanged; retry the check."
             "runtime" -> "The updater could not run on this app build. Reopen Updates and retry; your installed app is unchanged."
             "no_compatible_apk" -> firstSafe(raw, "No compatible APK found. This release has no ARMv7 package for this device.")
-            "storage" -> "Not enough storage. Free space and retry."
+            "storage" -> "Update storage is unavailable or full. Free space or restore app storage access, then retry; the installed app is unchanged."
             "signature_mismatch" -> "App signature mismatch. The installed app was not removed or replaced."
             "verification" -> "APK verification failed. The file was discarded and was not installed."
             "permission" -> "Install permission required. Enable Allow from this source for YTArk, then select Install update."
@@ -511,10 +585,17 @@ object UpdateStates {
         errorCategory = "rate_limit", stage = "check", httpStatus = httpStatus, speedBps = 0,
         releaseTag = candidate.tag, latestVersion = candidate.version, installedAhead = false, latestVersionStale = true
     )
-    @JvmStatic fun downloading(s: UpdateState): UpdateState = s.copy(phase = UpdatePhase.Downloading, message = "Downloading update…", verifiedPath = null, bytes = 0, speedBps = 0, detail = "", errorCategory = "", stale = false)
+    @JvmStatic fun downloading(s: UpdateState): UpdateState = s.copy(
+        phase = UpdatePhase.Downloading, message = "Downloading update…", verifiedPath = null, bytes = 0,
+        speedBps = 0, detail = "", errorCategory = "", stale = false, stage = "", httpStatus = 0, retryAt = 0,
+    )
     @JvmStatic fun progress(s: UpdateState, bytes: Long, speed: Long): UpdateState = s.copy(phase = UpdatePhase.Downloading, bytes = bytes, speedBps = speed)
     @JvmStatic fun verifying(s: UpdateState): UpdateState = s.copy(phase = UpdatePhase.Validating, message = "Verifying package, version, ABI, checksum and signer…", speedBps = 0)
-    @JvmStatic fun ready(s: UpdateState, path: String): UpdateState = s.copy(phase = UpdatePhase.Ready, verifiedPath = path, pendingIdentity = null, message = "Update ready. Select Install update; Android will ask for confirmation.", speedBps = 0, errorCategory = "", detail = "")
+    @JvmStatic fun ready(s: UpdateState, path: String): UpdateState = s.copy(
+        phase = UpdatePhase.Ready, verifiedPath = path, pendingIdentity = null,
+        message = "Update ready. Select Install update; Android will ask for confirmation.", speedBps = 0,
+        bytes = 0, stale = false, retryAt = 0, errorCategory = "", detail = "", stage = "", httpStatus = 0,
+    )
     @JvmStatic fun cancelled(s: UpdateState): UpdateState = s.copy(phase = UpdatePhase.Available, pendingIdentity = null, message = "Download cancelled. Retry when ready.", speedBps = 0, bytes = 0, errorCategory = "cancelled")
     @JvmStatic fun failed(s: UpdateState, mapped: MappedError, tag: String): UpdateState = s.copy(
         phase = UpdatePhase.Failed, pendingIdentity = null, message = mapped.message, detail = mapped.detail,
@@ -527,8 +608,9 @@ object UpdateStates {
     @JvmStatic fun installUnconfirmed(s: UpdateState): UpdateState = s.copy(phase = if (s.verifiedPath != null) UpdatePhase.Ready else UpdatePhase.Available, pendingIdentity = null, message = "Installation was not confirmed. Select Install update to retry; the downloaded APK is kept.")
     @JvmStatic fun installed(s: UpdateState): UpdateState = s.copy(
         phase = UpdatePhase.Idle, candidate = null, verifiedPath = null, pendingIdentity = null, bytes = 0,
-        stale = false, detail = "", errorCategory = "", latestVersion = "", installedAhead = false,
-        latestVersionStale = false, releaseTag = "", message = "Update installed. Your application data was not cleared."
+        stale = false, detail = "", errorCategory = "", httpStatus = 0, stage = "", retryAt = 0,
+        speedBps = 0, latestVersion = "", installedAhead = false, latestVersionStale = false,
+        releaseTag = "", message = "Update installed. Your application data was not cleared."
     )
 }
 
@@ -557,6 +639,9 @@ object UpdateFlowMachine {
 object ReleaseMetadataParser {
     private const val MAX = 512L * 1024 * 1024
 
+    private fun optionalText(fields: Map<String, Json>, key: String, fallback: String = ""): String =
+        fields[key]?.let { if (it.isNull()) fallback else it.asString() } ?: fallback
+
     @JvmStatic @Throws(IOException::class)
     fun parse(json: String, sums: String?): ParsedRelease {
         val root = Json.parse(json).asObject()
@@ -575,11 +660,11 @@ object ReleaseMetadataParser {
         val remote = assets.map { item ->
             val obj = item.asObject()
             RemoteAsset(
-                obj["name"]?.asString() ?: "",
-                obj["browser_download_url"]?.asString() ?: "",
-                obj["size"]?.asLong() ?: -1L,
-                obj["digest"]?.asString() ?: "",
-                obj["content_type"]?.asString() ?: ""
+                optionalText(obj, "name"),
+                optionalText(obj, "browser_download_url"),
+                obj["size"]?.takeUnless { it.isNull() }?.asLong() ?: -1L,
+                optionalText(obj, "digest"),
+                optionalText(obj, "content_type"),
             )
         }
         val apk = select(remote, tag)

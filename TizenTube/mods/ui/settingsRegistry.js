@@ -180,7 +180,7 @@ function aboutPanel() {
     ),
     (() => {
       const row = buttonItem(
-        { title: 'Diagnostics', subtitle: 'Opt-in local startup/playback measurements; Android update reports are separate' },
+        { title: 'Diagnostics', subtitle: 'Four local browser and native-updater controls' },
         { icon: 'INFO' }, [custom('YTARK_PANEL_SHOW', { id: 'about.diagnostics' })],
       );
       row.compactLinkRenderer.itemId = 'ytark-about-diagnostics';
@@ -210,59 +210,46 @@ function aboutPanel() {
   };
 }
 
-/** Technical metadata is separate from the short About screen and scrollable. */
-function aboutDiagnosticsPanel() {
+/** Four primary, bounded native rows; detailed local facts live in the summary panel. */
+function aboutDiagnosticsPanel(options = {}) {
   const enabled = configRead('recordBrowserDiagnostics') === true;
-  const state = browserDiagnostics.status;
-  const launchKind = ['cold', 'warm'].includes(configRead('startupDiagnosticRunKind'))
-    ? configRead('startupDiagnosticRunKind') : 'unclassified';
-  const status = enabled
-    ? (state === 'recording' ? 'Recording a browser startup/playback sample now.' : 'Recording is enabled; the last sample completed or is waiting for a new sample.')
-    : 'Browser startup/playback recording is off.';
+  const recorderState = browserDiagnostics.status;
+  const summary = browserDiagnostics.startupSummary().split('\n');
+  const line = prefix => summary.find(value => value.startsWith(prefix)) || '';
+  const sample = line('Latest sample:').replace(/^Latest sample:\s*/, '').replace(/\.$/, '') || 'No saved sample';
+  const durationDetail = line('Valid startup duration for latest sample:')
+    .replace(/^Valid startup duration for latest sample:\s*/, '').replace(/\.$/, '');
+  const duration = durationDetail.match(/^\d+(?:\.\d+)? ms/)?.[0] || 'duration unavailable';
+  const modeText = line('Faster startup preference:');
+  const actualMode = modeText.includes('Actual readiness mode:')
+    ? modeText.split('Actual readiness mode:').slice(1).join('Actual readiness mode:').replace(/\.$/, '').trim()
+    : 'not recorded';
+  const result = line('Latest result:').replace(/^Latest result:\s*/, '').replace(/\.$/, '') || 'No result recorded';
+  const summarySubtitle = `${sample} · ${duration} · actual ${actualMode} · ${result}`;
   const makeRow = (id, title, subtitle, icon, action, parameters = {}) => {
     const row = buttonItem({ title, subtitle }, { icon }, [custom(action, parameters)]);
     row.compactLinkRenderer.itemId = `ytark-diagnostics-${id}`;
     return row;
   };
-  const launchKindRow = (kind, title, subtitle) => {
-    const selected = launchKind === kind;
-    const row = buttonItem({ title, subtitle }, {
-      icon: 'SPEED', secondaryIcon: selected ? 'RADIO_BUTTON_CHECKED' : 'RADIO_BUTTON_UNCHECKED',
-    }, [
-      { setClientSettingEndpoint: { settingDatas: [{ clientSettingEnum: { item: 'startupDiagnosticRunKind' }, stringValue: kind }] } },
-      custom('YTARK_PANEL_SHOW', { id: 'about.diagnostics', update: true }),
-    ]);
-    row.compactLinkRenderer.itemId = `ytark-diagnostics-launch-kind-${kind}`;
-    return row;
-  };
   const items = [
-    overlayMessageRenderer('Technical measurements stay on this device; nothing is sent automatically. Enable diagnostics before launch to capture the next complete browser launch. Enabling mid-launch starts a partial sample that is never counted as a complete launch.'),
-    overlayMessageRenderer(`${status} Retention is bounded to 20 sessions, five minutes and 200 events per session. Browser and Android updater recorders are separate.`),
-    makeRow('recording', enabled ? 'Disable / stop recording' : 'Enable / start recording',
-      enabled ? 'Stops collection immediately; completed reports remain until cleared.' : 'Persists this choice for the next launch; records locally only.',
-      enabled ? 'STOP' : 'PLAY_ARROW', 'YTARK_DIAGNOSTICS_SET', { enabled: !enabled }),
-    overlayMessageRenderer('For comparisons, label future launches below. Cold/warm is a user label; the app cannot detect process coldness. Keep the same label, TV, build and startup destination.'),
-    launchKindRow('unclassified', 'Leave launches unclassified', launchKind === 'unclassified' ? 'Selected; these samples will not enter a comparison.' : 'Recommended unless you are deliberately collecting a matched set.'),
-    launchKindRow('cold', 'Label launches as cold starts', launchKind === 'cold' ? 'Selected for future launch samples.' : 'User-supplied label; use only for consistently cold starts.'),
-    launchKindRow('warm', 'Label launches as warm starts', launchKind === 'warm' ? 'Selected for future launch samples.' : 'User-supplied label; use only for consistently warm starts.'),
-    makeRow('startup-summary', 'View startup summary', 'Measured interval, actual Faster startup mode, and comparable local medians.',
-      'ASSESSMENT', 'YTARK_DIAGNOSTICS_STARTUP_SUMMARY'),
-    makeRow('new-sample', 'Start new partial sample',
-      enabled ? 'Ends the current sample and starts a labeled partial capture.' : 'Enables recording and starts a partial capture now.',
-      'REFRESH', 'YTARK_DIAGNOSTICS_NEW_SAMPLE'),
-    makeRow('latest', 'Advanced event report', 'Detailed browser-only events; missing marks remain unavailable, never zero.',
-      'DESCRIPTION', 'YTARK_DIAGNOSTICS_LATEST'),
-    makeRow('sessions', 'View recent sessions', 'Up to 20 locally retained browser samples.',
-      'HISTORY', 'YTARK_DIAGNOSTICS_SESSIONS'),
-    makeRow('clear', 'Clear diagnostic data', 'Clears browser reports only. Settings, launch label and Android reports are unchanged.',
-      'DELETE', 'YTARK_DIAGNOSTICS_CLEAR_CONFIRM'),
-    makeRow('android', 'Android update diagnostics', 'Separate native recorder and report; this browser page cannot read its status.',
+    makeRow('android', 'Android updater', 'Open native update, install-permission and Android diagnostics controls.',
       'SYSTEM_UPDATE', 'YTARK_NATIVE_UPDATES_OPEN'),
+    makeRow('recording', 'Recording', enabled
+      ? (recorderState === 'recording' ? 'On · a browser sample is recording.' : 'On · no sample is active.')
+      : 'Off · no browser measurements are being collected.',
+      enabled ? 'STOP' : 'PLAY_ARROW', 'YTARK_DIAGNOSTICS_SET',
+      { enabled: !enabled, returnFocusIndex: 1 }),
+    makeRow('startup-summary', 'Startup summary', summarySubtitle,
+      'ASSESSMENT', 'YTARK_DIAGNOSTICS_STARTUP_SUMMARY', { returnFocusIndex: 2 }),
+    makeRow('clear', 'Clear diagnostic data', 'Remove saved browser samples only; settings and accounts are unchanged.',
+      'DELETE', 'YTARK_DIAGNOSTICS_CLEAR_CONFIRM', { returnFocusIndex: 3 }),
   ];
+  const requested = Number(options.focusIndex);
+  const selectedIndex = Number.isInteger(requested) && requested >= 0 && requested < items.length ? requested : 1;
   return {
     title: 'Diagnostics',
-    subtitle: 'Opt-in local browser measurements · Android scope is separate',
-    content: overlayPanelItemListRenderer(items, 2),
+    subtitle: 'Browser measurements stay on this device · Android updater is separate',
+    content: overlayPanelItemListRenderer(items, selectedIndex),
   };
 }
 
@@ -754,7 +741,6 @@ export function buildSettingsTree() {
         },
           { id: 'misc.paidPromotion', type: 'toggle', title: t('settings.options.misc.options.paidPromoOverlay'), icon: 'MONEY_HAND', key: 'enablePaidPromotionOverlay' },
           { id: 'misc.youThere', type: 'toggle', title: t('settings.options.misc.options.youThereRenderer'), icon: 'HELP', key: 'enableYouThereRenderer' },
-          { id: 'misc.signInReminder', type: 'toggle', title: t('settings.options.misc.options.guestSignInReminder'), key: 'enableSigninReminder' },
     ],
     },
     {
@@ -765,7 +751,7 @@ export function buildSettingsTree() {
       icon: 'MENU',
       menuId: 'ytark-navigation',
       header: { title: tx('ytark.categories.navigation.title', 'Navigation'), subtitle: tx('ytark.categories.navigation.description', 'Guide, startup and the YouTube Settings page') },
-      resetKeys: ['launchToOnStartup', 'sortSubscriptionsByAlphabet', 'disableChannelsOnSidebar', 'enableYtarkGuideEntry', 'enableWhoIsWatchingMenu', 'permanentlyEnableWhoIsWatchingMenu', 'enableWhosWatchingMenuOnAppExit', 'reloadHomeOnStartup'],
+      resetKeys: ['launchToOnStartup', 'sortSubscriptionsByAlphabet', 'disableChannelsOnSidebar', 'enableYtarkGuideEntry', 'showAutomaticProfilePicker', 'reloadHomeOnStartup'],
       children: [
           {
             id: 'ui.disableSidebar',
@@ -817,16 +803,13 @@ export function buildSettingsTree() {
             key: 'enableYtarkGuideEntry',
             },
           {
-            id: 'misc.whosWatching',
-            type: 'menu',
-            title: t('settings.options.misc.options.whosWatching.title'),
+            id: 'nav.profilePicker',
+            type: 'toggle',
+            title: tx('ytark.navigation.profilePicker.title', "Who's watching"),
+            description: tx('ytark.navigation.profilePicker.description', 'Show the automatic profile picker.'),
             icon: 'ACCOUNT_CIRCLE',
-            menuId: 'tt-whos-watching-menu-settings',
-            children: [
-              { id: 'misc.whosWatching.enable', type: 'toggle', title: t('settings.options.misc.options.whosWatching.options.enableWW'), key: 'enableWhoIsWatchingMenu' },
-              { id: 'misc.whosWatching.permanent', type: 'toggle', title: t('settings.options.misc.options.whosWatching.options.permaEnableWW'), key: 'permanentlyEnableWhoIsWatchingMenu', dependsOn: { key: 'enableWhoIsWatchingMenu', title: t('settings.options.misc.options.whosWatching.options.enableWW') } },
-              { id: 'misc.whosWatching.onExit', type: 'toggle', title: t('settings.options.misc.options.whosWatching.options.enableWWOnExit'), key: 'enableWhosWatchingMenuOnAppExit' },
-            ],
+            key: 'showAutomaticProfilePicker',
+            statusOnly: true,
           },
           { id: 'misc.reloadHome', type: 'toggle', title: t('settings.options.misc.options.reloadHomeOnStartup'), key: 'reloadHomeOnStartup' },
           {
@@ -873,7 +856,7 @@ export function buildSettingsTree() {
           id: 'about.diagnostics',
           type: 'panel',
           title: 'Diagnostics',
-          description: 'Opt-in local browser measurements; Android updater diagnostics are separate',
+          description: 'Local browser recording, startup summary and Android updater access',
           icon: 'INFO',
           panel: aboutDiagnosticsPanel,
         },

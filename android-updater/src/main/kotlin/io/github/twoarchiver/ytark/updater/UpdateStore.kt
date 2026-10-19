@@ -5,7 +5,12 @@ import org.json.JSONObject
 
 /** Only this file owns persisted updater state. Old preferences are read, never cleared wholesale. */
 class UpdateStore(context: Context) {
-    val prefs = context.getSharedPreferences("ytark_native_updater", Context.MODE_PRIVATE)
+    // Deferred until the coordinator's serialized worker first loads state.
+    // Constructing the application-scoped coordinator on a UI path is therefore
+    // free of preference reads or storage initialization.
+    val prefs by lazy(LazyThreadSafetyMode.SYNCHRONIZED) {
+        context.getSharedPreferences("ytark_native_updater", Context.MODE_PRIVATE)
+    }
     fun load(): UpdateState {
         val hours = ScheduleRules.interval(if (prefs.contains("v31_hours")) prefs.getInt("v31_hours", 1) else null, prefs.getBoolean("automatic_checks_enabled", true))
         val raw = prefs.getString("v31_state", null) ?: return UpdateState(hours = hours)

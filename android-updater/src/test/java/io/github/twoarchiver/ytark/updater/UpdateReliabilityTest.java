@@ -211,6 +211,17 @@ public final class UpdateReliabilityTest {
         ParsedRelease checked = ReleaseMetadataParser.parse(json,
                 ACTUAL_V33_HASH + "  YTArk-v3.3.0-armv7.apk\n");
         assertEquals(ACTUAL_V33_HASH, checked.candidate.getSha256(), "actual published checksum contract");
+
+        java.nio.file.Path currentFixture = java.nio.file.Paths.get(resourceRoot, "github-v3.8.0-release.json");
+        String currentJson = new String(Files.readAllBytes(currentFixture), StandardCharsets.UTF_8);
+        ParsedRelease current = ReleaseMetadataParser.parse(currentJson, null);
+        assertEquals("v3.8.0", current.candidate.getTag(), "current official release tag");
+        assertEquals(3080000L, current.candidate.getCode(), "current official versionCode");
+        assertEquals("YTArk-v3.8.0-armeabi-v7a.apk", current.candidate.getAsset(), "one official ARMv7 APK is selected");
+        assertEquals("da475dcbd8e69c310cfb2e104b1ae8c9283066f09b6cbbf5655c5263e9841dc1",
+                current.candidate.getSha256(), "GitHub asset digest is sufficient when the release has no checksum sidecar");
+        assertEquals("", current.sumsUrl, "official current release has no checksum sidecar");
+        assertFalse(current.needsSums, "a verified GitHub digest does not trigger a nonexistent sidecar fetch");
     }
 
     private static void concurrentChecksJoinOneFlight() throws Exception {
@@ -229,6 +240,13 @@ public final class UpdateReliabilityTest {
         assertTrue(gate.finish(), "joined manual check is run once more");
         assertFalse(gate.finish(), "the gate then clears");
         assertFalse(gate.running(), "not left running");
+        CheckDeduper rejected = new CheckDeduper();
+        assertEquals("started", rejected.begin(false), "rejected-executor check starts locally");
+        assertEquals("joined", rejected.begin(true), "a joined manual check is retained before queueing");
+        rejected.abort();
+        assertFalse(rejected.running(), "executor rejection clears primary and joined checks");
+        assertEquals("started", rejected.begin(false), "a later retry is not blocked by stale dedupe state");
+        assertFalse(rejected.finish(), "retried check clears normally");
         AttemptGate attempts = new AttemptGate();
         int first = attempts.next();
         int second = attempts.next();
@@ -262,6 +280,16 @@ public final class UpdateReliabilityTest {
         rejects(() -> ReleaseMetadataParser.parse(releaseJson("3.3.0", 3030000L, HASH, 10, false).replace("\"prerelease\":false", "\"prerelease\":true"), null), "published stable");
         rejects(() -> ReleaseMetadataParser.parse(releaseJson("3.3.0", 3010000L, HASH, 10, false), null), "versionCode");
         rejects(() -> ReleaseMetadataParser.parse(releaseJson("3.3.0", 3030000L, OTHER, 10, true), HASH + "  YTArk-v3.3.0-armeabi-v7a.apk\n"), "disagree");
+
+        String nullDigestWithoutSidecar = releaseJson("3.3.0", 3030000L, HASH, 10, false)
+                .replace("\"digest\":\"sha256:" + HASH + "\"", "\"digest\":null");
+        rejects(() -> ReleaseMetadataParser.parse(nullDigestWithoutSidecar, null), "no verifiable APK checksum");
+        String nullDigestWithSidecar = releaseJson("3.3.0", 3030000L, HASH, 10, true)
+                .replace("\"digest\":\"sha256:" + HASH + "\"", "\"digest\":null");
+        ParsedRelease sidecarVerified = ReleaseMetadataParser.parse(nullDigestWithSidecar,
+                HASH + "  YTArk-v3.3.0-armeabi-v7a.apk\n");
+        assertEquals(HASH, sidecarVerified.candidate.getSha256(), "JSON null digest falls back to the same-tag checksum asset");
+        assertFalse(sidecarVerified.needsSums, "provided sidecar was consumed and verified");
     }
 
     private static void redirectsAndPartialDownloadsUseTheLocalServer() throws Exception {

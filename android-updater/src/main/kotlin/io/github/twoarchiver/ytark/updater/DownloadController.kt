@@ -18,16 +18,78 @@ import java.util.concurrent.atomic.AtomicBoolean
  * and process-death survival is not claimed.
  */
 class DownloadController(context: Context, private val validator: ApkValidator) {
-    val directory = File(context.filesDir, "ytark-updates-v31")
+    private val filesDirectory = context.filesDir
+    val directory = File(filesDirectory, "ytark-updates-v31")
     private val cancel = CancelHandle()
-    init {
-        requireUpdate(directory.mkdirs() || directory.isDirectory, "Cannot create update storage.")
-        requireUpdate(UpdateGuards.isSafeUpdateDirectory(context.filesDir, directory), "Unsafe update storage.")
+    @Volatile private var prepared = false
+
+    /** Called by the retryable coordinator gate, never on the UI thread. */
+    @Synchronized fun prepareStorage() {
+        try {
+            if (!directory.exists() && !directory.mkdirs() && !directory.isDirectory) {
+                throw UpdateStorageFailure("Cannot create update storage.")
+            }
+            if (!directory.isDirectory || !UpdateGuards.isSafeUpdateDirectory(filesDirectory, directory)) {
+                throw UpdateStorageFailure("Update storage is unsafe or unavailable.")
+            }
+            // One bounded write/readiness check per successful initialization. It
+            // is not a polling loop; a failed preparation is retried only when the
+            // coordinator is explicitly reacquired by a later operation.
+            val probe = try {
+                File.createTempFile(".ytark-write-", ".tmp", directory)
+            } catch (error: Exception) {
+                throw UpdateStorageFailure("Cannot write to update storage.", error)
+            }
+            try {
+                FileOutputStream(probe).use { output ->
+                    output.write(0)
+                    output.fd.sync()
+                }
+            } catch (error: Exception) {
+                throw UpdateStorageFailure("Cannot write to update storage.", error)
+            } finally {
+                if (probe.exists() && !probe.delete()) {
+                    throw UpdateStorageFailure("Cannot clean the update-storage readiness file.")
+                }
+            }
+            prepared = true
+        } catch (error: Throwable) {
+            prepared = false
+            if (error is VirtualMachineError || error is ThreadDeath) throw error
+            if (error is UpdateStorageFailure) throw error
+            throw UpdateStorageFailure("Cannot prepare update storage.", error)
+        }
     }
-    fun file(c: Candidate) = File(directory, "${c.code}-${c.sha256}.apk").also { requireUpdate(UpdateGuards.isSafeUpdateFile(directory, it), "Unsafe APK path.") }
+
+    /** Cheaply recheck a ready controller; re-run the bounded probe only after storage changes. */
+    fun ensureStorageAvailable() {
+        if (!prepared || !directory.isDirectory || !directory.canWrite()
+            || !UpdateGuards.isSafeUpdateDirectory(filesDirectory, directory)) {
+            prepareStorage()
+        }
+    }
+
+    private fun requirePrepared() {
+        if (!prepared || !directory.isDirectory || !UpdateGuards.isSafeUpdateDirectory(filesDirectory, directory)) {
+            throw UpdateStorageFailure("Update storage is no longer available. Retry after restoring app storage access.")
+        }
+    }
+
+    fun file(c: Candidate): File {
+        requirePrepared()
+        return File(directory, "${c.code}-${c.sha256}.apk")
+            .also { requireUpdate(UpdateGuards.isSafeUpdateFile(directory, it), "Unsafe APK path.") }
+    }
+
     fun cancel() { cancel.cancel() }
+    fun resetCancellation() {
+        cancel.connection.set(null)
+        cancel.cancelled.set(false)
+    }
 
     fun download(c: Candidate, cancelled: AtomicBoolean, progress: (Long, Long) -> Unit, validating: () -> Unit): File {
+        requirePrepared()
+        resetCancellation()
         val target = file(c)
         if (target.exists()) {
             try {
@@ -133,6 +195,7 @@ class DownloadController(context: Context, private val validator: ApkValidator) 
     }
 
     fun clean(keep: Set<String>) {
+        requirePrepared()
         val retained = keep.filter { it.isNotEmpty() }.flatMap { listOf(it, "$it.part", "$it.part.properties") }.toSet()
         directory.listFiles()?.forEach { file ->
             if (file.path in retained || !UpdateGuards.isSafeUpdateFile(directory, file)) return@forEach
