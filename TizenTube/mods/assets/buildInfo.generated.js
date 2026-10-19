@@ -16,6 +16,6 @@ export const YTARK_BUILD_INFO = {
   "baseTag": "v2.0.2",
   "appId": "io.github.twoarchiver.ytark",
   "appName": "YTArk",
-  "apkAsset": "YTArk-v3.8.0-armv7.apk"
+  "apkAsset": "YTArk-v3.8.0-armeabi-v7a.apk"
 };
 export default YTARK_BUILD_INFO;

@@ -26,22 +26,51 @@ Conventions:
 
 > Not yet published. Planned tag `v3.8.0` · versionCode 3080000 · userscript `s39` · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.
 
-Reliable updater error reporting, one ARMv7 APK per release, and clear upgrade paths.
+Reliable updater errors, one ARMv7 APK, clear upgrades.
 
 ### Added
-- Updater errors now classify TLS/SSL failures, network timeouts, rate limits and metadata issues with specific messages and reference codes instead of a generic "Unexpected error".
+- Updater errors now carry specific categories, messages and reference codes instead of one generic failure.
+  - TLS/SSL failures, timeouts, rate limits, metadata problems and incompatible APKs are classified distinctly.
+  - The unexpected-error fallback reports the stable reference code `[EUNEXPECTED]` so users can report it.
 ### Changed
-- Release asset filename uses the full ABI name (`armeabi-v7a`); the legacy `armv7` suffix is still accepted for backward compatibility with older releases.
-- Each stable release attaches exactly one downloadable ARMv7 APK; source-code archives remain GitHub-generated and are never considered update candidates.
+- Releases attach one ARMv7 APK with the full ABI.
+  - The legacy `armv7` suffix stays accepted for historical releases during the transition.
+  - GitHub-generated source archives are never update candidates.
 ### Fixed
-- Update checks that previously showed "Unexpected error" now display a specific, actionable message with Retry (TLS failure, timeout, rate limit, missing checksum, incompatible APK).
-- The release parser accepts both current and historical asset names, so older clients and newer releases interoperate during the transition.
-- Missing or malformed checksums produce a clear "metadata" error instead of falling through to the generic unexpected-error path.
+- Update checks report specific TLS, timeout and rate-limit errors.
+  - Wrapped causes, stages and sanitized technical details stay available in the Updates panel.
+- Missing checksums produce clear metadata errors, not generic failures.
+  - The release response is retried instead of pretending the check succeeded.
 ### Known limitations
-- Upgrading from 3.7 or earlier may require a manual APK install if the installed updater cannot reach the fixed release endpoint.
-- Physical-TV update-check, download, permission-return, playback and Shorts/settings checks are NOT RUN in this candidate.
+- Upgrading from 3.7 or earlier needs a manual APK install; the installed updater selects only `armv7` filenames.
+- Physical-TV update-check, download, permission-return, playback and Shorts/settings checks are NOT RUN.
 ### Validation
-- Kotlin and Node regression tests cover version comparison, error classification, asset selection with mixed historical names, and metadata parsing.
+- Kotlin and Node regression tests cover version comparison, error classification, asset selection with mixed historical names and metadata parsing.
+- Release/Android checks and physical-device evidence are recorded separately; mocks and static checks are not TV verification.
+
+## [3.7.0] — 2026-10-17
+
+> Published 2026-10-17 02:59 UTC as [YTArk 3.7](https://github.com/2archiver/YTArk/releases/tag/v3.7.0) · tag `v3.7.0` · versionCode 3070000 · userscript `s38` · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.
+
+Explicit Settings access, honest local startup comparisons, and retryable update checks.
+
+### Added
+- Startup summary reports the narrow userscript-module-to-controls interval and compares only complete, matched local samples.
+- Browser diagnostics retain at most 20 bounded local sessions; advanced event details remain separate from the concise summary.
+### Changed
+- About removes the inline What's New wall while retaining the full Changelog, Technical details, Credits & licenses, and Project link.
+- Faster startup remains opt-in; reports show the actual readiness mode and make no speedup promise.
+### Fixed
+- Guide-row Settings opens only on explicit OK/click; scrolling past the row no longer opens the panel.
+- Open Settings modals keep D-pad, OK, Back, and color shortcuts within the active panel.
+- Already-current update checks show installed/latest versions, clear prior errors, and remain retryable.
+- Startup routes are fixed and allowlisted, and delayed navigation cancels when the user starts navigating.
+### Known limitations
+- The browser interval is a UI-bootstrap proxy, not Android app start, full YouTube readiness, playback-ready, or first frame; no Faster startup benefit is claimed.
+- Physical-TV Settings access, guide activation, remote focus, normal playback, deliberate Shorts access, permission return, clean install, and in-place upgrade checks are NOT RUN.
+- Startup comparisons need at least three complete matched launches in each actual mode; five alternating pairs are recommended, without promising a benefit.
+### Validation
+- Node regression tests cover modal ownership, targeted guide activation, startup cancellation/readiness, diagnostics bounds/comparisons, About, and CSS scope.
 - Release/Android checks and physical-device evidence are recorded separately; mocks and static checks are not TV verification.
 
 ## [3.6.0] — 2026-10-16

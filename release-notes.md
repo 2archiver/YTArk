@@ -1,11 +1,16 @@
-YTArk 3.8 — candidate, not published
+YTArk 3.8
 
-Reliable updater error reporting, one ARMv7 APK per release, and clear upgrade paths.
+Reliable updater errors, one ARMv7 APK, clear upgrades.
 
-- Update checks no longer show a generic "Unexpected error"; specific messages cover TLS, timeout, rate limit and metadata failures with Retry.
-- Each release attaches exactly one ARMv7 APK with the full ABI name (`armeabi-v7a`); older `armv7` assets remain accepted.
-- Guide-row Settings, D-pad ownership and Shorts/settings interaction remain fixed from 3.7.
+- Update checks report specific TLS, timeout and rate-limit errors.
+- Missing checksums produce clear metadata errors, not generic failures.
+- Releases attach one ARMv7 APK with the full ABI.
 
-Requires Android support for armeabi-v7a. Install over your existing YTArk app; your data is preserved. Upgrading from 3.7 may require a manual APK install if the installed updater cannot reach the fixed release endpoint.
+ARMv7 (armeabi-v7a): [Download APK](https://github.com/2archiver/YTArk/releases/download/v3.8.0/YTArk-v3.8.0-armeabi-v7a.apk). Not for arm64-v8a-only devices; a 64-bit CPU alone is insufficient. 4K does not select an APK architecture.
+
+Install over the existing app; data is preserved. From 3.7.0, install manually once.
+Notices and licenses: https://github.com/2archiver/YTArk/blob/main/NOTICE.md
+
+Known limitations: TV permission, startup, upgrade and playback checks remain unverified; the engine is unchanged.
 
 <!-- Package io.github.twoarchiver.ytark; 3.8.0; versionCode 3080000; base TizenTubeCobalt v2.0.2. -->

@@ -35,7 +35,9 @@ unsigned_apks=("$WORK"/*-unsigned.apk)
 armv7_count=0
 for candidate in "${unsigned_apks[@]}"; do
   case "$(basename "$candidate")" in
-    *-armv7-unsigned.apk) armv7_count=$((armv7_count + 1)) ;;
+    # The public filename carries the full ABI suffix from 3.8.0;
+    # the internal architecture key is accepted for older candidates.
+    *-armeabi-v7a-unsigned.apk|*-armv7-unsigned.apk) armv7_count=$((armv7_count + 1)) ;;
     *) echo "unexpected unsigned YTArk APK (this release is ARMv7 only): $candidate" >&2; exit 1 ;;
   esac
 done
