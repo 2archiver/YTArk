@@ -395,7 +395,7 @@ public final class UpdateReliabilityTest {
         assertMapped(new java.net.ConnectException("Connection refused"), "connection", "Could not connect");
         assertMapped(new IOException("could not reach the service", new java.net.UnknownHostException("api.github.com")), "offline", "Network unavailable");
         assertMapped(new IOException("No compatible APK found. Release v9 has no ARMv7 package."), "no_compatible_apk", "No compatible APK found");
-        assertMapped(new IOException("Not enough storage. Free space and retry."), "storage", "Not enough storage");
+        assertMapped(new IOException("Not enough storage. Free space and retry."), "storage", "Update storage is unavailable or full");
         assertMapped(new IOException("Download interrupted. Retry to continue the download."), "download_interrupted", "Download interrupted");
         assertMapped(new IOException("APK checksum failed; retry download."), "verification", "APK verification failed");
         assertMapped(new IOException("APK signer is incompatible with the installed app."), "signature_mismatch", "App signature mismatch");
