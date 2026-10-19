@@ -470,6 +470,20 @@ class GitHub:
         destination.write_bytes(response.body)
         return destination
 
+    def fetch_tag_file(self, path: str, ref: str) -> bytes:
+        """Read one file from an immutable git tag, byte-for-byte."""
+        response = self.request(
+            "GET", f"/repos/{self.repository}/contents/{path}",
+            params={"ref": ref},
+            accept="application/vnd.github.raw+json",
+        )
+        if response is None or not response.body:
+            raise ReleaseError(
+                f"Tag {ref} does not serve {path}; the immutable userscript "
+                "delivery is incomplete."
+            )
+        return response.body
+
 
 # --------------------------------------------------------------------------- #
 # Candidate handling
@@ -1528,6 +1542,37 @@ def candidate_from_release(
             )
         files[key] = CandidateFile(
             name=name, path=destination, sha256=digest, size=destination.stat().st_size
+        )
+    if "userScript.js" not in files:
+        # The public release carries the APK only, so a candidate
+        # rebuilt from a release takes the script bytes from the
+        # immutable tag itself and cross-checks them against the
+        # digest the release identity block recorded; without that
+        # recorded digest there is nothing to verify the tag
+        # against, and the run stops instead of guessing.
+        recorded_script = str((identity or {}).get("user_script_sha256") or "")
+        if not re.fullmatch(r"[0-9a-f]{64}", recorded_script):
+            raise ReleaseError(
+                f"{state.capitalize()} {release.get('tag_name')} does not record "
+                "the immutable userscript hash, so the script half of the "
+                "candidate cannot be reconstructed; supply the verified build "
+                "artefact instead."
+            )
+        script_path = workdir / "userScript.js"
+        script_path.write_bytes(
+            github.fetch_tag_file("userScript.js", config["SCRIPT_TAG"])
+        )
+        script_digest = file_sha256(script_path)
+        if script_digest != recorded_script:
+            raise ReleaseConflict(
+                f"The userscript served by tag {config['SCRIPT_TAG']} is "
+                f"{script_digest}, but the release identity block records "
+                f"{recorded_script}. Immutable delivery is broken; the tag "
+                "cannot be moved or rewritten."
+            )
+        files["userScript.js"] = CandidateFile(
+            name="userScript.js", path=script_path,
+            sha256=script_digest, size=script_path.stat().st_size,
         )
     identity_commit = str((identity or {}).get("commit") or commit)
     # A verify-only run has no artefact, so the release's own identity is the
