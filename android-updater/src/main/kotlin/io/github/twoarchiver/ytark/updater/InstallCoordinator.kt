@@ -18,6 +18,7 @@ import java.io.IOException
 internal object InstallAuthorizationAccess {
     const val OPEN_UNAVAILABLE = "unavailable"
     const val OPEN_BLOCKED = "blocked"
+    const val OPEN_STORAGE_UNAVAILABLE = "storage"
 
     fun granted(context: Context): Boolean? = try {
         when (InstallPermissionEntryPolicy.routeForApi(Build.VERSION.SDK_INT)) {
@@ -135,26 +136,30 @@ class InstallCoordinator(private val activity: UpdateActivity, private val updat
         }
         val requestId = reserved.route.requestId
         updates.markExternal(UpdatePhase.AwaitingPermission, candidate, file) {
-            try {
-                if (!activity.visible) {
-                    activity.cancelInstallPermissionRoute(requestId, candidate.identity)
-                    updates.clearPermissionRequest(candidate.identity)
-                    return@markExternal
+            if(!activity.visible) {
+                activity.cancelInstallPermissionRoute(requestId,candidate.identity)
+                updates.clearPermissionRequest(candidate.identity)
+                flow=false
+                return@markExternal
+            }
+            if(!InstallAuthorizationAccess.canHoldAuthorization(activity)) {
+                activity.cancelInstallPermissionRoute(requestId,candidate.identity)
+                updates.externalReturned(InstallAuthorizationAccess.explanation(activity)+" Select Install update to retry once an allowed installer replaced this build.")
+                flow=false
+                stateChanged(updates.state)
+                return@markExternal
+            }
+            activity.launchReservedInstallPermissionRoute(requestId) { outcome ->
+                if(outcome!=null) {
+                    activity.cancelInstallPermissionRoute(requestId,candidate.identity)
+                    val message=when(outcome) {
+                        InstallAuthorizationAccess.OPEN_STORAGE_UNAVAILABLE -> "YTArk could not save the Android install-authorization request. No Settings screen was opened; check local storage and select Install update to retry."
+                        InstallAuthorizationAccess.OPEN_UNAVAILABLE -> "Android has no install-authorization screen on this device. Check this TV's Security settings, then select Install update."
+                        else -> "This TV refused to open the install-authorization screen. Allow installs for YTArk in Android Settings, then select Install update."
+                    }
+                    updates.externalReturned(message)
                 }
-                if (!InstallAuthorizationAccess.canHoldAuthorization(activity)) {
-                    activity.cancelInstallPermissionRoute(requestId, candidate.identity)
-                    updates.externalReturned(InstallAuthorizationAccess.explanation(activity) + " Select Install update to retry once an allowed installer replaced this build.")
-                    return@markExternal
-                }
-                val outcome = activity.launchReservedInstallPermissionRoute(requestId)
-                if (outcome != null) {
-                    activity.cancelInstallPermissionRoute(requestId, candidate.identity)
-                    updates.externalReturned(if (outcome == InstallAuthorizationAccess.OPEN_UNAVAILABLE)
-                        "Android has no install-authorization screen on this device. Check this TV's Security settings, then select Install update."
-                    else "This TV refused to open the install-authorization screen. Allow installs for YTArk in Android Settings, then select Install update.")
-                }
-            } finally {
-                flow = false
+                flow=false
                 // The shared entry route might have returned while markExternal
                 // was queued. Recheck only after the busy mark is released.
                 stateChanged(updates.state)
@@ -174,17 +179,21 @@ class InstallCoordinator(private val activity: UpdateActivity, private val updat
                 }
                 AndroidDiagnostics.record("installer_handoff", "requested")
                 val app = activity.applicationContext
-                val free = file.parentFile?.usableSpace ?: 0L
-                val canCopy = free >= file.length() + UpdateGuards.SAFETY_MARGIN_BYTES
-                if (!canCopy) {
-                    if (!legacy(file)) updates.enqueue { throw IOException("No Android package installer accepted the APK. Check this TV's installation restrictions and retry.") }
-                    return@markExternal
-                }
                 updates.enqueue {
-                    try { SessionInstall.commit(app, file) }
-                    catch (e: Exception) {
+                    val canCopy=try {
+                        val free=file.parentFile?.usableSpace ?: 0L
+                        free >= file.length()+UpdateGuards.SAFETY_MARGIN_BYTES
+                    } catch (_: Exception) { false }
+                    if(!canCopy) {
                         activity.runOnUiThread {
-                            if (!activity.visible || !legacy(file)) updates.enqueue { throw e }
+                            if(!activity.visible || !legacy(file)) updates.enqueue { throw IOException("No Android package installer accepted the APK. Check this TV's installation restrictions and retry.") }
+                        }
+                        return@enqueue
+                    }
+                    try { SessionInstall.commit(app,file) }
+                    catch (error: Exception) {
+                        activity.runOnUiThread {
+                            if(!activity.visible || !legacy(file)) updates.enqueue { throw error }
                         }
                     }
                 }

@@ -1,0 +1,15 @@
+{
+  "draft": false,
+  "prerelease": false,
+  "tag_name": "v3.8.0",
+  "body": "YTArk 3.8\n\nReliable updater errors, one ARMv7 APK, clear upgrades.\n\n- Update checks report specific TLS, timeout and rate-limit errors.\n- Missing checksums produce clear metadata errors, not generic failures.\n- Releases attach one ARMv7 APK with the full ABI.\n\nARMv7 (armeabi-v7a): [Download APK](https://github.com/2archiver/YTArk/releases/download/v3.8.0/YTArk-v3.8.0-armeabi-v7a.apk). Not for arm64-v8a-only devices; a 64-bit CPU alone is insufficient. 4K does not select an APK architecture.\n\nInstall over the existing app; data is preserved. From 3.7.0, install manually once.\nNotices and licenses: https://github.com/2archiver/YTArk/blob/main/NOTICE.md\n\nKnown limitations: TV permission, startup, upgrade and playback checks remain unverified; the engine is unchanged.\n\n<!-- Package io.github.twoarchiver.ytark; 3.8.0; versionCode 3080000; base TizenTubeCobalt v2.0.2. -->\n\n<!-- ytark-release-identity/v1 {\"apk_name\": \"YTArk-v3.8.0-armeabi-v7a.apk\", \"apk_sha256\": \"da475dcbd8e69c310cfb2e104b1ae8c9283066f09b6cbbf5655c5263e9841dc1\", \"base_tag\": \"v2.0.2\", \"commit\": \"59d3a2de699a396c5331e3bd1e31ccb2f74e78f2\", \"run_id\": \"39190444475\", \"schema\": \"ytark-release-identity/v1\", \"script_tag\": \"s39\", \"user_script_sha256\": \"3ccdc612571888be88e0a3192d940eae65c4558d82b601e21a9105dfd2ec8293\", \"version_code\": 3080000, \"version_name\": \"3.8.0\", \"version_tag\": \"v3.8.0\"} -->\n",
+  "assets": [
+    {
+      "name": "YTArk-v3.8.0-armeabi-v7a.apk",
+      "browser_download_url": "https://github.com/2archiver/YTArk/releases/download/v3.8.0/YTArk-v3.8.0-armeabi-v7a.apk",
+      "size": 98446550,
+      "digest": "sha256:da475dcbd8e69c310cfb2e104b1ae8c9283066f09b6cbbf5655c5263e9841dc1",
+      "content_type": "application/vnd.android.package-archive"
+    }
+  ]
+}

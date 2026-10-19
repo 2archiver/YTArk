@@ -12,6 +12,76 @@ fun main() {
     check(!ScheduleRules.due(1,120000,60000,0,0)) // never-confirmed checks must not poll every minute
     check(ScheduleRules.due(1,ScheduleRules.HOUR,0,0,0))
     check(!ScheduleRules.due(1,100000,0,0,100001))
+
+    // Storage/controller creation and preparation failures stay explicit and retryable.
+    val createAttempts=java.util.concurrent.atomic.AtomicInteger()
+    val prepareAttempts=java.util.concurrent.atomic.AtomicInteger()
+    val controller=Any()
+    val dependency=RetryableDependency(
+        create={ createAttempts.incrementAndGet(); controller },
+        prepare={ if(prepareAttempts.incrementAndGet()==1) throw java.io.IOException("storage unavailable") },
+    )
+    val failedPreparation=dependency.acquire()
+    check(failedPreparation is DependencyResult.Unavailable)
+    check(dependency.readyValue()==null)
+    check(dependency.lastFailure() is java.io.IOException)
+    val restored=dependency.acquire()
+    check(restored is DependencyResult.Ready && restored.value===controller)
+    check(dependency.acquire() is DependencyResult.Ready)
+    check(createAttempts.get()==1 && prepareAttempts.get()==2)
+    check(dependency.lastFailure()==null && dependency.readyValue()===controller)
+
+    val createFailureAttempts=java.util.concurrent.atomic.AtomicInteger()
+    val createFailure=RetryableDependency(
+        create={ if(createFailureAttempts.incrementAndGet()==1) throw java.io.IOException("controller unavailable") else Any() },
+        prepare={},
+    )
+    check(createFailure.acquire() is DependencyResult.Unavailable)
+    check(createFailure.readyValue()==null)
+    check(createFailure.acquire() is DependencyResult.Ready)
+    check(createFailureAttempts.get()==2)
+
+    // Concurrent callers share one preparation; failure/retry cannot race a lateinit-style read.
+    val prepareCount=java.util.concurrent.atomic.AtomicInteger()
+    val enteredPrepare=java.util.concurrent.CountDownLatch(1)
+    val allowPrepare=java.util.concurrent.CountDownLatch(1)
+    val concurrentDependency=RetryableDependency(
+        create={ Any() },
+        prepare={
+            if(prepareCount.incrementAndGet()==1) {
+                enteredPrepare.countDown()
+                check(allowPrepare.await(2,java.util.concurrent.TimeUnit.SECONDS))
+            }
+        },
+    )
+    val answers=java.util.concurrent.CopyOnWriteArrayList<DependencyResult<Any>>()
+    val readers=(1..6).map { Thread { answers.add(concurrentDependency.acquire()) } }
+    readers.forEach { it.start() }
+    check(enteredPrepare.await(2,java.util.concurrent.TimeUnit.SECONDS))
+    allowPrepare.countDown()
+    readers.forEach { it.join(2000); check(!it.isAlive) }
+    check(prepareCount.get()==1 && answers.size==6)
+    val sharedValue=(answers.first() as DependencyResult.Ready).value
+    check(answers.all { it is DependencyResult.Ready && it.value===sharedValue })
+
+    val optionalAttempts=java.util.concurrent.atomic.AtomicInteger()
+    val optionalController=Any()
+    val storageAccess=UpdateStorageAccess(
+        RetryableDependency(create={ optionalController },prepare={}),
+    ) { if(optionalAttempts.incrementAndGet()==1) throw java.io.IOException("temporary storage failure") }
+    check(storageAccess.optional() is DependencyResult.Unavailable) // metadata/cleanup can report and continue
+    check(storageAccess.required()===optionalController) // explicit action retries storage and proceeds only when ready
+    check(optionalAttempts.get()==2)
+    val unavailableAccess=UpdateStorageAccess(
+        RetryableDependency(create={ Any() },prepare={}),
+    ) { throw java.io.IOException("storage remains unavailable") }
+    try {
+        unavailableAccess.required()
+        error("required storage must not report success")
+    } catch(expected: UpdateStorageFailure) {
+        check(expected.message.orEmpty().contains("storage is unavailable"))
+    }
+
     check(PendingInstallPolicy.mayContinue("a","a",true,true))
     check(!PendingInstallPolicy.mayContinue("a","b",true,true))
     check(!PendingInstallPolicy.mayContinue("a","a",false,true))
@@ -140,6 +210,9 @@ fun main() {
     check(nativeReport.contains("fixed granted/denied/unknown outcome"))
     check(nativeReport.contains("never as raw system settings"))
     check(NativeDiagnosticsPolicy.report(NativeDiagnosticsSnapshot(false,emptyList())).contains("No native updater diagnostic events"))
+    val hostileNativeReport=NativeDiagnosticsPolicy.report(NativeDiagnosticsSnapshot(false,emptyList(),"secret="+"x".repeat(10_000)))
+    check(hostileNativeReport.contains("Storage state: unavailable"))
+    check(!hostileNativeReport.contains("secret=") && hostileNativeReport.length<=NativeDiagnosticsPolicy.MAX_REPORT_CHARS)
     check(UpdateState(phase=UpdatePhase.AwaitingInstaller).busy)
     check(!UpdateState(phase=UpdatePhase.Ready).busy)
     val legacyCurrent = UpdateState(message="Installed version is current. Latest compatible: 3.1.0.",lastSuccess=1)
@@ -152,13 +225,13 @@ fun main() {
     check(structured.latestVersion=="3.3.0")
     check(UpdatePresentation.latest(structured)=="3.3.0")
     check(UpdatePresentation.latestLabel(structured)=="Latest compatible stable")
-    check(UpdatePresentation.status(structured)=="You're on the latest version.")
+    check(UpdatePresentation.status(structured)=="You're up to date — v3.3.0.")
     check(structured.phase==UpdatePhase.Idle && structured.candidate==null && structured.verifiedPath==null)
     check(structured.pendingIdentity==null && !structured.busy && structured.errorCategory.isBlank())
     check(structured.stage.isBlank() && structured.httpStatus==0 && structured.retryAt==0L)
     val installedAhead = UpdateStates.upToDate(UpdateState(), "3.3.0", 6L, installedAhead=true)
     check(installedAhead.installedAhead)
-    check(UpdatePresentation.status(installedAhead)=="Installed version is newer than the latest stable release.")
+    check(UpdatePresentation.status(installedAhead)=="Installed version is newer than the latest stable release — v3.3.0.")
     check(UpdatePresentation.latest(installedAhead)=="3.3.0")
     val priorFailure = UpdateStates.failed(UpdateState(latestVersion="3.3.0",lastSuccess=5L), MappedError("http","HTTP error","",100L,403,"check"), "v3.3.0")
     check(UpdatePresentation.status(priorFailure)=="HTTP error")
@@ -191,14 +264,41 @@ fun main() {
     check(sameStaleCandidate.verifiedPath=="/verified.apk")
     check(UpdatePresentation.latestLabel(staleAvailable)=="Last known compatible stable")
     val available = UpdateState(UpdatePhase.Available,candidate,"YTArk 3.2.0 is available.")
-    check(UpdatePresentation.status(available)=="Update available")
+    check(UpdatePresentation.status(available)=="Newer version available — v3.2.0.")
     check(UpdatePresentation.latest(available)=="3.2.0")
     val failedAvailableCheck = UpdateStates.failed(available, MappedError("http","Update check failed","",100L,403,"check"), "v3.2.0")
     check(UpdatePresentation.latestLabel(failedAvailableCheck)=="Last confirmed compatible stable")
     check(UpdatePresentation.status(available.copy(message="Download cancelled. Retry when ready."))=="Download cancelled. Retry when ready.")
+    check(UpdatePresentation.status(UpdateStates.cancelled(available))=="Download cancelled. Retry when ready.")
+    val readyForInstall = UpdateStates.ready(available, "/verified.apk")
+    check(UpdatePresentation.status(readyForInstall)=="Verified update ready — v3.2.0. Select Install update.")
+    val installUnconfirmed = UpdateStates.installUnconfirmed(readyForInstall)
+    check(UpdatePresentation.status(installUnconfirmed)==installUnconfirmed.message)
+    check(installUnconfirmed.message.startsWith("Installation was not confirmed."))
     check(UpdatePresentation.status(available.copy(phase=UpdatePhase.Downloading,bytes=1048576))=="Downloading · 1.0 MB / 10.0 MB")
     check(UpdatePresentation.progress(512,0,0)=="Downloading · 512 B")
     check(UpdatePresentation.technical(UpdateState(phase=UpdatePhase.Failed,detail="Stage: check",errorCategory="rate_limit",httpStatus=403,releaseTag="v3.3.0")).contains("HTTP status: 403"))
+    val legacyTechnical=UpdatePresentation.technical(UpdateState(
+        phase=UpdatePhase.Failed,
+        stage="check",
+        errorCategory="rate_limit",
+        httpStatus=403,
+        releaseTag="v3.9.0",
+        detail="Stage: check\nCategory: rate_limit\nRelease: v3.9.0\nHTTP status: 403\nCause chain:\n1. IOException: see https://secret.example/token=abc\nCause chain:\n2. IOException: token=hidden",
+    ))
+    check(legacyTechnical.lines().count { it.startsWith("Stage:") }==1)
+    check(legacyTechnical.lines().count { it.startsWith("Category:") }==1)
+    check(legacyTechnical.lines().count { it.startsWith("Release:") }==1)
+    check(legacyTechnical.lines().count { it.startsWith("HTTP status:") }==1)
+    check(legacyTechnical.lines().count { it.startsWith("Cause chain:") }==1)
+    check(!legacyTechnical.contains("secret.example") && !legacyTechnical.contains("token=abc") && !legacyTechnical.contains("token=hidden"))
+    check(UpdatePresentation.technical(UpdateState(releaseTag="v3.9.0")).isEmpty())
+    val hostileTechnical=UpdatePresentation.technical(UpdateState(
+        phase=UpdatePhase.Failed,stage="<img onerror=alert(1)>",errorCategory="html",httpStatus=999,
+        releaseTag="https://secret.example/update",detail="Cause chain:\n1. IOException: /data/user/0/io.github.twoarchiver.ytark/private.apk token=abc",
+    ))
+    check(!hostileTechnical.contains("<img") && !hostileTechnical.contains("https://") && !hostileTechnical.contains("/data/user/0"))
+    check(hostileTechnical.contains("[path]") && hostileTechnical.contains("token=[redacted]"))
     for(phase in listOf(UpdatePhase.Checking,UpdatePhase.Failed,UpdatePhase.AwaitingPermission,UpdatePhase.AwaitingInstaller)) {
         check(UpdatePresentation.status(UpdateState(phase=phase,message="Guidance"))=="Guidance")
     }

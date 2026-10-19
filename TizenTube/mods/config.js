@@ -26,10 +26,13 @@ import { isSafeStartupDestination } from './features/startupDestination.js';
 //   6            Adds default-off browser diagnostic recording. Existing settings
 //                are merged missing-key-only; explicit user choices are retained.
 //   7            Adds a local cold/warm label for comparing future startup samples.
-//                It does not enable diagnostics or change any runtime setting.
+//   8            Retires user-supplied launch labels and advanced browser reports,
+//                replaces three profile-selector controls with one automatic
+//                prompt preference, and removes the guest sign-in reminder. Old
+//                valid diagnostic samples remain readable; accounts are untouched.
 
 const CONFIG_KEY = 'ytaf-configuration';
-export const CONFIG_SCHEMA_VERSION = 7;
+export const CONFIG_SCHEMA_VERSION = 8;
 
 /**
  * Preferences that no longer exist, with the schema that retired them.
@@ -51,6 +54,14 @@ export const CONFIG_SCHEMA_VERSION = 7;
  *                         removed in 3.0; the stored value is discarded, the
  *                         app keeps the normal YouTube/YTArk theming and the
  *                         user's custom colours)
+ *   enableWhoIsWatchingMenu / permanentlyEnableWhoIsWatchingMenu /
+ *   enableWhosWatchingMenuOnAppExit
+ *                         legacy selector controls, merged into the single
+ *                         `showAutomaticProfilePicker` preference
+ *   enableSigninReminder  removed sign-in reminder preference; explicit sign-in
+ *                         flows remain owned by YouTube
+ *   startupDiagnosticRunKind
+ *                         removed user-supplied cold/warm launch label
  */
 export const RETIRED_KEYS = Object.freeze([
   'userAgentProfile',
@@ -62,6 +73,11 @@ export const RETIRED_KEYS = Object.freeze([
   'uiTheme',
   'skipStartupAnimation',
   'enableSkipStartupAnimation',
+  'enableWhoIsWatchingMenu',
+  'permanentlyEnableWhoIsWatchingMenu',
+  'enableWhosWatchingMenuOnAppExit',
+  'enableSigninReminder',
+  'startupDiagnosticRunKind',
 ]);
 /** Presence of YouTube TV's own storage means the app has run before. Only the
  * existence of the key is checked; its contents are never read. */
@@ -110,9 +126,8 @@ const defaultConfig = {
   enableLongPress: true,
   enableShorts: true,
   dontCheckUpdateUntil: 0,
-  enableWhoIsWatchingMenu: false,
-  permanentlyEnableWhoIsWatchingMenu: false,
-  enableWhosWatchingMenuOnAppExit: false,
+  // Show only automatic account/profile selectors; YouTube manual account flows remain available.
+  showAutomaticProfilePicker: false,
   enableShowUserLanguage: true,
   enableShowOtherLanguages: false,
   enablePreviousNextButtons: true,
@@ -151,13 +166,10 @@ const defaultConfig = {
   // Browser-side startup/playback measurements. Default-off on fresh installs
   // and missing-key-only on upgrades; native updater diagnostics are separate.
   recordBrowserDiagnostics: false,
-  // Labels only future local samples; no cold/warm state is inferred from the browser.
-  startupDiagnosticRunKind: 'unclassified',
   // Automatic retries are an explicit opt-in because PlayerService.loadVideo is not a general recovery API.
   enablePlaybackRecovery: false,
   autoFrameRate: false,
   autoFrameRatePauseVideoFor: 0,
-  enableSigninReminder: false,
   sortSubscriptionsByAlphabet: false,
   enableClock: false,
   isClock12HourFormat: false,
@@ -224,9 +236,6 @@ export function sanitizeLayout(value) {
 const SANITIZERS = {
   launchToOnStartup(value) {
     return value === null || isSafeStartupDestination(value) ? value : null;
-  },
-  startupDiagnosticRunKind(value) {
-    return ['unclassified', 'cold', 'warm'].includes(value) ? value : 'unclassified';
   },
   ytSettingsLayout(value) {
     return sanitizeLayout(value);
@@ -324,6 +333,16 @@ export function migrateConfig(stored, env = {}) {
       migratedFrom = schema || 1;
     } else {
       freshInstall = true;
+    }
+    if (schema < 8 && !Object.prototype.hasOwnProperty.call(config, 'showAutomaticProfilePicker')) {
+      // Preserve any affirmative legacy choice. This OR reduction is stable for
+      // every old-boolean combination; false is the default only when all three
+      // old controls were off or absent.
+      config.showAutomaticProfilePicker = [
+        config.enableWhoIsWatchingMenu,
+        config.permanentlyEnableWhoIsWatchingMenu,
+        config.enableWhosWatchingMenuOnAppExit,
+      ].some(value => value === true || value === 'true');
     }
     if (config.preferredVideoCodec === undefined && typeof config.videoPreferredCodec === 'string'
         && config.videoPreferredCodec !== 'any') {

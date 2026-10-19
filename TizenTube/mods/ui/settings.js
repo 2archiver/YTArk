@@ -9,7 +9,7 @@
 
 import { configRead } from '../config.js';
 import { showModal, buttonItem, overlayPanelItemListRenderer, overlayMessageRenderer, scrollPaneRenderer } from './ytUI.js';
-import { browserDiagnostics, browserDiagnosticSnapshot } from '../features/browserDiagnostics.js';
+import { browserDiagnostics } from '../features/browserDiagnostics.js';
 import { t } from 'i18next';
 import resolveCommand from '../resolveCommand.js';
 import {
@@ -74,7 +74,9 @@ export function subtitleFor(node) {
   if (node.unavailable) return node.unavailable;
   const parts = [];
   const value = valueText(node);
-  if ((node.type === 'choice' || node.type === 'multi') && value) {
+  if (node.statusOnly && node.type === 'toggle') {
+    parts.push(value);
+  } else if ((node.type === 'choice' || node.type === 'multi') && value) {
     parts.push(tx('ytark.value.current', 'Current: {{value}}', { value }));
   }
   if (node.description) parts.push(node.description);
@@ -96,7 +98,8 @@ export function rowForNode(node, ctx) {
       const current = configRead(node.key) === true;
       return buttonItem(title, {
         icon: node.icon || 'CHEVRON_DOWN',
-        secondaryIcon: toggleDisplayValue(node) ? 'CHECK_BOX' : 'CHECK_BOX_OUTLINE_BLANK',
+        secondaryIcon: node.statusOnly ? undefined
+          : (toggleDisplayValue(node) ? 'CHECK_BOX' : 'CHECK_BOX_OUTLINE_BLANK'),
       }, [settingCommand(node.key, 'boolValue', !current), ctx.refresh(node.id)]);
     }
     case 'action':
@@ -229,7 +232,7 @@ export function showPanel(id, options = {}) {
   const tree = buildSettingsTree();
   const node = findNode(tree, id);
   if (!node || typeof node.panel !== 'function') return null;
-  const panel = node.panel();
+  const panel = node.panel(options);
   watchAwaitingPanel(node.id, node.versionAware === true && installedVersionInfo().loading);
   const parent = parentOf(tree, node.id);
   return showModal(
@@ -244,94 +247,71 @@ export function showPanel(id, options = {}) {
   );
 }
 
-function diagnosticsRow(id, title, subtitle, action, parameters = {}) {
-  const row = buttonItem({ title, subtitle }, { icon: 'DESCRIPTION' }, [custom(action, parameters)]);
-  row.compactLinkRenderer.itemId = `ytark-diagnostics-${id}`;
-  return row;
+function returnToDiagnosticsCommands(focusIndex = 1) {
+  return [deferred('YTARK_PANEL_SHOW', {
+    id: 'about.diagnostics', update: true, focusIndex,
+  })];
 }
 
-function returnToDiagnosticsCommands() {
-  return [deferred('YTARK_PANEL_SHOW', { id: 'about.diagnostics', update: true })];
+function boundedNativeTextRows(raw, maxChars = 88, maxRows = 24) {
+  const text = String(raw || '').slice(0, 2048);
+  const rows = [];
+  for (const paragraph of text.split(/\r?\n/)) {
+    let row = '';
+    for (const word of paragraph.split(/\s+/).filter(Boolean)) {
+      if (word.length > maxChars) {
+        if (row) { rows.push(row); row = ''; }
+        for (let offset = 0; offset < word.length; offset += maxChars) {
+          rows.push(word.slice(offset, offset + maxChars));
+        }
+      } else if (!row) row = word;
+      else if (row.length + word.length + 1 <= maxChars) row += ` ${word}`;
+      else { rows.push(row); row = word; }
+      if (rows.length >= maxRows) return rows.slice(0, maxRows);
+    }
+    if (row && rows.length < maxRows) rows.push(row);
+    if (rows.length >= maxRows) break;
+  }
+  return rows.length ? rows.slice(0, maxRows) : [' '];
 }
 
-/** Readable, scrollable browser-only report. No file, clipboard, URL or native bridge is assumed. */
-export function showBrowserStartupSummary() {
+/** Native bounded summary renderer; Back returns focus to its Diagnostics row. */
+export function showBrowserStartupSummary(parameters = {}) {
   const report = browserDiagnostics.startupSummary();
-  const content = scrollPaneRenderer(report.split('\n').map((line) => overlayMessageRenderer(line || ' ')));
+  const content = scrollPaneRenderer(boundedNativeTextRows(report).map((line) => overlayMessageRenderer(line || ' ')));
+  const focusIndex = Number.isInteger(Number(parameters.returnFocusIndex))
+    ? Number(parameters.returnFocusIndex) : 2;
   return showModal(
     { title: 'Startup summary', subtitle: 'Local browser measurements · no cross-clock comparisons' },
     content,
     'ytark-browser-startup-summary',
     false,
-    { onDismiss: returnToDiagnosticsCommands(), settingsInputOwner: true },
+    { onDismiss: returnToDiagnosticsCommands(focusIndex), settingsInputOwner: true },
   );
 }
 
-export function showBrowserDiagnosticsReport(sessionIndex = null) {
-  const snapshot = browserDiagnosticSnapshot();
-  let session = null;
-  if (Number.isInteger(sessionIndex) && sessionIndex >= 0 && sessionIndex < snapshot.sessions.length) {
-    session = snapshot.sessions[sessionIndex];
-  }
-  const report = browserDiagnostics.report(session);
-  const content = scrollPaneRenderer(report.split('\n').map((line) => overlayMessageRenderer(line || ' ')));
-  return showModal(
-    { title: 'Advanced browser event report', subtitle: 'On-device text · browser scope only' },
-    content,
-    'ytark-browser-diagnostics-report',
-    false,
-    { onDismiss: returnToDiagnosticsCommands(), settingsInputOwner: true },
-  );
-}
-
-export function showBrowserDiagnosticSessions() {
-  const snapshot = browserDiagnosticSnapshot();
-  const rows = snapshot.sessions.map((session, index) => diagnosticsRow(
-    `session-${index}`,
-    `Sample ${snapshot.sessions.length - index} · ${session.capture === 'launch' ? 'launch capture' : 'partial'}`,
-    `${session.status} · ${session.events.length} event(s) · ${session.clockDomain} clock`,
-    'YTARK_DIAGNOSTICS_REPORT', { index },
-  ));
-  if (!rows.length) rows.push(overlayMessageRenderer(
-    snapshot.storageState === 'future-schema'
-      ? 'Saved browser diagnostics use a newer schema and cannot be displayed.'
-      : snapshot.storageState === 'corrupt' || snapshot.storageState === 'oversized'
-        ? 'Saved browser diagnostics are unreadable or exceed the supported size. Clear diagnostic data to remove them.'
-        : snapshot.storageState === 'unavailable'
-          ? 'Local browser diagnostic storage is unavailable.'
-          : 'No browser diagnostic sessions are available yet.',
-  ));
-  const back = buttonItem({ title: 'Back to Diagnostics', subtitle: 'Return to the scope controls' }, { icon: 'ARROW_BACK' },
-    [POPUP_BACK, deferred('YTARK_PANEL_SHOW', { id: 'about.diagnostics', update: true })]);
-  back.compactLinkRenderer.itemId = 'ytark-diagnostics-sessions-back';
-  rows.push(back);
-  return showModal(
-    { title: 'Recent browser sessions', subtitle: 'Separate local samples; no cross-session timing arithmetic' },
-    overlayPanelItemListRenderer(rows, 0),
-    'ytark-browser-diagnostics-sessions',
-    false,
-    { onDismiss: returnToDiagnosticsCommands(), settingsInputOwner: true },
-  );
-}
-
-export function showBrowserDiagnosticsClearConfirm() {
+export function showBrowserDiagnosticsClearConfirm(parameters = {}) {
+  const focusIndex = Number.isInteger(Number(parameters.returnFocusIndex))
+    ? Number(parameters.returnFocusIndex) : 3;
   const rows = [
-    overlayMessageRenderer('Clear only YTArk browser diagnostic reports and their active browser sample. Settings, cookies, accounts, playback state, app cache, downloads and native updater reports are not changed.'),
+    overlayMessageRenderer('Clear only saved YTArk browser diagnostic samples and the active browser sample. Settings, cookies, accounts, playback state, app cache, downloads and Android updater data are not changed.'),
     (() => {
-      const row = buttonItem({ title: 'Clear browser diagnostic data', subtitle: 'This cannot be undone.' }, { icon: 'DELETE' },
-        [POPUP_BACK, deferred('YTARK_DIAGNOSTICS_CLEAR')]);
+      const row = buttonItem({ title: 'Clear diagnostic data', subtitle: 'This cannot be undone.' }, { icon: 'DELETE' },
+        [POPUP_BACK, deferred('YTARK_DIAGNOSTICS_CLEAR', { returnFocusIndex: focusIndex })]);
       row.compactLinkRenderer.itemId = 'ytark-diagnostics-clear-confirm';
       return row;
     })(),
-    buttonItem({ title: 'Cancel', subtitle: 'Keep the saved browser reports' }, { icon: 'CLOSE' },
-      [POPUP_BACK, deferred('YTARK_PANEL_SHOW', { id: 'about.diagnostics', update: true })]),
+    buttonItem({ title: 'Cancel', subtitle: 'Keep the saved browser samples' }, { icon: 'CLOSE' },
+      [POPUP_BACK, deferred('YTARK_PANEL_SHOW', {
+        id: 'about.diagnostics', update: true, focusIndex,
+      })]),
   ];
   return showModal(
-    { title: 'Clear browser diagnostics?', subtitle: 'Android reports are cleared separately in Updates > Diagnostics' },
+    { title: 'Clear diagnostic data?', subtitle: 'Only local browser samples are removed' },
     overlayPanelItemListRenderer(rows, 2),
     'ytark-browser-diagnostics-clear-confirm',
     false,
-    { onDismiss: returnToDiagnosticsCommands(), settingsInputOwner: true },
+    { onDismiss: returnToDiagnosticsCommands(focusIndex), settingsInputOwner: true },
   );
 }
 

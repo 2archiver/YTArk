@@ -91,8 +91,6 @@ function sanitizeContext(value) {
   const baseTag = typeof source.baseTag === 'string' && SAFE_BASE.test(source.baseTag)
     ? source.baseTag : null;
   const startupDestination = DESTINATIONS.has(source.startupDestination) ? source.startupDestination : 'invalid';
-  const startupComparisonKind = ['unclassified', 'cold', 'warm'].includes(source.startupComparisonKind)
-    ? source.startupComparisonKind : 'unclassified';
   return {
     packageId: source.packageId === 'io.github.twoarchiver.ytark' ? source.packageId : null,
     bundleVersion: version,
@@ -104,7 +102,6 @@ function sanitizeContext(value) {
     reloadHomeOnStartup: typeof source.reloadHomeOnStartup === 'boolean' ? source.reloadHomeOnStartup : null,
     fasterStartup: typeof source.fasterStartup === 'boolean' ? source.fasterStartup : null,
     startupDestination,
-    startupComparisonKind,
   };
 }
 
@@ -241,13 +238,11 @@ function makeContext() {
   let reload = null;
   let faster = null;
   let destination = 'invalid';
-  let startupComparisonKind = 'unclassified';
   try { reload = configRead('reloadHomeOnStartup') === true; } catch (_) { /* unavailable */ }
   try { faster = configRead('fasterStartup') === true; } catch (_) { /* unavailable */ }
   try {
     destination = reload === false ? 'none' : classifyStartupDestination(configRead('launchToOnStartup'));
   } catch (_) { /* unavailable */ }
-  try { startupComparisonKind = configRead('startupDiagnosticRunKind') || 'unclassified'; } catch (_) { /* unavailable */ }
   return sanitizeContext({
     packageId: YTARK_BUILD_INFO && YTARK_BUILD_INFO.appId,
     bundleVersion: YTARK_BUILD_INFO && YTARK_BUILD_INFO.versionName,
@@ -256,7 +251,6 @@ function makeContext() {
     reloadHomeOnStartup: reload,
     fasterStartup: faster,
     startupDestination: destination,
-    startupComparisonKind,
   });
 }
 
@@ -466,14 +460,6 @@ export class BrowserDiagnosticRecorder {
     this._schedulePersist();
   }
 
-  startNewSample() {
-    if (!this.enabled) this.enabled = true;
-    if (this.active) this._finish('replaced');
-    else this._loadForEnable();
-    this._startSession('partial');
-    return this.active;
-  }
-
   disable() {
     if (!this.enabled) return;
     this.enabled = false;
@@ -618,9 +604,13 @@ export class BrowserDiagnosticRecorder {
   }
 
   startupSummary() {
-    const snapshot = browserDiagnosticSnapshot();
+    // An explicit summary request may read saved diagnostics while collection is
+    // off; the default-off bootstrap itself still does not touch these keys.
+    if (!this.enabled && !this.storage) this.storage = defaultStorage();
+    const recent = this._readSamplesForSummary();
     return summarizeStartupSessions({
-      sessions: snapshot.sessions, status: snapshot.storageState, evicted: snapshot.evicted,
+      sessions: recent.samples, status: recent.status,
+      recordingEnabled: this.enabled, activeRecording: !!this.active,
     });
   }
 
@@ -869,89 +859,18 @@ export class BrowserDiagnosticRecorder {
     }
   }
 
-  readRecentSessions() {
+  _readSamplesForSummary() {
     if (this.enabled && this.active) {
-      const values = [this._plainSession(this.active), ...this.sessions.slice().reverse()];
-      return { sessions: values.slice(0, BROWSER_DIAGNOSTICS_LIMITS.sessions), status: this.storageStatus, evicted: this.evicted };
+      const samples = [this._plainSession(this.active), ...this.sessions.slice().reverse()];
+      return { samples: samples.slice(0, BROWSER_DIAGNOSTICS_LIMITS.sessions), status: this.storageStatus };
     }
     const data = readDataset(this.storage);
     this.storageStatus = data.status;
-    return { sessions: data.sessions.slice().reverse(), status: data.status, evicted: data.evicted };
-  }
-
-  latestSession() {
-    const recent = this.readRecentSessions();
-    return recent.sessions.length ? recent.sessions[0] : null;
-  }
-
-  report(session = null) {
-    const recent = this.readRecentSessions();
-    const selected = session || recent.sessions[0] || null;
-    if (!selected) {
-      const reason = recent.status === 'future-schema' ? 'Saved diagnostic data uses a newer schema and is not shown.'
-        : recent.status === 'corrupt' ? 'Saved diagnostic data is unreadable. Clear diagnostics to remove it.'
-          : recent.status === 'oversized' ? 'Saved diagnostic data exceeds the supported size and is not shown.'
-            : recent.status === 'unavailable' ? 'Local diagnostic storage is unavailable on this runtime.'
-              : 'No diagnostic sample is available yet.';
-      return `YTArk startup/playback diagnostics\n\n${reason}\n\nThis report stays on this device. No data is sent automatically.`;
-    }
-    const clean = sanitizeSession(selected);
-    if (!clean) return 'This diagnostic sample is invalid or unsupported and cannot be shown.';
-    const lines = [
-      'YTArk startup/playback diagnostics · browser scope',
-      `Capture: ${clean.capture === 'launch' ? 'launch capture from userscript bootstrap (not Android process start)' : 'partial sample started in this session'}`,
-      `Status: ${clean.status}${clean.truncated ? ' · event limit reached' : ''}`,
-      `Clock: ${clean.clockDomain} (${clean.clockQuality})`,
-      `Bundle: ${clean.context.bundleVersion || 'unavailable'} (${clean.context.bundleVersionSource})`,
-      `Installed package version: ${clean.context.packageVersion || 'unavailable'} (${clean.context.packageVersionSource})`,
-      `Script/base: ${clean.context.scriptTag || 'unavailable'} / ${clean.context.baseTag || 'unavailable'}`,
-      `Saved startup options: Home reload ${triBool(clean.context.reloadHomeOnStartup)}, Faster startup preference ${triBool(clean.context.fasterStartup)}, destination ${clean.context.startupDestination}, user-labelled launch class ${clean.context.startupComparisonKind}`,
-      `Actual readiness polling mode: ${readinessModeDescription(clean.events)}`,
-      'Times are relative to this browser sample only; they are never compared with Android elapsedRealtime or another session.',
-      'Playing and video-frame callbacks are proxies, not input-to-photon or physical display latency. Handler-to-rAF is a rendering-opportunity proxy.',
-      '',
-    ];
-    const seen = new Set(clean.events.map((event) => event.event));
-    for (const event of clean.events) {
-      const at = event.relativeMs === null ? 'unavailable' : `${formatMs(event.relativeMs)} ms`;
-      const value = event.valueMs === null ? '' : ` · value ${formatMs(event.valueMs)} ms`;
-      const meaning = event.event === 'remote-handler-render-opportunity' ? ' (rendering-opportunity proxy)'
-        : event.event === 'first-playing-event' ? ' (playing-event proxy)'
-          : event.event === 'first-video-frame-callback' && event.outcome === 'observed' ? ' (video-frame callback, not display latency)' : '';
-      lines.push(`${event.event}: ${at} · ${event.outcome} · ${event.quality}${meaning}${value}`);
-    }
-    for (const [event, label] of [
-      ['dom-body-available', 'DOM body'], ['controls-ready', 'controls'], ['resolver-ready', 'resolver'],
-      ['guide-executor-ready', 'guide executor'], ['startup-navigation-dispatched', 'startup navigation'],
-      ['first-remote-input-received', 'recognized remote input'], ['first-playing-event', 'playing event'],
-      ['first-video-frame-callback', 'video-frame callback'],
-    ]) if (!seen.has(event)) lines.push(`${label}: not observed / unsupported (no zero or guessed time)`);
-    if (recent.evicted > 0) lines.push(`Retention: ${recent.evicted} older session(s) evicted by the local size bound.`);
-    lines.push('', 'Privacy: allowlisted technical fields only; no cookies, account data, video IDs/titles, URLs, paths, payloads, or raw exceptions. Nothing is sent automatically.');
-    return lines.join('\n');
+    return { samples: data.sessions.slice().reverse(), status: data.status };
   }
 
   _getStorageState() { return this.storageStatus; }
 }
-
-function readinessModeDescription(events) {
-  const modes = (events || []).filter(event => event.event === 'startup-readiness-mode');
-  if (!modes.length) return 'not recorded / unavailable';
-  const first = modes[0].outcome;
-  if (first === 'faster') {
-    return modes.slice(1).some(event => event.outcome === 'normal-fallback')
-      ? 'Faster cadence initially, then normal fallback'
-      : 'Faster cadence selected';
-  }
-  if (first === 'normal-disabled') return 'normal cadence (Faster startup disabled)';
-  if (first === 'normal-interrupted') return 'normal cadence (prior accelerated launch was interrupted)';
-  if (first === 'normal-storage-unavailable') return 'normal cadence (startup storage unavailable)';
-  if (first === 'normal-fallback') return 'normal cadence after Faster startup fallback';
-  return 'unavailable';
-}
-
-function triBool(value) { return value === null ? 'unavailable' : value ? 'on' : 'off'; }
-function formatMs(value) { return Number(value).toFixed(1); }
 
 function isTextEntry(target) {
   if (!target) return false;
@@ -999,34 +918,11 @@ export function setBrowserDiagnosticsEnabled(enabled) {
   return { enabled: value, preferenceSaved: lastPersistSucceeded(), storageState: browserDiagnostics.storageState };
 }
 
-export function startBrowserDiagnosticSample() {
-  if (configRead('recordBrowserDiagnostics') !== true) {
-    const result = setBrowserDiagnosticsEnabled(true);
-    return { ...result, partial: true };
-  }
-  browserDiagnostics.startNewSample();
-  return { enabled: true, partial: true, storageState: browserDiagnostics.storageState };
-}
-
 export function clearBrowserDiagnosticData() {
   // Explicit Clear is allowed to open the recorder's separate storage even when
   // collection is OFF; automatic off-state initialization still touches none.
   browserDiagnostics.storage = defaultStorage();
   return browserDiagnostics.clear();
-}
-
-export function browserDiagnosticSnapshot() {
-  // Reading saved reports happens only after an explicit report/history action;
-  // the default-off bootstrap itself never opens the diagnostics keys.
-  if (!browserDiagnostics.enabled && !browserDiagnostics.storage) browserDiagnostics.storage = defaultStorage();
-  const recent = browserDiagnostics.readRecentSessions();
-  return {
-    enabled: configRead('recordBrowserDiagnostics') === true,
-    status: browserDiagnostics.status,
-    storageState: recent.status,
-    sessions: recent.sessions,
-    evicted: recent.evicted,
-  };
 }
 
 export default browserDiagnostics;

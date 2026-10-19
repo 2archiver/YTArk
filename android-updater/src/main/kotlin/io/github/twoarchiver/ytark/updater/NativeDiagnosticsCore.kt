@@ -21,6 +21,7 @@ object NativeDiagnosticsPolicy {
     const val MAX_EVENTS_PER_SESSION = 32
     const val MAX_TOTAL_EVENTS = 160
     const val MAX_SERIALIZED_CHARS = 16_384
+    const val MAX_REPORT_CHARS = 24_000
     const val MAX_OFFSET_MS = 24L * 60L * 60L * 1000L
     const val MAX_DURATION_MS = 10L * 60L * 1000L
 
@@ -33,6 +34,7 @@ object NativeDiagnosticsPolicy {
         "download_started", "download_completed", "apk_validation_started", "apk_validation_completed",
         "permission_continuation_queued", "permission_denied",
         "installer_handoff", "installer_ui_returned", "installer_status",
+        "storage_initialization", "storage_cleanup",
     ) + permissionEvents
     val OUTCOMES = setOf(
         "none", "enabled", "entry", "install", "ok", "error", "no_update", "candidate", "stale",
@@ -141,7 +143,8 @@ object NativeDiagnosticsPolicy {
         appendLine("Native startup milestones are not reconstructed; enable before the next launch to capture a full startup sequence.")
         appendLine("Browser measurements are separate. No network transfer, account/content data, URLs, device IDs or file paths are included. Permission is reported only as a fixed granted/denied/unknown outcome, never as raw system settings.")
         appendLine("Clock: Android elapsedRealtime offsets and durations within each process sample; no comparison with browser clocks or across sample offsets.")
-        if (snapshot.storageState != "ok") appendLine("Storage state: ${snapshot.storageState}")
+        val storage = snapshot.storageState.takeIf { it in setOf("ok", "unavailable", "corrupt", "oversized") } ?: "unavailable"
+        if (storage != "ok") appendLine("Storage state: $storage")
         val sessions = sanitize(snapshot.sessions)
         if (sessions.isEmpty()) {
             append("No native updater diagnostic events are saved.")
@@ -155,5 +158,5 @@ object NativeDiagnosticsPolicy {
                 }
             }
         }
-    }
+    }.take(MAX_REPORT_CHARS)
 }

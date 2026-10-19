@@ -21,10 +21,16 @@ object UpdatePresentation {
 
     fun status(s: UpdateState): String = when {
         s.phase == UpdatePhase.Idle && s.candidate == null && s.latestVersion.isNotBlank() && s.errorCategory.isBlank() && !s.stale ->
-            if (s.installedAhead) "Installed version is newer than the latest stable release." else "You're on the latest version."
+            if (s.installedAhead) "Installed version is newer than the latest stable release — v${s.latestVersion}."
+            else "You're up to date — v${s.latestVersion}."
         s.latestVersion.isBlank() && s.phase == UpdatePhase.Idle && s.lastSuccess > 0 && s.message.startsWith("Installed version is current.") ->
             "Saved check status cannot confirm the latest version. Check again."
-        s.phase == UpdatePhase.Available && s.message == "YTArk ${s.candidate?.version} is available." -> "Update available"
+        s.phase == UpdatePhase.Available && s.candidate != null && s.errorCategory.isBlank() &&
+            s.message == "YTArk ${s.candidate.version} is available." ->
+            "Newer version available — v${s.candidate.version}."
+        s.phase == UpdatePhase.Ready && s.candidate != null && s.errorCategory.isBlank() &&
+            s.message == "Update ready. Select Install update; Android will ask for confirmation." ->
+            "Verified update ready — v${s.candidate.version}. Select Install update."
         s.phase == UpdatePhase.Downloading -> progress(s.bytes, s.candidate?.size ?: 0, s.speedBps)
         s.phase == UpdatePhase.Validating -> "Verifying package…"
         else -> s.message // Preserve errors, cancellation and permission/install guidance.
@@ -50,16 +56,59 @@ object UpdatePresentation {
     }
 
     fun technical(s: UpdateState): String {
+        // A release tag alone is normal update metadata, not a technical failure.
         if (s.detail.isBlank() && s.errorCategory.isBlank() && s.httpStatus == 0 && s.stage.isBlank()) return ""
+
+        // Saved updater state predates this presentation contract: some versions
+        // embedded Stage, Category, Release and HTTP status inside `detail`. Keep
+        // only the cause lines from old records, then render each field once.
+        val seen = mutableSetOf<String>()
+        val causeParts = s.detail.take(16_384).lineSequence().mapNotNull { line ->
+            val trimmed = line.trim()
+            if (trimmed.isBlank()) return@mapNotNull null
+            val field = when {
+                trimmed.startsWith("Stage:", ignoreCase = true) -> "stage"
+                trimmed.startsWith("Category:", ignoreCase = true) -> "category"
+                trimmed.startsWith("Release:", ignoreCase = true) -> "release"
+                trimmed.startsWith("HTTP status:", ignoreCase = true) -> "http"
+                trimmed.startsWith("Cause chain:", ignoreCase = true) -> "cause-heading"
+                else -> null
+            }
+            if (field != null && !seen.add(field)) return@mapNotNull null
+            if (field != null && field != "cause-heading") return@mapNotNull null
+            trimmed
+        }.take(8).toList()
+        // Sanitize the bounded combined text so credentials split across old
+        // line boundaries are still recognized before the display cap is applied.
+        val cause = UpdateTexts.sanitizeBounded(causeParts.joinToString("\n"), 1600)
+
+        val stage = s.stage.takeIf { it.length <= 32 && it in TECHNICAL_STAGES }
+        val category = s.errorCategory.takeIf { it.length <= 40 && it in TECHNICAL_CATEGORIES }
+        val tag = safeReleaseTag(s.releaseTag.ifBlank { s.candidate?.tag ?: "" })
         return buildString {
-            if (s.stage.isNotBlank()) append("Stage: ").append(s.stage).append('\n')
-            if (s.errorCategory.isNotBlank()) append("Category: ").append(s.errorCategory).append('\n')
-            if (s.httpStatus != 0) append("HTTP status: ").append(s.httpStatus).append('\n')
-            val tag = s.releaseTag.ifBlank { s.candidate?.tag ?: "" }
-            if (tag.isNotBlank()) append("Release: ").append(tag).append('\n')
-            if (s.detail.isNotBlank()) append(s.detail.trim())
-        }.trim()
+            stage?.let { append("Stage: ").append(it).append('\n') }
+            category?.let { append("Category: ").append(it).append('\n') }
+            if (s.httpStatus in 100..599) append("HTTP status: ").append(s.httpStatus).append('\n')
+            tag?.let { append("Release: ").append(it).append('\n') }
+            if (cause.isNotBlank()) append(cause)
+        }.trim().take(2000)
     }
+
+    private fun safeReleaseTag(raw: String): String? {
+        if (raw.length !in 6..32 || !raw.startsWith('v')) return null
+        val version = raw.removePrefix("v")
+        return try {
+            if (raw == "v$version" && UpdateReleaseContract.expectedVersionCodeForVersion(version) > 0) raw else null
+        } catch (_: Exception) { null }
+    }
+
+    private val TECHNICAL_STAGES = setOf("check", "download", "validation", "install", "restore", "updater")
+    private val TECHNICAL_CATEGORIES = setOf(
+        "rate_limit", "forbidden", "no_release", "server", "runtime", "metadata", "storage", "tls",
+        "offline", "timeout", "connection", "no_compatible_apk", "signature_mismatch", "verification",
+        "permission", "install_cancelled", "cancelled", "download_interrupted", "http", "unexpected",
+        "blocked", "invalid", "incompatible", "signature", "conflict", "failure",
+    )
 
     private fun amount(bytes: Long): String {
         if (bytes < 1024) return "$bytes B"

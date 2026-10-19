@@ -30,6 +30,8 @@ describe('fresh installation defaults', () => {
     assert.equal(config.configRead('removePlayerScrim'), true);
     assert.equal(config.configRead('fasterStartup'), false, 'the experimental faster start begins off');
     assert.equal(config.configRead('recordBrowserDiagnostics'), false, 'browser diagnostics are default-off on a fresh install');
+    assert.equal(config.configRead('enableSigninReminder'), undefined, 'the guest sign-in reminder preference is retired');
+    assert.equal(config.configKeys().includes('enableSigninReminder'), false);
     assert.equal(config.getConfigMeta().freshInstall, true);
     assert.equal(config.configRead('lastSeenVersion'), '');
     // Persisted immediately: on the next launch YouTube's own storage exists,
@@ -155,32 +157,82 @@ describe('malformed saved settings', () => {
 });
 
 describe('browser diagnostics migration', () => {
-  it('adds a missing opt-in as false and never overrides an explicit choice', async () => {
-    const missing = await loadConfig(propertyStorage({ [CONFIG_KEY]: JSON.stringify({ configSchemaVersion: 5, enableAdBlock: false }) }));
+  it('adds a missing opt-in as false, retains explicit choices, and upgrades through schema 8', async () => {
+    const storage = propertyStorage({ [CONFIG_KEY]: JSON.stringify({
+      configSchemaVersion: 7, enableAdBlock: false,
+    }) });
+    const missing = await loadConfig(storage);
     assert.equal(missing.configRead('recordBrowserDiagnostics'), false);
     assert.equal(missing.configRead('enableAdBlock'), false);
-    assert.equal(missing.configRead('configSchemaVersion'), 7);
-    assert.equal(missing.configRead('startupDiagnosticRunKind'), 'unclassified');
+    assert.equal(missing.configRead('configSchemaVersion'), 8);
+    assert.equal(missing.configRead('startupDiagnosticRunKind'), undefined);
+    assert.equal(Object.hasOwn(stored(storage), 'startupDiagnosticRunKind'), false);
 
-    const optedIn = await loadConfig(propertyStorage({ [CONFIG_KEY]: JSON.stringify({ configSchemaVersion: 5, recordBrowserDiagnostics: true }) }));
+    const optedIn = await loadConfig(propertyStorage({ [CONFIG_KEY]: JSON.stringify({
+      configSchemaVersion: 7, recordBrowserDiagnostics: true,
+    }) }));
     assert.equal(optedIn.configRead('recordBrowserDiagnostics'), true);
-    const optedOut = await loadConfig(propertyStorage({ [CONFIG_KEY]: JSON.stringify({ configSchemaVersion: 5, recordBrowserDiagnostics: false }) }));
+    const optedOut = await loadConfig(propertyStorage({ [CONFIG_KEY]: JSON.stringify({
+      configSchemaVersion: 7, recordBrowserDiagnostics: false,
+    }) }));
     assert.equal(optedOut.configRead('recordBrowserDiagnostics'), false);
   });
 
-  it('keeps explicit cold/warm labels local and repairs unsupported labels without enabling recording', async () => {
-    for (const kind of ['cold', 'warm']) {
-      const config = await loadConfig(propertyStorage({ [CONFIG_KEY]: JSON.stringify({
-        configSchemaVersion: 6, recordBrowserDiagnostics: false, startupDiagnosticRunKind: kind,
-      }) }));
-      assert.equal(config.configRead('startupDiagnosticRunKind'), kind);
+  it('retires old launch labels without changing recording preference or diagnostic sample storage', async () => {
+    for (const kind of ['cold', 'warm', 'unclassified', 'guess']) {
+      const storage = propertyStorage({ [CONFIG_KEY]: JSON.stringify({
+        configSchemaVersion: 7, recordBrowserDiagnostics: false, startupDiagnosticRunKind: kind,
+      }), 'ytark-browser-diagnostics-v1': 'old valid samples remain in their independent key',
+    });
+      const config = await loadConfig(storage);
+      assert.equal(config.configRead('startupDiagnosticRunKind'), undefined);
+      assert.equal(config.configKeys().includes('startupDiagnosticRunKind'), false);
       assert.equal(config.configRead('recordBrowserDiagnostics'), false);
+      assert.equal(Object.hasOwn(stored(storage), 'startupDiagnosticRunKind'), false);
+      assert.equal(storage['ytark-browser-diagnostics-v1'], 'old valid samples remain in their independent key');
     }
-    const invalid = await loadConfig(propertyStorage({ [CONFIG_KEY]: JSON.stringify({
-      configSchemaVersion: 6, recordBrowserDiagnostics: false, startupDiagnosticRunKind: 'guess',
-    }) }));
-    assert.equal(invalid.configRead('startupDiagnosticRunKind'), 'unclassified');
-    assert.equal(invalid.configRead('recordBrowserDiagnostics'), false);
+  });
+});
+
+describe('automatic profile picker migration', () => {
+  const oldKeys = [
+    'enableWhoIsWatchingMenu',
+    'permanentlyEnableWhoIsWatchingMenu',
+    'enableWhosWatchingMenuOnAppExit',
+  ];
+
+  it('maps every old-boolean combination to one deterministic Off/On value and removes the old keys', async () => {
+    for (let combination = 0; combination < 8; combination += 1) {
+      const oldValues = Object.fromEntries(oldKeys.map((key, index) => [
+        key, (combination & (1 << index)) !== 0,
+      ]));
+      const storage = propertyStorage({ [CONFIG_KEY]: JSON.stringify({
+        configSchemaVersion: 7, ...oldValues,
+      }) });
+      const config = await loadConfig(storage);
+      assert.equal(config.configRead('showAutomaticProfilePicker'), combination !== 0, `combination ${combination}`);
+      for (const key of oldKeys) {
+        assert.equal(config.configRead(key), undefined, `${key} is retired`);
+        assert.equal(Object.hasOwn(stored(storage), key), false, `${key} is removed from persisted config`);
+      }
+    }
+  });
+
+  it('honours an existing canonical choice and removes the retired guest sign-in reminder', async () => {
+    const storage = propertyStorage({ [CONFIG_KEY]: JSON.stringify({
+      configSchemaVersion: 7,
+      enableWhoIsWatchingMenu: true,
+      permanentlyEnableWhoIsWatchingMenu: true,
+      enableWhosWatchingMenuOnAppExit: true,
+      showAutomaticProfilePicker: false,
+      enableSigninReminder: true,
+    }) });
+    const config = await loadConfig(storage);
+    assert.equal(config.configRead('showAutomaticProfilePicker'), false, 'the canonical explicit choice wins');
+    assert.equal(config.configRead('enableSigninReminder'), undefined);
+    assert.equal(Object.hasOwn(stored(storage), 'enableSigninReminder'), false);
+    assert.equal(config.configKeys().includes('enableSigninReminder'), false);
+    assert.equal(config.configRead('enableShorts'), true, 'unrelated preferences remain untouched');
   });
 });
 
@@ -274,8 +326,8 @@ describe('writes, resets and storage failure', () => {
     });
     assert.doesNotThrow(() => config.configWrite('enableClock', true));
     assert.doesNotThrow(() => config.configWrite('enableClock', false));
-    config.configWriteMany({ enableSigninReminder: true, removePlayerScrim: false });
-    assert.equal(config.configRead('enableSigninReminder'), true);
+    config.configWriteMany({ enableClock: true, removePlayerScrim: false });
+    assert.equal(config.configRead('enableClock'), true);
     assert.equal(config.lastPersistSucceeded(), false);
     assert.equal(failures.length, 1, 'one notice per session, no toast spam');
   });
@@ -293,10 +345,10 @@ describe('writes, resets and storage failure', () => {
     const keys = [];
     const listener = event => keys.push(event.detail.key);
     config.configChangeEmitter.addEventListener('configChange', listener);
-    config.configWriteMany({ enableSigninReminder: true, hidePlayerWatermark: false, removePlayerScrim: false });
+    config.configWriteMany({ enableClock: true, hidePlayerWatermark: false, removePlayerScrim: false });
     config.configChangeEmitter.removeEventListener('configChange', listener);
     assert.equal(writes, 1);
-    assert.deepEqual(keys, ['enableSigninReminder', 'hidePlayerWatermark', 'removePlayerScrim']);
+    assert.deepEqual(keys, ['enableClock', 'hidePlayerWatermark', 'removePlayerScrim']);
   });
 
   it('resets only the requested YTArk keys and never other storage', async () => {

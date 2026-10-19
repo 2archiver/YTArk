@@ -69,12 +69,12 @@ YTArk ${DISPLAY_VERSION}
 
 ${WHAT_CHANGED}
 
-ARMv7 (armeabi-v7a): [Download APK](https://github.com/${GITHUB_REPOSITORY}/releases/download/${VERSION_TAG}/${APK_ARMV7}). Not for arm64-v8a-only devices; a 64-bit CPU alone is insufficient. 4K does not select an APK architecture.
+ARMv7 (armeabi-v7a) only: [APK](https://github.com/${GITHUB_REPOSITORY}/releases/download/${VERSION_TAG}/${APK_ARMV7}). Not for arm64-v8a-only devices; 64-bit CPU alone is insufficient. 4K does not select an APK architecture.
 
-Install over the existing app; data is preserved. From 3.7.0, install manually once.
+Keep accounts and data; do not uninstall. If the 3.8 updater cannot recover, manually install signed 3.9 APK over it. Package/signing identity and TizenTubeCobalt v2.0.2 stay unchanged.
 Notices and licenses: https://github.com/${GITHUB_REPOSITORY}/blob/main/NOTICE.md
 
-Known limitations: TV permission, startup, upgrade and playback checks remain unverified; the engine is unchanged.
+Known limitations: TV permission, startup, upgrade, playback and Google TV remain unverified.
 
 <!-- Package ${APP_ID}; ${VERSION_NAME}; versionCode ${VERSION_CODE}; base TizenTubeCobalt ${BASE_TAG}. -->
 EOF

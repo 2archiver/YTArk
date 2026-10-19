@@ -14,6 +14,7 @@ import { handleYtarkAction } from './ui/ytarkActions.js';
 import {
   GUIDE_SETTINGS_ACTION, activationFromCommand, noteResolverCommand,
 } from './ui/guideEntryActivation.js';
+import { automaticAccountSelectorAction } from './features/accountSelectorPolicy.js';
 
 export default function resolveCommand(cmd, _) {
     // resolveCommand function is pretty OP, it can do from opening modals, changing client settings and way more.
@@ -207,16 +208,12 @@ export function patchResolveCommand() {
                     return true;
                 }
 
-                if (cmd?.requestAccountSelectorCommand
-                    && cmd.requestAccountSelectorCommand?.identityActionContext?.eventTrigger === 'ACCOUNT_EVENT_TRIGGER_ON_EXIT') {
-                    if (!configRead('enableWhosWatchingMenuOnAppExit')) {
-                        ogResolve.call(this, {
-                            signalAction: {
-                                signal: 'EXIT_APP'
-                            }
-                        });
-                        return false;
-                    }
+                const selectorAction = automaticAccountSelectorAction(
+                    cmd, configRead('showAutomaticProfilePicker'),
+                );
+                if (selectorAction === 'exit') {
+                    ogResolve.call(this, { signalAction: { signal: 'EXIT_APP' } });
+                    return false;
                 }
 
                 return ogResolve.call(this, cmd, _);

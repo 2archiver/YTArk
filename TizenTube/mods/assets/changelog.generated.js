@@ -4,20 +4,80 @@ export const YTARK_CHANGELOG = {
   "schema": 1,
   "source": "CHANGELOG.md",
   "summaryFallback": "No short highlights available for this version.",
-  "sourceSha256": "3f528bef9ddad47efbbe19953496f3175aafb0752f3ad04275e99142ee1927a0",
+  "sourceSha256": "c87e2c903ff29318ab0977f2de79dfd12a5405c252102d032c0c0b3624f3474d",
   "entries": [
     {
-      "version": "3.8.0",
-      "display": "3.8",
+      "version": "3.9.0",
+      "display": "3.9",
       "status": "unreleased",
       "date": null,
       "publishedAt": null,
+      "tag": "v3.9.0",
+      "versionCode": 3090000,
+      "scriptTag": "s40",
+      "title": "YTArk 3.9",
+      "releaseUrl": null,
+      "facts": "Not yet published. Planned tag v3.9.0 · versionCode 3090000 · userscript s40 · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.",
+      "summary": "Reliable updates, simpler profiles, compact diagnostics.",
+      "sections": [
+        {
+          "heading": "Added",
+          "items": [
+            "Android updater storage recovery is serialized and retryable; a failed optional cleanup no longer blocks release metadata checks.",
+            "The official single-APK ARMv7 release digest is validated directly; a checksum sidecar is optional when GitHub publishes the digest."
+          ]
+        },
+        {
+          "heading": "Changed",
+          "items": [
+            "One Off/On setting preserves manual account flows.",
+            "– Off suppresses only automatic profile prompts; manual account and sign-in flows remain available.",
+            "Four Diagnostics rows show recording, real startup mode, and result.",
+            "– The startup summary also reports a bounded valid duration; native details scroll and restore Back/focus."
+          ]
+        },
+        {
+          "heading": "Fixed",
+          "items": [
+            "Checks survive storage outages; transfers and installs require usable storage.",
+            "– Failures are explicit and retryable; no secondary uninitialized-controller error is thrown.",
+            "Native diagnostics I/O moved off the UI thread."
+          ]
+        },
+        {
+          "heading": "Removed",
+          "items": [
+            "Removed the guest sign-in reminder preference/runtime behavior and the retired diagnostic labels, session browser, advanced reports, and commands."
+          ]
+        },
+        {
+          "heading": "Known limitations",
+          "items": [
+            "Android updater compilation, signed-candidate inspection, TV permission-return, in-place upgrade, playback, and Google TV behavior remain UNVERIFIED until their recorded checks run.",
+            "If the 3.8 updater cannot recover, install the signed 3.9 APK manually over the existing app once; do not uninstall or clear app data."
+          ]
+        },
+        {
+          "heading": "Validation",
+          "items": [
+            "Regression coverage is added for storage recovery/wiring, release digest fallback, account-setting migration, reversible automatic-prompt suppression, and the four-row diagnostics UI.",
+            "Executed host-test results and unavailable Android/device checks are recorded in docs/YTARK-3.9.0-EVIDENCE.md."
+          ]
+        }
+      ]
+    },
+    {
+      "version": "3.8.0",
+      "display": "3.8",
+      "status": "published",
+      "date": "2026-10-19",
+      "publishedAt": "2026-10-19T02:38Z",
       "tag": "v3.8.0",
       "versionCode": 3080000,
       "scriptTag": "s39",
       "title": "YTArk 3.8",
-      "releaseUrl": null,
-      "facts": "Not yet published. Planned tag v3.8.0 · versionCode 3080000 · userscript s39 · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.",
+      "releaseUrl": "https://github.com/2archiver/YTArk/releases/tag/v3.8.0",
+      "facts": "Published 2026-10-19 02:38 UTC as YTArk 3.8 · tag v3.8.0 · versionCode 3080000 · userscript s39 · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.",
       "summary": "Reliable updater errors, one ARMv7 APK, clear upgrades.",
       "sections": [
         {

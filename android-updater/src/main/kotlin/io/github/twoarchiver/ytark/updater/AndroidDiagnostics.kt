@@ -3,6 +3,8 @@ package io.github.twoarchiver.ytark.updater
 import android.content.Context
 import android.content.SharedPreferences
 import android.os.SystemClock
+import java.util.concurrent.Executors
+import java.util.concurrent.RejectedExecutionException
 
 /** App-private, opt-in Android-updater diagnostics. Never sends data over the network. */
 object AndroidDiagnostics {
@@ -11,14 +13,29 @@ object AndroidDiagnostics {
     private const val KEY_EVENTS = "events"
     private const val KEY_NEXT_SESSION = "next_session"
     private val lock = Any()
+    // SharedPreferences commits and initial reads are serialized off the UI thread.
+    private val storageWorker = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "ytark-native-diagnostics").apply { isDaemon = true }
+    }
     private var preferences: SharedPreferences? = null
-    private var sessions: List<NativeDiagnosticSession> = emptyList()
+    @Volatile private var sessions: List<NativeDiagnosticSession> = emptyList()
     private var activeSessionNumber = 0L
     private var activeSessionStart = 0L
-    private var enabledInProcess = false
-    private var storageState = "ok"
+    @Volatile private var enabledInProcess = false
+    @Volatile private var storageState = "ok"
 
-    fun initialize(context: Context) {
+    /** Queue initialization before every later diagnostic write; never load preferences on the UI thread. */
+    fun initialize(context: Context, onReady: (() -> Unit)? = null) {
+        dispatchStorageWork(onRejected = {
+            synchronized(lock) { storageState = "unavailable" }
+            onReady?.invoke()
+        }) {
+            initializeNow(context)
+            onReady?.invoke()
+        }
+    }
+
+    private fun initializeNow(context: Context) {
         try {
             synchronized(lock) {
                 if (preferences != null) return
@@ -43,6 +60,18 @@ object AndroidDiagnostics {
                 enabledInProcess = false
                 storageState = "unavailable"
             }
+        }
+    }
+
+    private fun dispatchStorageWork(onRejected: (() -> Unit)? = null, work: () -> Unit) {
+        try {
+            storageWorker.execute {
+                try { work() }
+                catch (_: Exception) { synchronized(lock) { storageState = "unavailable" } }
+            }
+        } catch (_: RejectedExecutionException) {
+            synchronized(lock) { storageState = "unavailable" }
+            onRejected?.invoke()
         }
     }
 
@@ -74,17 +103,17 @@ object AndroidDiagnostics {
         if (!prefs.edit().putLong(KEY_NEXT_SESSION, next).commit()) storageState = "unavailable"
     }
 
-    fun enabled(): Boolean = synchronized(lock) { enabledInProcess }
+    /** Volatile read only: callers never wait behind a preference operation. */
+    fun enabled(): Boolean = enabledInProcess
 
     /** Returns whether the requested choice was persisted. Disable gates recording first. */
-    fun setEnabled(enabled: Boolean): Boolean {
+    private fun setEnabled(enabled: Boolean): Boolean {
         return try {
             synchronized(lock) {
                 val prefs = preferences ?: return@synchronized false
-                if (enabledInProcess == enabled) return@synchronized true
                 if (!enabled) {
-                    // Flip the in-process gate while holding the same lock as record():
-                    // collection stops immediately even if the preference write fails.
+                    // `setEnabledAsync(false)` closes the volatile gate on the
+                    // caller thread before it queues the durable preference write.
                     enabledInProcess = false
                     activeSessionNumber = 0L
                     activeSessionStart = 0L
@@ -92,6 +121,7 @@ object AndroidDiagnostics {
                     if (!stored) storageState = "unavailable"
                     return@synchronized stored
                 }
+                if (enabledInProcess) return@synchronized true
                 if (!prefs.edit().putBoolean(KEY_ENABLED, true).commit()) {
                     storageState = "unavailable"
                     return@synchronized false
@@ -120,8 +150,17 @@ object AndroidDiagnostics {
         }
     }
 
+    /** Preference writes are performed by the diagnostics worker, not by a UI callback. */
+    fun setEnabledAsync(enabled: Boolean, completed: (Boolean) -> Unit) {
+        // Disabling collection is immediate even when earlier background writes
+        // are queued or a filesystem commit is slow. The durable write remains
+        // serialized on the storage worker.
+        if (!enabled) enabledInProcess = false
+        dispatchStorageWork(onRejected = { completed(false) }) { completed(setEnabled(enabled)) }
+    }
+
     /** Clear only this recorder's event key; the enable preference is preserved. */
-    fun clear(): Boolean {
+    private fun clear(): Boolean {
         return try {
             synchronized(lock) {
                 val prefs = preferences ?: return@synchronized false
@@ -139,12 +178,12 @@ object AndroidDiagnostics {
         }
     }
 
+    fun clearAsync(completed: (Boolean) -> Unit) {
+        dispatchStorageWork(onRejected = { completed(false) }) { completed(clear()) }
+    }
+
     fun record(name: String, outcome: String = "none", durationMs: Long? = null) {
-        try {
-            synchronized(lock) { recordLocked(name, outcome, durationMs) }
-        } catch (_: Exception) {
-            synchronized(lock) { storageState = "unavailable" }
-        }
+        dispatchStorageWork { synchronized(lock) { recordLocked(name, outcome, durationMs) } }
     }
 
     private fun recordLocked(name: String, outcome: String, durationMs: Long?) {
@@ -194,8 +233,10 @@ object AndroidDiagnostics {
         record(event, if (outcome in setOf("entry", "install", "system-screen")) "none" else outcome)
     }
 
-    fun snapshot(): NativeDiagnosticsSnapshot = synchronized(lock) {
-        NativeDiagnosticsSnapshot(enabled(), sessions.toList(), storageState)
+    /** In-memory volatile snapshot only; diagnostic storage may be committing concurrently. */
+    fun snapshot(): NativeDiagnosticsSnapshot {
+        val currentSessions = sessions
+        return NativeDiagnosticsSnapshot(enabledInProcess, currentSessions.toList(), storageState)
     }
 
     fun report(): String = NativeDiagnosticsPolicy.report(snapshot())
