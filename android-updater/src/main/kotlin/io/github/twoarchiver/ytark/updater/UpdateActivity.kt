@@ -196,7 +196,7 @@ class UpdateActivity : Activity() {
             isFillViewport=false
             isFocusable=true
             isFocusableInTouchMode=true
-            addView(contentText,ScrollView.LayoutParams(-1,-2))
+            addView(contentText,FrameLayout.LayoutParams(-1,-2))
         }
         val dialog=AlertDialog.Builder(this,android.R.style.Theme_Material_Dialog_Alert)
             .setTitle(title).setView(content).setPositiveButton("Back",null).create()
@@ -261,7 +261,7 @@ class UpdateActivity : Activity() {
             isFocusable=true
             isFocusableInTouchMode=true
             isVerticalScrollBarEnabled=true
-            addView(body,ScrollView.LayoutParams(-1,-2))
+            addView(body,FrameLayout.LayoutParams(-1,-2))
         }
         val dialog=AlertDialog.Builder(this,android.R.style.Theme_Material_Dialog_Alert)
             .setTitle("Android updater diagnostics")

@@ -2,6 +2,7 @@ package io.github.twoarchiver.ytark.updater
 
 import android.content.Context
 import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
 import java.io.InterruptedIOException
 import java.util.Properties
