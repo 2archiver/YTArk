@@ -243,3 +243,14 @@ live GitHub API records cited in this document.
   permission-return, playback and Shorts/settings checks (no hardware
   in this environment); the original device TLS report remains an
   unconfirmed hypothesis.
+
+Post-publication follow-up (PR #68, merged `64b689e`): the
+single-APK contract left release-reconstructed candidates with
+no `userScript.js`, so the verify-only run that every later
+main push triggers failed in `publish_script_tag` (main run
+39195326241; the release itself was never touched — verify-only
+uploads nothing). A verify-only candidate now rebuilds the
+script bytes from the immutable `s39` tag and cross-checks them
+against the identity block's `user_script_sha256`, failing
+closed on any disagreement; main run 39200074432 then
+completed the verify-only path successfully.
