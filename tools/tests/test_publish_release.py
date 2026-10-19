@@ -232,6 +232,11 @@ class Scenario:
         self.list_visibility = True
         # tag name -> commit sha, as GitHub's git refs API would report it.
         self.tags: dict[str, str] = {}
+        # "ref:path" -> file bytes, as the contents API would serve
+        # them from an immutable tag.
+        self.tag_files: dict[str, bytes] = {
+            f"{CONFIG['SCRIPT_TAG']}:{SCRIPT}": SCRIPT_BYTES
+        }
         # Simulate GitHub rewriting a release tag to untagged-<sha>.
         self.rewrite_tag = False
 
@@ -281,6 +286,15 @@ class Scenario:
                 if asset["id"] == asset_id:
                     return Response(200, asset["_bytes"])
             return Response(404, {"message": "Not Found"})
+        if "/contents/" in url:
+            parsed = urllib.parse.urlparse(url)
+            query = urllib.parse.parse_qs(parsed.query)
+            ref = (query.get("ref") or [""])[0]
+            name = urllib.parse.unquote(parsed.path.split("/contents/", 1)[1])
+            content = self.tag_files.get(f"{ref}:{name}")
+            if content is None:
+                return Response(404, {"message": "Not Found"})
+            return Response(200, content)
         raise AssertionError(f"unexpected GitHub request: {url}")
 
     def as_transport(self):
@@ -678,6 +692,59 @@ class PublicationTests(PublishReleaseTestCase):
             "a complete release must not be touched",
         )
         self.assertEqual(len([call for call in scenario.calls if call[0] == "delete"]), 0)
+
+    def test_verify_only_reconstruction_serves_the_script_from_the_immutable_tag(self):
+        """A verify-only run rebuilds the script half of the candidate
+        from the immutable tag and cross-checks the recorded digest."""
+        published = release_payload(draft=False, body=identity_body(self.candidate))
+        result, scenario = self.run_publish(
+            published, candidate_dir="", manifest="", run_id="999999999"
+        )
+        self.assertEqual(result, 0)
+        self.assertTrue(
+            any(f"/contents/{SCRIPT}" in url for url in scenario.requests),
+            "the userscript must be read back from its immutable tag",
+        )
+        self.assertEqual(
+            [call for call in scenario.calls if call[0] in ("upload", "edit", "create")],
+            [],
+            "a complete release must not be touched",
+        )
+
+    def test_a_userscript_tag_that_disagrees_with_the_identity_fails_closed(self):
+        """Immutable delivery broken: the tag no longer carries the
+        bytes the release identity block recorded."""
+        published = release_payload(draft=False, body=identity_body(self.candidate))
+        scenario = Scenario(published)
+        scenario.tag_files[f"{CONFIG['SCRIPT_TAG']}:{SCRIPT}"] = b"// rewritten\n"
+        with self.assertRaises(publish_release.ReleaseConflict):
+            self.run_publish(
+                published, scenario=scenario,
+                candidate_dir="", manifest="", run_id="999999999",
+            )
+
+    def test_reconstruction_without_a_recorded_script_digest_fails_closed(self):
+        """Without the recorded script hash the tag bytes cannot be
+        verified, so the run stops instead of guessing."""
+        body = identity_body(self.candidate).replace(
+            f'"user_script_sha256": "{sha256(SCRIPT_BYTES)}", ', ""
+        )
+        published = release_payload(draft=False, body=body)
+        with self.assertRaises(publish_release.ReleaseError):
+            self.run_publish(
+                published, candidate_dir="", manifest="", run_id="999999999"
+            )
+
+    def test_reconstruction_fails_when_the_immutable_tag_is_missing(self):
+        """The tag is the only public source of the script bytes."""
+        published = release_payload(draft=False, body=identity_body(self.candidate))
+        scenario = Scenario(published)
+        scenario.tag_files.clear()
+        with self.assertRaises(publish_release.ReleaseError):
+            self.run_publish(
+                published, scenario=scenario,
+                candidate_dir="", manifest="", run_id="999999999",
+            )
 
     def test_re_downloaded_public_bytes_are_checked_under_their_published_names(self):
         """Static checks on the public release must see the exact published
