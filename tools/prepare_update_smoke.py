@@ -27,6 +27,22 @@ ARCHITECTURES = {
 }
 
 
+def asset_suffixes(architecture: str) -> tuple[str, ...]:
+    """Public APK filename suffixes a prior release may carry.
+
+    From 3.8.0 the public asset name uses the full ABI suffix
+    (`armeabi-v7a`); published history up to 3.7.x uses the
+    internal architecture key (`armv7`). The prior-release
+    eligibility check must recognise both, because the release
+    it inspects is whichever version was published last.
+    """
+    entry = ARCHITECTURES[architecture]
+    return (
+        "-" + entry["abi"] + ".apk",
+        "-" + entry["suffix"] + ".apk",
+    )
+
+
 def output(message: str) -> None:
     print(message)
 
@@ -126,10 +142,10 @@ def main() -> None:
             raise ValueError("The previous YTArk release tag is invalid")
         tag_version = tag_match.group("version")
         assets = latest.get("assets", [])
-        expected_suffix = "-" + ARCHITECTURES[architecture]["suffix"] + ".apk"
+        accepted_suffixes = asset_suffixes(architecture)
         candidates = [asset for asset in assets
                       if str(asset.get("name", "")).startswith("YTArk-v")
-                      and str(asset.get("name", "")).endswith(expected_suffix)]
+                      and str(asset.get("name", "")).endswith(accepted_suffixes)]
         if not candidates:
             write_ineligible(
                 args.output,
@@ -142,8 +158,9 @@ def main() -> None:
 
         asset = candidates[0]
         asset_name = asset.get("name", "")
+        suffix_pattern = "|".join(re.escape(suffix) for suffix in accepted_suffixes)
         version_match = re.fullmatch(
-            rf"YTArk-v(\d+\.\d+\.\d+(?:-ytark\.[1-9]\d*)?){re.escape(expected_suffix)}", asset_name
+            rf"YTArk-v(\d+\.\d+\.\d+(?:-ytark\.[1-9]\d*)?)(?:{suffix_pattern})", asset_name
         )
         if not version_match or version_match.group(1) != tag_version:
             raise ValueError("The prior APK filename does not match its release tag/version")

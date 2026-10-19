@@ -48,11 +48,19 @@ OPTIONAL_TV_FEATURES = {
 
 
 def apk_filename(version: str, architecture: str) -> str:
+    """Public release filename for one architecture.
+
+    The public asset name uses the full Android ABI suffix
+    (`armeabi-v7a`), not the internal architecture key (`armv7`) that
+    build tooling and CLI flags still use. The legacy `armv7` filename
+    stays a valid *input* for parsers of already-published releases,
+    but new releases are produced with the ABI name only.
+    """
     if architecture not in ARCHITECTURES:
         raise ValueError(f"Unsupported architecture: {architecture}")
     if not CLEAN_VERSION_PATTERN.fullmatch(version):
         raise ValueError(f"APK asset versions must use clean SemVer: {version}")
-    return f"YTArk-v{version}-{architecture}.apk"
+    return f"YTArk-v{version}-{ARCHITECTURES[architecture]['abi']}.apk"
 
 
 def version_code_for_release(version: str) -> int:
@@ -922,10 +930,13 @@ def verify_release_record(
     if parsed_code != int(config["VERSION_CODE"]):
         raise ValueError("Release notes versionCode is missing or does not match the APK versionCode")
 
-    expected_names = {
-        config["APK_ARMV7"], "SHA256SUMS.txt",
-        "base-apk-sha256.txt", "NOTICE.md", "userScript.js",
-    }
+    # The public release contract is exactly one attached asset: the
+    # validated signed ARMv7 APK. Checksums, source bundles, reports and
+    # notices remain private build evidence in the candidate artefact;
+    # the userscript is delivered by its immutable git tag, not by a
+    # release asset. GitHub's automatic source archives are not attached
+    # assets and never enter this list.
+    expected_names = {config["APK_ARMV7"]}
     assets = release.get("assets", [])
     actual_names = [asset.get("name") for asset in assets]
     actual_name_set = set(actual_names)
@@ -934,10 +945,12 @@ def verify_release_record(
     missing = expected_names - actual_name_set
     if missing:
         raise ValueError("Release is missing assets: " + ", ".join(sorted(missing)))
-    expected_apks = {config["APK_ARMV7"]}
-    for name in actual_name_set:
-        if name.lower().endswith(".apk") and name not in expected_apks:
-            raise ValueError(f"Release contains an unexpected APK asset: {name}")
+    extra = actual_name_set - expected_names
+    if extra:
+        raise ValueError(
+            "The public release must attach exactly one asset, the validated "
+            "ARMv7 APK; unexpected attached assets: " + ", ".join(sorted(extra))
+        )
 
     for architecture in ARCHITECTURES:
         name = config[ARCHITECTURES[architecture]["key"]]

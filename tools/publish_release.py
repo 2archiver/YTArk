@@ -57,10 +57,15 @@ IDENTITY_MARKER = re.compile(
     r"<!--\s*ytark-release-identity/v1\s+(\{.*?\})\s*-->", re.DOTALL
 )
 
-# Logical asset keys. "apk" resolves to the configured ARMv7 asset name; the
-# rest are literal file names. NOTICE.md is rendered by the release helper at
-# publication time, so it never comes from the build artefact.
-ASSET_KEYS = ("apk", "userScript.js", "SHA256SUMS.txt", "base-apk-sha256.txt", "NOTICE.md")
+# Public release asset keys: the stable release attaches exactly one
+# asset, the validated signed ARMv7 APK. Checksums, the userscript
+# bundle, base-APK evidence and NOTICE.md stay private build evidence
+# in the candidate artefact; the userscript is delivered by its
+# immutable git tag and its hash is recorded in the release-body
+# identity block. "apk" resolves to the configured public asset name.
+ASSET_KEYS = ("apk",)
+# Candidate artefact keys: everything the trusted build produced.
+# Internal CI evidence may retain all of them; only the APK is public.
 ARTEFACT_KEYS = ("apk", "userScript.js", "SHA256SUMS.txt", "base-apk-sha256.txt")
 
 RELEASE_NOTES = "release-notes.md"
@@ -501,12 +506,17 @@ class Candidate:
     run_id: str
     config: dict[str, str]
     origin: str = "artefact"
+    # Userscript hash for candidates rebuilt from a published release,
+    # where the script is no longer an attached asset: its immutable
+    # git tag and the release-body identity block carry the hash.
+    script_sha256: str = ""
 
     @property
     def apk(self) -> CandidateFile:
         return self.files["apk"]
 
     def identity(self) -> dict[str, Any]:
+        script = self.files.get("userScript.js")
         return {
             "schema": IDENTITY_SCHEMA,
             "commit": self.commit,
@@ -518,7 +528,9 @@ class Candidate:
             "base_tag": self.config["BASE_TAG"],
             "apk_name": self.apk.name,
             "apk_sha256": self.apk.sha256,
-            "user_script_sha256": self.files["userScript.js"].sha256,
+            "user_script_sha256": (
+                script.sha256 if script is not None else self.script_sha256
+            ),
         }
 
     def identity_matches(self, other: dict[str, Any] | None) -> bool:
@@ -871,11 +883,15 @@ def verify_candidate_static(
         aapt,
         apksigner,
     )
-    validate_release.check_checksums(
-        str(candidate.files["SHA256SUMS.txt"].path),
-        str(candidate.apk.path),
-        str(candidate.files["userScript.js"].path),
-    )
+    if "SHA256SUMS.txt" in candidate.files:
+        # Build artefacts carry the private checksum manifest;
+        # a candidate rebuilt from a published release is
+        # confirmed by the asset digest GitHub recorded for it.
+        validate_release.check_checksums(
+            str(candidate.files["SHA256SUMS.txt"].path),
+            str(candidate.apk.path),
+            str(candidate.files["userScript.js"].path),
+        )
     verify_script_binding(candidate.apk.path, script_url(candidate.config))
 
 
@@ -987,6 +1003,26 @@ def upload_assets(
         github.upload_asset(release["id"], path, name)
 
 
+def drop_non_public_draft_assets(
+    github: GitHub, release: dict[str, Any], required: Sequence[str]
+) -> list[str]:
+    """Keep an unpublished draft to the public release asset allowlist.
+
+    A draft is never public, so staged private build evidence —
+    checksum files, the userscript bundle, base-APK digests, notices —
+    can be dropped in place. The stable release must attach exactly
+    the validated signed APK and nothing else. Published releases are
+    never touched here: their assets are immutable.
+    """
+    dropped: list[str] = []
+    for name, asset in release_assets(release).items():
+        if name in required:
+            continue
+        github.delete_asset(asset["id"])
+        dropped.append(name)
+    return dropped
+
+
 def edit_release(
     github: GitHub,
     release: dict[str, Any],
@@ -1067,11 +1103,19 @@ def render_notes(config: dict[str, str], commit: str, cert_sha256: str) -> Path:
 
 
 def stage_release_assets(candidate: Candidate) -> None:
-    """Mirror the exact candidate bytes into ./release-assets for the helpers."""
+    """Mirror the exact candidate bytes into ./release-assets for the helpers.
+
+    Build candidates carry every artefact key; a candidate rebuilt
+    from a published release carries only the one public APK, so
+    staging mirrors what the candidate actually holds instead of
+    assuming the full build layout.
+    """
     stage = ROOT / "release-assets"
     stage.mkdir(parents=True, exist_ok=True)
     for key in ARTEFACT_KEYS:
-        source = candidate.files[key]
+        source = candidate.files.get(key)
+        if source is None:
+            continue
         destination = stage / source.name
         shutil.copyfile(source.path, destination)
     notice = stage / "NOTICE.md"
@@ -1234,9 +1278,10 @@ def publish_command(args: argparse.Namespace) -> int:
             # Reuse the draft in place. Deleting a release also deletes its tag,
             # and recreating that tag moments later is exactly what makes GitHub
             # fall back to a synthetic untagged-<sha> tag; a draft is never
-            # public, so its staged assets can simply be dropped and restaged.
-            stale = [asset for name, asset in release_assets(release).items()
-                     if name in required]
+            # public, so every staged asset — the superseded APK bytes and any
+            # private evidence an older pipeline attached — can simply be
+            # dropped and restaged from the verified candidate.
+            stale = list(release_assets(release).values())
             summarise([
                 "## Restaging an unpublished draft",
                 f"- Draft `{release.get('tag_name')}` (id {release.get('id')}) was staged "
@@ -1323,6 +1368,27 @@ def publish_command(args: argparse.Namespace) -> int:
         if release is None:
             raise ReleaseError(f"Release {config['VERSION_TAG']} disappeared after upload")
         plan = classify(release, config, head_sha=args.commit, candidate=candidate)
+
+    if (release or {}).get("draft"):
+        # The public contract is exactly one attached APK. Private
+        # candidate evidence an older pipeline may have staged on the
+        # draft is dropped before the draft can become public; a
+        # draft was never visible, so nothing immutable is touched.
+        dropped = drop_non_public_draft_assets(
+            github, release, required_asset_names(config)
+        )
+        if dropped:
+            release = refresh_release(github, release)
+            if release is None:
+                raise ReleaseError(
+                    f"Release {config['VERSION_TAG']} disappeared while "
+                    "restricting the draft to the public asset allowlist"
+                )
+            summarise([
+                "## Draft restricted to the public release asset",
+                "- Dropped private build evidence from the unpublished draft: "
+                + ", ".join(dropped) + ".",
+            ])
 
     if plan.action == ACTION_VERIFY_ONLY or not (release or {}).get("draft"):
         # Either it was already published (and now repaired/verified) or there was
@@ -1447,7 +1513,15 @@ def candidate_from_release(
         github.download_asset(asset, destination)
         digest = file_sha256(destination)
         published = asset_sha256(asset)
-        if published and digest != published:
+        if not published:
+            # Missing integrity data fails clearly: bytes without a
+            # recorded digest can never be confirmed as the reviewed
+            # candidate, so they are never accepted as the release.
+            raise ReleaseError(
+                f"{state.capitalize()} asset {name} has no published SHA-256 "
+                "digest; its integrity cannot be confirmed."
+            )
+        if digest != published:
             raise ReleaseError(
                 f"Downloaded {state} asset {name} sha256 {digest} does not match the "
                 f"digest GitHub recorded for it ({published})"
@@ -1465,6 +1539,7 @@ def candidate_from_release(
     candidate = Candidate(
         files=files, commit=identity_commit, run_id=effective_run_id, config=config,
         origin="release-assets" if not release.get("draft") else "draft-assets",
+        script_sha256=str((identity or {}).get("user_script_sha256") or ""),
     )
     if identity and not candidate.identity_matches(identity):
         raise ReleaseConflict(
@@ -1574,11 +1649,27 @@ def verify_published(
             str(public_apk), "armv7", str(ROOT / "signing" / "YTArk-cert-sha256.txt"),
             args.aapt, args.apksigner,
         )
-        validate_release.check_checksums(
-            str(public_dir / "SHA256SUMS.txt"),
-            str(public_apk),
-            str(public_dir / "userScript.js"),
-        )
+    # The APK carries its own published SHA-256 digest on the release
+    # asset, so no separate sums file is attached. When the release
+    # body records the candidate identity block, its apk_sha256 must
+    # agree with the verified candidate bytes; conflicting or
+    # malformed identity data fails closed here.
+    identity = parse_identity(release)
+    if identity is not None:
+        recorded = str(identity.get("apk_sha256") or "")
+        if recorded != candidate.apk.sha256:
+            raise ReleaseConflict(
+                f"The release identity block records apk_sha256 {recorded[:12]}…, "
+                f"but the verified candidate is {candidate.apk.sha256[:12]}…. "
+                "Published bytes are never silently re-identified."
+            )
+        recorded_script = str(identity.get("user_script_sha256") or "")
+        if not re.fullmatch(r"[0-9a-f]{64}", recorded_script):
+            raise ReleaseError(
+                "The release identity block is missing the immutable "
+                "userscript hash; publication stops rather than serve an "
+                "unidentifiable script tag."
+            )
     apk_url = (
         f"https://github.com/{TRUSTED_REPOSITORY}/releases/download/{tag}/{config['APK_ARMV7']}"
     )

@@ -34,7 +34,10 @@ SCRIPT = "userScript.js"
 SUMS = "SHA256SUMS.txt"
 BASE_SUMS = "base-apk-sha256.txt"
 NOTICE = "NOTICE.md"
+# Private candidate evidence: the build artefact keeps checksums,
+# the script bundle and the base digest. Only the APK is public.
 ALL_ASSETS = [APK, SCRIPT, SUMS, BASE_SUMS, NOTICE]
+PUBLIC_ASSETS = [APK]
 
 APK_BYTES = b"signed-armv7-apk-bytes"
 REBUILD_BYTES = b"a-different-rebuilt-armv7-apk"
@@ -139,7 +142,7 @@ def release_payload(
     digests = digests or {}
     contents = payloads(apk_bytes)
     asset_list = []
-    for index, asset_name in enumerate(ALL_ASSETS if assets is None else assets):
+    for index, asset_name in enumerate(PUBLIC_ASSETS if assets is None else assets):
         asset_list.append({
             "id": ASSET_ID_BASE + index,
             "name": asset_name,
@@ -526,7 +529,7 @@ class ReleaseStateTests(PublishReleaseTestCase):
         plan = publish_release.classify(empty, CONFIG, head_sha=COMMIT)
         self.assertEqual(plan.state, "published-incomplete")
         self.assertTrue(plan.build_needed)
-        self.assertEqual(sorted(plan.missing), sorted(ALL_ASSETS))
+        self.assertEqual(sorted(plan.missing), sorted(PUBLIC_ASSETS))
 
 
 class ApiFailureTests(unittest.TestCase):
@@ -594,8 +597,8 @@ class PublicationTests(PublishReleaseTestCase):
         self.assertTrue(scenario.called_with("--draft=False"))
         self.assertTrue(scenario.called_with("--prerelease=False"))
         self.assertTrue(scenario.called_with("--make_latest=true"))
-        self.assertEqual(len(scenario.uploads()), len(ALL_ASSETS))
-        for name in ALL_ASSETS:
+        self.assertEqual(len(scenario.uploads()), len(PUBLIC_ASSETS))
+        for name in PUBLIC_ASSETS:
             self.assertTrue(any(call[1] == name for call in scenario.uploads()), name)
         self.assertFalse(scenario.release["draft"])
         self.assertFalse(scenario.release["prerelease"])
@@ -609,6 +612,50 @@ class PublicationTests(PublishReleaseTestCase):
         self.assertEqual(scenario.uploads(), [])
         self.assertTrue(scenario.called_with("--draft=False"))
         self.assertFalse(scenario.release["draft"])
+
+    def test_a_draft_staged_with_private_evidence_is_restricted_to_the_apk(self):
+        """An older pipeline may have staged checksums and script bundles
+        on an unpublished draft. The draft was never public, so the
+        private evidence is dropped in place and exactly one asset —
+        the validated APK — is promoted.
+        """
+        draft = release_payload(draft=True, assets=ALL_ASSETS,
+                                body=identity_body(self.candidate))
+        result, scenario = self.run_publish(draft)
+        self.assertEqual(result, 0)
+        # The four private evidence assets are dropped from the
+        # unpublished draft; the APK bytes themselves stay staged.
+        self.assertEqual(
+            len([call for call in scenario.calls if call[0] == "delete-asset"]),
+            len(ALL_ASSETS) - len(PUBLIC_ASSETS),
+        )
+        self.assertEqual(scenario.uploads(), [])
+        self.assertEqual(
+            [asset["name"] for asset in scenario.release["assets"]], [APK],
+            "the promoted release attaches exactly the validated APK",
+        )
+        self.assertFalse(scenario.release["draft"])
+
+    def test_a_conflicting_identity_block_fails_closed(self):
+        """A release body that records different bytes than the candidate
+        must refuse publication rather than re-identify the release.
+        """
+        body = identity_body(self.candidate).replace(
+            sha256(APK_BYTES), "b" * 64
+        )
+        published = release_payload(draft=False, body=body)
+        with self.assertRaises(publish_release.ReleaseConflict):
+            self.run_publish(published)
+
+    def test_a_release_asset_without_a_digest_fails_closed(self):
+        """No recorded digest means no confirmable integrity."""
+        published = release_payload(draft=False, body=identity_body(self.candidate))
+        for asset in published["assets"]:
+            asset.pop("digest", None)
+        with self.assertRaises(publish_release.ReleaseError):
+            self.run_publish(
+                published, candidate_dir="", manifest="", run_id="999999999"
+            )
 
     def test_complete_stable_release_changes_nothing(self):
         published = release_payload(draft=False, body=identity_body(self.candidate))
@@ -636,12 +683,13 @@ class PublicationTests(PublishReleaseTestCase):
         """Static checks on the public release must see the exact published
         basenames.
 
-        ``validate_apk`` rejects any other file name and ``check_checksums``
-        keys the SHA256SUMS.txt entries by basename, so the scratch names used
-        for the re-downloaded copies must never leak into those checks. Before
-        this fix a successful publication reported a failed run with
-        "Expected APK filename YTArk-v<version>-armv7.apk, got
-        published-YTArk-v<version>-armv7.apk" (the 2.3/2.4 re-verify failure).
+        ``validate_apk`` rejects any other file name, so the scratch
+        names used for the re-downloaded copies must never leak into
+        the check. Before this fix a successful publication reported
+        a failed run with "Expected APK filename
+        YTArk-v<version>-armv7.apk, got
+        published-YTArk-v<version>-armv7.apk" (the 2.3/2.4
+        re-verify failure).
         """
         published = release_payload(draft=False, body=identity_body(self.candidate))
 
@@ -657,9 +705,9 @@ class PublicationTests(PublishReleaseTestCase):
 
         with patch.object(validate_release, "validate_apk", fake_validate_apk), \
              patch.object(publish_release, "verify_script_binding", lambda *a, **k: None):
-            # Real check_checksums runs against the real re-downloaded bytes:
-            # the fake release serves exactly the digests its SHA256SUMS.txt
-            # records, so only the file *names* can make it fail here.
+            # The verify-only path re-downloads the one public asset and
+            # confirms its bytes against the digest GitHub recorded for
+            # it; only the file *name* can make the static check fail.
             result, _scenario = self.run_publish(
                 published, candidate_dir="", manifest="", run_id="999999999",
                 skip_static_checks=False,
@@ -681,16 +729,33 @@ class PublicationTests(PublishReleaseTestCase):
         )
 
     def test_stable_release_missing_apk_is_repaired_from_the_candidate(self):
-        published = release_payload(
-            draft=False, assets=[SCRIPT, SUMS, BASE_SUMS, NOTICE],
-            body=identity_body(self.candidate),
-        )
+        published = release_payload(draft=False, assets=[],
+                                    body=identity_body(self.candidate))
         result, scenario = self.run_publish(published)
         self.assertEqual(result, 0)
         self.assertFalse(scenario.called_verb("create"))
         uploads = scenario.uploads()
         self.assertEqual(len(uploads), 1)
         self.assertEqual(uploads[0][1], APK)
+        self.assertEqual(
+            [asset["name"] for asset in scenario.release["assets"]], [APK],
+            "the repaired public release carries exactly the one APK",
+        )
+
+    def test_extra_public_assets_fail_closed(self):
+        """Attached evidence files are private build artefacts: a
+        published release carrying them violates the one-asset
+        contract and is never promoted or verified as complete.
+        """
+        published = release_payload(
+            draft=False, assets=ALL_ASSETS,
+            body=identity_body(self.candidate),
+        )
+        plan = publish_release.classify(published, CONFIG, head_sha=COMMIT,
+                                        candidate=self.candidate)
+        self.assertEqual(plan.state, "published-complete")
+        with self.assertRaisesRegex(ValueError, "exactly one asset"):
+            validate_release.verify_release_record(published, "published")
 
     def test_conflicting_published_asset_is_refused(self):
         published = release_payload(
@@ -709,7 +774,10 @@ class PublicationTests(PublishReleaseTestCase):
 
     def test_stale_draft_is_restaged_and_the_restaging_is_recorded(self):
         stale = identity_body(self.candidate).replace(COMMIT, "b" * 40)
-        draft = release_payload(draft=True, body=stale)
+        # A draft staged by the older five-asset pipeline: the
+        # restage drops every private evidence asset in place and
+        # uploads only the public APK.
+        draft = release_payload(draft=True, assets=ALL_ASSETS, body=stale)
         result, scenario = self.run_publish(draft)
         self.assertEqual(result, 0)
         self.assertFalse(scenario.release["draft"])
@@ -718,7 +786,10 @@ class PublicationTests(PublishReleaseTestCase):
         self.assertEqual(len([call for call in scenario.calls if call[0] == "delete-asset"]), 5)
         self.assertEqual(
             sorted(call[1] for call in scenario.calls if call[0] == "upload"),
-            sorted(ALL_ASSETS),
+            sorted(PUBLIC_ASSETS),
+        )
+        self.assertEqual(
+            [asset["name"] for asset in scenario.release["assets"]], [APK]
         )
         summary = (self.root / "summary.md").read_text(encoding="utf-8")
         self.assertIn("Restaging an unpublished draft", summary)
@@ -735,8 +806,8 @@ class PublicationTests(PublishReleaseTestCase):
             self.run_publish(None, scenario=scenario)
         self.assertIn("asset upload refused", str(caught.exception))
         version, code = publish_release.next_patch_version(CONFIG)
-        # The next patch above the configured 3.7.0 candidate.
-        self.assertEqual((version, code), ("3.7.1", 3070100))
+        # The next patch above the configured 3.8.0 candidate.
+        self.assertEqual((version, code), ("3.8.1", 3080100))
 
     def test_repair_refuses_a_rebuild_that_disagrees_with_published_checksums(self):
         published = release_payload(
@@ -750,7 +821,7 @@ class PublicationTests(PublishReleaseTestCase):
                 manifest=str(rebuilt.manifest), run_id=rebuilt.run_id,
             )
         self.assertIn("next patch version", str(caught.exception))
-        self.assertIn("3070100", str(caught.exception))
+        self.assertIn("3080100", str(caught.exception))
 
     def test_repair_guard_rejects_bytes_the_published_checksums_refuse(self):
         """The published checksum file decides whether a rebuild may repair an APK."""
@@ -795,7 +866,7 @@ class PublicationTests(PublishReleaseTestCase):
         result, scenario = self.run_publish(None, scenario=scenario)
         self.assertEqual(result, 0)
         self.assertFalse(scenario.release["draft"])
-        self.assertEqual(len(scenario.release["assets"]), len(ALL_ASSETS))
+        self.assertEqual(len(scenario.release["assets"]), len(PUBLIC_ASSETS))
 
     def test_the_release_tag_is_created_before_the_release(self):
         result, scenario = self.run_publish(None)
@@ -825,10 +896,11 @@ class PublicationTests(PublishReleaseTestCase):
             "the release itself must not be deleted",
         )
         self.assertTrue([call for call in scenario.calls if call[0] == "delete-asset"])
-        # Every required asset was staged again from the verified candidate.
+        # Every required public asset was staged again from the verified
+        # candidate: exactly the one validated APK.
         self.assertEqual(
             sorted(call[1] for call in scenario.calls if call[0] == "upload"),
-            sorted(ALL_ASSETS),
+            sorted(PUBLIC_ASSETS),
         )
 
     def test_every_release_update_re_sends_the_tag(self):
@@ -854,7 +926,7 @@ class PublicationTests(PublishReleaseTestCase):
         """Drafts 404 on /releases/tags/{tag}, so uploads must use the release id."""
         _, scenario = self.run_publish(None)
         uploads = [url for url in scenario.requests if "uploads.github.com" in url]
-        self.assertEqual(len(uploads), len(ALL_ASSETS))
+        self.assertEqual(len(uploads), len(PUBLIC_ASSETS))
         for url in uploads:
             self.assertIn("/releases/409000001/assets", url)
             self.assertNotIn("/releases/tags/", url)

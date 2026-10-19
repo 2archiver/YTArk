@@ -369,9 +369,21 @@ object InstallStatusContract {
 }
 
 object UpdateErrorMapper {
-    /** Short reference code for the unexpected-error fallback; helps users report issues. */
+    /**
+     * Short reference code for the unexpected-error fallback; helps users
+     * report issues. HTTP failures keep their numeric status with the E
+     * prefix (for example [E403]); every other category uses the full
+     * normalized category name, never a truncation that would rename the
+     * contract: the unknown-failure category is always [EUNEXPECTED].
+     * Categories are a fixed internal vocabulary, so the normalized code
+     * is bounded by construction and is never user-supplied text.
+     */
     private fun refCode(category: String, httpStatus: Int): String {
-        val code = if (httpStatus > 0) "E${httpStatus}" else category.take(8).uppercase(Locale.US)
+        val code = if (httpStatus > 0) {
+            "E${httpStatus}"
+        } else {
+            "E" + category.uppercase(Locale.US).filter { it.isLetterOrDigit() || it == '_' }
+        }
         return "[$code]"
     }
 

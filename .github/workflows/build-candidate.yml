@@ -189,7 +189,11 @@ jobs:
           zipalign -c -p 4 "work/${APK_ARMV7%.apk}-unsigned.apk"
           export YTARK_EXPECTED_CERT_SHA256="$SIGNING_CERT_SHA256"
           bash tools/sign_apks.sh work
-          stray_count="$(find work -maxdepth 1 -name '*-armv7.apk' ! -name "${APK_ARMV7%.apk}.apk" | wc -l)"
+          # Exactly one final APK may leave the signing step, under
+          # either the current ABI filename or the legacy internal
+          # key; unsigned intermediates end in -unsigned.apk and are
+          # not matched by this check.
+          stray_count="$(find work -maxdepth 1 \( -name '*-armeabi-v7a.apk' -o -name '*-armv7.apk' \) ! -name "$APK_ARMV7" | wc -l)"
           test "$stray_count" -eq 0
           mkdir -p release-assets
           mv "work/${APK_ARMV7%.apk}.apk" "release-assets/$APK_ARMV7"
@@ -321,7 +325,7 @@ jobs:
       - name: Upload the ARMv7 candidate artefact (not a release)
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ytark-3.7.0-armv7-candidate-${{ github.event.pull_request.head.sha || github.sha }}
+            name: ytark-${{ env.VERSION_NAME }}-armv7-candidate-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
             release-assets/*
             update-smoke/eligibility.properties

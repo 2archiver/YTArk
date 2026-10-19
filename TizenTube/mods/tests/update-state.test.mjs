@@ -132,6 +132,57 @@ describe('stable release validation', () => {
     assert.equal(release.abi, 'armeabi-v7a');
   });
 
+  test('selects the single 3.8-style APK from a digest-only release', () => {
+    // The 3.8.0 publication contract: one attached asset named with
+    // the full ABI, integrity from the asset's own published digest,
+    // no SHA256SUMS.txt and no attached userscript bundle.
+    const asset = 'YTArk-v3.8.0-armeabi-v7a.apk';
+    const { release, error } = validateReleasePayload(releaseFixture({
+      tag_name: 'v3.8.0',
+      body: 'YTArk 3.8\n\nAndroid versionCode: 3080000\n',
+      assets: [{
+        name: asset,
+        size: 98442454,
+        browser_download_url:
+          `https://github.com/2archiver/YTArk/releases/download/v3.8.0/${asset}`,
+        digest: `sha256:${'ef'.repeat(32)}`,
+      }],
+    }), { installedVersion: '3.7.0', architecture: 'armeabi-v7a' });
+    assert.equal(error, undefined);
+    assert.equal(release.version, '3.8.0');
+    assert.equal(release.assetName, asset);
+    assert.equal(release.sha256Published, 'ef'.repeat(32));
+    assert.equal(release.newer, true);
+  });
+
+  test('rejects a release that attaches both ARMv7 filename generations', () => {
+    const both = releaseFixture({
+      tag_name: 'v3.8.0',
+      body: 'YTArk 3.8\n\nAndroid versionCode: 3080000\n',
+      assets: [
+        {
+          name: 'YTArk-v3.8.0-armeabi-v7a.apk',
+          size: 1,
+          browser_download_url:
+            'https://github.com/2archiver/YTArk/releases/download/v3.8.0/YTArk-v3.8.0-armeabi-v7a.apk',
+          digest: `sha256:${'ab'.repeat(32)}`,
+        },
+        {
+          name: 'YTArk-v3.8.0-armv7.apk',
+          size: 1,
+          browser_download_url:
+            'https://github.com/2archiver/YTArk/releases/download/v3.8.0/YTArk-v3.8.0-armv7.apk',
+          digest: `sha256:${'cd'.repeat(32)}`,
+        },
+      ],
+    });
+    const { release, error } = validateReleasePayload(both, {
+      installedVersion: '3.7.0', architecture: 'armeabi-v7a',
+    });
+    assert.equal(release, undefined);
+    assert.match(error, /expected exactly one/);
+  });
+
   test('requires a valid published digest when matching the ARMv7 asset', () => {
     const noDigest = validateReleasePayload(releaseFixture({
       assets: [{ name: ARMV7_ASSET, size: 1, browser_download_url: ARMV7_URL }],

@@ -26,7 +26,7 @@ resolve.patchResolveCommand();
 const resolveCommand = resolve.default;
 
 const PUBLISHED_TAGS = [
-  'v3.6.0', 'v3.5.2', 'v3.5.1', 'v3.5.0', 'v3.4.0', 'v3.3.0', 'v3.2.0', 'v3.1.0', 'v3.0.0','v2.9.0', 'v2.8.0', 'v2.7.0', 'v2.6.0', 'v2.5.0', 'v2.4.0', 'v2.3.0', 'v2.2.0', 'v2.1.2', 'v2.1.1', 'v2.1.0', 'v2.0.4-ytark.17',
+  'v3.7.0', 'v3.6.0', 'v3.5.2', 'v3.5.1', 'v3.5.0', 'v3.4.0', 'v3.3.0', 'v3.2.0', 'v3.1.0', 'v3.0.0','v2.9.0', 'v2.8.0', 'v2.7.0', 'v2.6.0', 'v2.5.0', 'v2.4.0', 'v2.3.0', 'v2.2.0', 'v2.1.2', 'v2.1.1', 'v2.1.0', 'v2.0.4-ytark.17',
   'v2.0.4-ytark.16', 'v2.0.3-ytark.15', 'v2.0.2-personal.14'];
 
 beforeEach(() => {
@@ -54,7 +54,7 @@ describe('bundled changelog data', () => {
     const published = entries.filter(entry => entry.status === 'published');
     assert.deepEqual(published.map(entry => entry.tag), PUBLISHED_TAGS);
     for (const entry of published) {
-      assert.match(entry.date, /^2026-10-(09|10|11|13|14|15|16)$/);
+      assert.match(entry.date, /^2026-10-(09|10|11|13|14|15|16|17)$/);
       assert.equal(entry.releaseUrl, `https://github.com/2archiver/YTArk/releases/tag/${entry.tag}`);
       assert.ok(entry.publishedAt.startsWith(entry.date));
       // Simplified history: a published version is one short, user-facing line
@@ -84,7 +84,7 @@ describe('in-app reader', () => {
       const expected = reader.headlineFor(entry) + (entry.version === '2.3.0' ? '  ·  Installed' : '');
       assert.equal(versionRows[i], expected);
     }
-    assert.equal(versionRows[0], '3.8 — Reliable updater error reporting, one ARMv7 APK per release, and clear upgrade paths');
+    assert.equal(versionRows[0], '3.8 — Reliable updater errors, one ARMv7 APK, clear upgrades');
     assert.equal(rowTitle(modalItems(modal)[selectedIndex(modal)]), versionRows.find(title => title.endsWith('  ·  Installed')));
     assert.match(rowSubtitle(findRow(modal, item => rowTitle(item).startsWith('2.2 — '))), /Published .*2026 · v2\.2\.0/);
     assert.match(header(modal).subtitle, /installed 2\.3\.0/);

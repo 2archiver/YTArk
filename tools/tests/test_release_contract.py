@@ -42,16 +42,19 @@ class Armv7OnlyReleaseContractTests(unittest.TestCase):
 
     def test_expected_clean_semver_version_and_asset_names(self):
         config = validate_release.load_config()
-        # The 3.7.0 candidate identity is the next numeric release after the
-        # published 3.6.0 (3060000). Keep these literals so the test checks the
+        # The 3.8.0 candidate identity is the next numeric release after the
+        # published 3.7.0 (3070000). Keep these literals so the test checks the
         # release contract itself rather than echoing the configured values.
-        self.assertEqual(config["VERSION_NAME"], "3.7.0")
-        self.assertEqual(config["DISPLAY_VERSION"], "3.7")
-        self.assertEqual(config["VERSION_CODE"], "3070000")
-        self.assertEqual(config["VERSION_TAG"], "v3.7.0")
-        self.assertEqual(config["RELEASE_NAME"], "YTArk 3.7")
-        self.assertEqual(config["APK_ARMV7"], "YTArk-v3.7.0-armv7.apk")
+        self.assertEqual(config["VERSION_NAME"], "3.8.0")
+        self.assertEqual(config["DISPLAY_VERSION"], "3.8")
+        self.assertEqual(config["VERSION_CODE"], "3080000")
+        self.assertEqual(config["VERSION_TAG"], "v3.8.0")
+        self.assertEqual(config["RELEASE_NAME"], "YTArk 3.8")
+        # The public filename carries the full ABI suffix; the internal
+        # architecture key stays in build tooling and CLI flags.
+        self.assertEqual(config["APK_ARMV7"], "YTArk-v3.8.0-armeabi-v7a.apk")
         self.assertEqual(validate_release.apk_filename(config["VERSION_NAME"], "armv7"), config["APK_ARMV7"])
+        self.assertTrue(config["APK_ARMV7"].endswith("-armeabi-v7a.apk"))
         # Only one architecture is published from 2.1.2 onwards.
         self.assertNotIn("APK_ARM64", config)
         self.assertEqual(list(validate_release.ARCHITECTURES), ["armv7"])
@@ -131,10 +134,10 @@ class Armv7OnlyReleaseContractTests(unittest.TestCase):
             releases_path.write_text(json.dumps([releases[:5], releases[5:]]), encoding="utf-8")
             validate_release.check_version(str(latest_path), str(releases_path))
 
-            # A published release above the candidate (3.7.1 = 3070100) must block it.
+            # A published release above the candidate (3.8.1 = 3080100) must block it.
             too_high = dict(releases[1])
-            too_high["tag_name"] = "v3.7.1"
-            too_high["body"] = "Version 3.7.1 (versionCode 3070100)"
+            too_high["tag_name"] = "v3.8.1"
+            too_high["body"] = "Version 3.8.1 (versionCode 3080100)"
             releases_path.write_text(json.dumps(releases + [too_high]), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "must exceed every published release|must be newer"):
                 validate_release.check_version(str(latest_path), str(releases_path))
@@ -385,15 +388,16 @@ Only ARMv7 is published; an Android userspace whose abilist contains only
 arm64-v8a (a 64-bit-only system) cannot install this release.
 4K does not select an APK architecture.
 """
-        assets = []
-        for name in (config["APK_ARMV7"], "SHA256SUMS.txt",
-                     "base-apk-sha256.txt", "NOTICE.md", "userScript.js"):
-            assets.append({
-                "name": name,
-                "size": 10,
-                "digest": "sha256:" + "a" * 64 if name.endswith(".apk") else "",
-                "browser_download_url": f"https://github.com/2archiver/YTArk/releases/download/{config['VERSION_TAG']}/{name}",
-            })
+        # The public release contract attaches exactly one asset:
+        # the validated signed ARMv7 APK. Checksums, the userscript
+        # bundle and notices stay private build evidence or are
+        # delivered by their immutable git tag.
+        assets = [{
+            "name": config["APK_ARMV7"],
+            "size": 10,
+            "digest": "sha256:" + "a" * 64,
+            "browser_download_url": f"https://github.com/2archiver/YTArk/releases/download/{config['VERSION_TAG']}/{config['APK_ARMV7']}",
+        }]
         release = {
             "name": config["RELEASE_NAME"],
             "tag_name": config["VERSION_TAG"],
@@ -416,6 +420,27 @@ arm64-v8a (a 64-bit-only system) cannot install this release.
             broken = dict(release)
             broken["assets"] = [asset for asset in assets if asset["name"] != config["APK_ARMV7"]]
             path.write_text(json.dumps(broken), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                validate_release.verify_release(str(path), "draft", None)
+            # A second attached asset violates the one-APK contract,
+            # even when it is not another APK.
+            extra = dict(release)
+            extra["assets"] = assets + [{
+                "name": "SHA256SUMS.txt", "size": 10, "digest": "",
+                "browser_download_url": f"https://github.com/2archiver/YTArk/releases/download/{config['VERSION_TAG']}/SHA256SUMS.txt",
+            }]
+            path.write_text(json.dumps(extra), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "exactly one asset"):
+                validate_release.verify_release(str(path), "draft", None)
+            # The legacy internal-key filename is history, not a
+            # publishable name for a new release.
+            legacy = dict(release)
+            legacy["assets"] = [{
+                "name": config["APK_ARMV7"].replace("-armeabi-v7a.apk", "-armv7.apk"),
+                "size": 10, "digest": "sha256:" + "a" * 64,
+                "browser_download_url": f"https://github.com/2archiver/YTArk/releases/download/{config['VERSION_TAG']}/{config['APK_ARMV7']}",
+            }]
+            path.write_text(json.dumps(legacy), encoding="utf-8")
             with self.assertRaises(ValueError):
                 validate_release.verify_release(str(path), "draft", None)
 

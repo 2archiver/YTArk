@@ -380,11 +380,10 @@ public final class UpdateReliabilityTest {
         // Missing-checksum metadata errors map to metadata, not verification
         assertMapped(new IOException("The release has no verifiable APK checksum. The update cannot proceed safely."), "metadata", "The release response was incomplete");
         assertMapped(new IOException("Malformed release digest."), "metadata", "The release response was incomplete");
-        MappedError unexpected = UpdateErrorMapper.map(new IllegalStateException("https://secret.example/token=abc /data/user/0/io.github.twoarchiver.ytark/files/update.apk"), "check", now, "v3.4.0");
+        MappedError unexpected = UpdateErrorMapper.map(new IllegalStateException("https://secret.example/token=abc /data/user/0/io.github.twoarchiver/ytark/files/update.apk"), "check", now, "v3.4.0");
         assertEquals("unexpected", unexpected.category, "unknown category stays honest");
-        assertTrue(unexpected.message.contains("unexpectedly"), unexpected.message);
-        assertTrue(unexpected.message.contains("[EUNEXPECTED]"), "unexpected error includes a reference code: " + unexpected.message);
-        assertFalse(unexpected.message.equals("Download failed"), unexpected.message);
+        assertEquals("The update stopped unexpectedly [EUNEXPECTED]. Your installed app is unchanged. Retry or report this code.", unexpected.message, "the unknown-failure reference code is the untruncated E-prefixed category, never a clipped token like [UNEXPECT]");
+        assertTrue(unexpected.detail.contains("IllegalStateException"), unexpected.detail);
         assertFalse(unexpected.detail.contains("secret.example"), unexpected.detail);
         assertFalse(unexpected.detail.contains("/data/user/0"), unexpected.detail);
         assertFalse(unexpected.detail.contains("update.apk"), unexpected.detail);

@@ -57,7 +57,7 @@ Use the [latest published release](https://github.com/2archiver/YTArk/releases/l
 
 YTArk publishes a **32-bit ARM (`armeabi-v7a`) APK only**. There is no `arm64-v8a` APK. A 64-bit processor alone does not establish that the device's Android system can install 32-bit apps; an arm64-only system is not compatible with this package. 4K capability does not change APK architecture.
 
-1. Download the `YTArk-v<version>-armv7.apk` asset from the official release page.
+1. Download the `YTArk-v<version>-armeabi-v7a.apk` asset from the official release page. From 3.8.0 the attached asset uses the full ABI name; releases up to 3.7.x used the shorter `YTArk-v<version>-armv7.apk` name. Each release attaches exactly one APK.
 2. Transfer it to the TV if needed and open it with a compatible file manager or installer.
 3. If Android blocks installation, follow its prompts to grant install permission to the app that opened the APK, if your device exposes that setting. Some TV firmware may not provide a working settings route.
 4. Return to the installer, review Android's package-installer prompt, and confirm the installation yourself.

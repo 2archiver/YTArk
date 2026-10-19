@@ -71,8 +71,10 @@ ${WHAT_CHANGED}
 
 ARMv7 (armeabi-v7a): [Download APK](https://github.com/${GITHUB_REPOSITORY}/releases/download/${VERSION_TAG}/${APK_ARMV7}). Not for arm64-v8a-only devices; a 64-bit CPU alone is insufficient. 4K does not select an APK architecture.
 
-Known limitations: TV permission screens, startup speed, upgrades and ARMv7
-runtime remain unverified; the Cobalt/YouTube engine is unchanged.
+Install over the existing app; data is preserved. From 3.7.0, install manually once.
+Notices and licenses: https://github.com/${GITHUB_REPOSITORY}/blob/main/NOTICE.md
+
+Known limitations: TV permission, startup, upgrade and playback checks remain unverified; the engine is unchanged.
 
 <!-- Package ${APP_ID}; ${VERSION_NAME}; versionCode ${VERSION_CODE}; base TizenTubeCobalt ${BASE_TAG}. -->
 EOF
