@@ -195,7 +195,6 @@
                         "addToSidebar": "Add Channel to Sidebar",
                         "removeFromSidebar": "Remove Channel from Sidebar"
                     },
-                    "disableEnlargingThumbnails": "Disable Enlarged Thumbnails",
                     "enableShrinkingThumbnails": "Enable Shrinked Thumbnails"
                 }
             },

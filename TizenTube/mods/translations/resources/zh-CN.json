@@ -192,7 +192,6 @@
                             "clockHideWhenVideoPlaying": "播放视频时隐藏时钟"
                         }
                     },
-                    "disableEnlargingThumbnails": "禁用缩略图放大",
                     "enableShrinkingThumbnails": "启用缩略图缩小"
                 }
             },

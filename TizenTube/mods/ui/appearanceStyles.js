@@ -70,20 +70,3 @@ html.${ROOT_CLASSES.hideWatermark} [${WATERMARK_ATTRIBUTE}="hidden"] {
   display: none !important;
 }`;
 }
-
-const SAFE_COLOR = /^(?:#[0-9a-f]{3,8}|(?:rgb|rgba|hsl|hsla)\([\d.% ,+-]+\)|black|white|transparent|red|blue|gray|grey|navy)$/i;
-
-export function colorValue(value, fallback) {
-  const candidate = String(value || '').trim();
-  return SAFE_COLOR.test(candidate) ? candidate : fallback;
-}
-
-/** CSS for the user's saved custom colours (independent of the feature classes). */
-export function buildCustomColorCss(focusColor, routeColor) {
-  const focus = colorValue(focusColor, '#0f0f0f');
-  const route = colorValue(routeColor, '#0f0f0f');
-  return [
-    `ytlr-guide-response yt-focus-container { background-color: ${focus}; }`,
-    `#container { background-color: ${route} !important; }`,
-  ].join('\n');
-}

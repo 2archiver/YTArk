@@ -20,25 +20,29 @@ const onExitRequest = () => ({ requestAccountSelectorCommand: {
 function lastRecorded() { return recorded.at(-1); }
 
 describe('account selector resolver wiring', () => {
-  it('renders one canonical Who’s watching setting with a visible Off/On status', () => {
+  it('renders one canonical Who’s watching checkbox row (checked = on)', () => {
     assert.equal(config.configKeys().includes('enableWhoIsWatchingMenu'), false);
     assert.equal(config.configKeys().includes('permanentlyEnableWhoIsWatchingMenu'), false);
     assert.equal(config.configKeys().includes('enableWhosWatchingMenuOnAppExit'), false);
     const node = registry.findNode(registry.buildSettingsTree(), 'nav.profilePicker');
     assert.equal(node.key, 'showAutomaticProfilePicker');
-    assert.equal(node.statusOnly, true);
+    assert.equal(node.statusOnly, undefined, 'a real checkbox row, not a status-only text row');
 
     settings.showSettingsMenu('navigation');
     let panel = lastModal(recorded, 'ytark-navigation');
     let row = findRow(panel, node.title);
-    assert.match(rowSubtitle(row), /Off/);
-    assert.notEqual(rowSecondaryIcon(row), 'CHECK_BOX', 'the status is text, not one of the retired checkbox controls');
+    // Off: an outlined checkbox carries the state; the tiny On/Off
+    // text the old status-only row showed is gone.
+    assert.equal(rowSecondaryIcon(row), 'CHECK_BOX_OUTLINE_BLANK');
+    assert.doesNotMatch(rowSubtitle(row), /\bOff\b/, 'the state is the checkbox, not On/Off text');
 
     config.configWrite('showAutomaticProfilePicker', true);
     settings.showSettingsMenu('navigation', { update: true });
     panel = lastModal(recorded, 'ytark-navigation');
     row = findRow(panel, node.title);
-    assert.match(rowSubtitle(row), /On/);
+    // On: a filled checkbox.
+    assert.equal(rowSecondaryIcon(row), 'CHECK_BOX');
+    assert.doesNotMatch(rowSubtitle(row), /\bOn\b/);
     assert.equal(modalItems(panel).filter(item => /who.s watching/i.test(rowTitle(item))).length, 1);
     config.configWrite('showAutomaticProfilePicker', false);
   });

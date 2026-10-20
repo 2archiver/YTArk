@@ -192,8 +192,7 @@
               "clockHideWhenVideoPlaying": "Hide Clock While Video is Playing"
             }
           },
-          "disableEnlargingThumbnails": "Disable Enlarged Thumbnails",
-          "enableShrinkingThumbnails": "Enable Shrinked Thumbnails"
+          "enableShrinkingThumbnails": "Enable shrunken thumbnails"
         }
       },
       "updater": {
@@ -318,14 +317,10 @@
       "ytarkVersion": "YTArk version"
     },
     "appearance": {
-      "colors": {
-        "edit": "Change them in the colour panel opened with the remote's red button, or with the focus and route colour settings.",
-        "saved": "Saved colours: navigation {{focus}}, content {{route}}.",
-        "subtitle": "Your saved custom colours",
-        "title": "Navigation and content colours",
-        "youtube": "YouTube default is active, so these colours are in use."
+      "description": "Player look, thumbnails and screen behaviour",
+      "enableShrinkingThumbnails": {
+        "description": "Keep video thumbnails smaller and consistently sized."
       },
-      "description": "Colours, player look and screen behaviour",
       "player": {
         "description": "Watermark and control-overlay dimming",
         "hideEndCards": "Hide end-screen cards",

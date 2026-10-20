@@ -192,7 +192,6 @@
                             "clockHideWhenVideoPlaying": "動画再生中に時計を非表示にする"
                         }
                     },
-                    "disableEnlargingThumbnails": "サムネイルの拡大表示を無効にする",
                     "enableShrinkingThumbnails": "縮小したサムネイルを有効にする"
                 }
             },

@@ -15,6 +15,9 @@ import {
   GUIDE_SETTINGS_ACTION, activationFromCommand, noteResolverCommand,
 } from './ui/guideEntryActivation.js';
 import { automaticAccountSelectorAction } from './features/accountSelectorPolicy.js';
+import {
+  isInlinePlaybackCommand, readPlaybackContext, findPlayerService, shouldBlockFocusPreview,
+} from './features/focusPreviewGuard.js';
 
 export default function resolveCommand(cmd, _) {
     // resolveCommand function is pretty OP, it can do from opening modals, changing client settings and way more.
@@ -79,6 +82,20 @@ export function patchResolveCommand() {
                 // the guide entry.
                 noteYtarkModalCommand(cmd);
                 noteResolverCommand(cmd);
+                // An automatic focus-dwell inline preview must never replace
+                // the playing video: only a deliberate OK/Play (watchEndpoint)
+                // may open another video. Judged against the live playback
+                // context, so a stale preview left over from a route, menu or
+                // playback change is decided against what is playing now.
+                if (isInlinePlaybackCommand(cmd)) {
+                    const previewContext = readPlaybackContext({
+                        documentObject: typeof document !== 'undefined' ? document : null,
+                        playerService: findPlayerService(typeof window !== 'undefined' ? window : null),
+                    });
+                    if (shouldBlockFocusPreview(cmd, previewContext)) {
+                        return true;
+                    }
+                }
                 if (cmd.setClientSettingEndpoint) {
                     // Command to change client settings. YTArk keys (no underscore)
                     // are written to the YTArk configuration and stay on the TV:

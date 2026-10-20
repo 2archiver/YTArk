@@ -66,7 +66,8 @@ describe('upgrade from YTArk 2.2 or earlier', () => {
     assert.equal(config.configRead('lastSeenVersion'), config.LEGACY_VERSION_MARKER);
     assert.equal(config.getConfigMeta().migratedFrom, 1);
     assert.equal(config.configRead('enableAdBlock'), false, 'an explicit opt-out is preserved');
-    assert.equal(config.configRead('focusContainerColor'), '#0a1628');
+    assert.equal(config.configRead('focusContainerColor'), undefined, 'the retired navigation colour is dropped');
+    assert.equal(config.configRead('routeColor'), undefined, 'the retired content colour is dropped');
     assert.deepEqual(config.configRead('sidebarContentsOrder'), ['FEwhat_to_watch', { browseId: 'UC123', title: 'Channel' }]);
     assert.equal(config.configRead('preferredVideoQuality'), '1080p');
     assert.equal(config.configRead('recordBrowserDiagnostics'), true, 'an explicit diagnostics opt-in survives upgrade migration');
@@ -157,14 +158,14 @@ describe('malformed saved settings', () => {
 });
 
 describe('browser diagnostics migration', () => {
-  it('adds a missing opt-in as false, retains explicit choices, and upgrades through schema 8', async () => {
+  it('adds a missing opt-in as false, retains explicit choices, and upgrades through schema 9', async () => {
     const storage = propertyStorage({ [CONFIG_KEY]: JSON.stringify({
       configSchemaVersion: 7, enableAdBlock: false,
     }) });
     const missing = await loadConfig(storage);
     assert.equal(missing.configRead('recordBrowserDiagnostics'), false);
     assert.equal(missing.configRead('enableAdBlock'), false);
-    assert.equal(missing.configRead('configSchemaVersion'), 8);
+    assert.equal(missing.configRead('configSchemaVersion'), 9);
     assert.equal(missing.configRead('startupDiagnosticRunKind'), undefined);
     assert.equal(Object.hasOwn(stored(storage), 'startupDiagnosticRunKind'), false);
 
@@ -265,17 +266,20 @@ describe('upgrade from YTArk 2.4: removed preferences are retired, nothing else 
     const meta = config.getConfigMeta();
     assert.equal(meta.migratedFrom, 2);
     assert.deepEqual(meta.retired.slice().sort(), [
-      'enableFixedUI', 'tvActivePreset', 'tvLastPresetSnapshot', 'tvQuickQuality',
+      'enableFixedUI', 'focusContainerColor', 'routeColor',
+      'tvActivePreset', 'tvLastPresetSnapshot', 'tvQuickQuality',
       'uiTheme', 'userAgentProfile', 'videoPreferredCodec',
     ]);
     // The removed user-agent override is reported once, so the retirement
     // migration in features/userAgentRetirement.js can restore the platform UA.
     assert.equal(meta.retiredValues.userAgentProfile, 'androidTv32');
     assert.equal(meta.retiredValues.uiTheme, 'oled', 'the retired theme value is reported once');
+    assert.equal(meta.retiredValues.focusContainerColor, '#0a1628', 'the retired navigation colour is reported once');
+    assert.equal(meta.retiredValues.routeColor, '#0d1f3c', 'the retired content colour is reported once');
 
     const persisted = stored(storage);
     for (const key of ['userAgentProfile', 'enableFixedUI', 'tvActivePreset', 'tvLastPresetSnapshot',
-      'tvQuickQuality', 'videoPreferredCodec', 'uiTheme']) {
+      'tvQuickQuality', 'videoPreferredCodec', 'uiTheme', 'focusContainerColor', 'routeColor']) {
       assert.equal(Object.prototype.hasOwnProperty.call(persisted, key), false, `${key} is gone from storage`);
     }
     assert.equal(persisted.configSchemaVersion, config.CONFIG_SCHEMA_VERSION);
@@ -287,8 +291,8 @@ describe('upgrade from YTArk 2.4: removed preferences are retired, nothing else 
     assert.equal(config.configRead('enableHideEndScreenCards'), true);
     assert.equal(config.configRead('hideRelatedVideosPlayer'), true);
     assert.equal(config.configRead('preferredVideoQuality'), '1080p');
-    assert.equal(config.configRead('focusContainerColor'), '#0a1628');
-    assert.equal(config.configRead('routeColor'), '#0d1f3c');
+    assert.equal(config.configRead('focusContainerColor'), undefined, 'the retired navigation colour is dropped');
+    assert.equal(config.configRead('routeColor'), undefined, 'the retired content colour is dropped');
     assert.equal(config.configRead('uiTheme'), undefined, 'the OLED choice is retired with its value');
     assert.equal(config.configRead('enableAdBlock'), false);
     assert.equal(config.configRead('enablePremiumLogo'), true);

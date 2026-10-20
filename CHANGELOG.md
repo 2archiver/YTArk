@@ -22,9 +22,42 @@ Conventions:
 - Capabilities inherited from TizenTube and TizenTubeCobalt are listed under
   "Upstream base and inherited capabilities", not as YTArk additions.
 
-## [3.9.0] — Unreleased
+## [4.0.0] — Unreleased
 
-> Not yet published. Planned tag `v3.9.0` · versionCode 3090000 · userscript `s40` · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.
+> Not yet published. Candidate tag `v4.0.0` · versionCode 4000000 · userscript `s41` · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.
+
+Browsing no longer hijacks playback, and settings are clearer.
+
+### Fixed
+- Browsing no longer auto-starts a focused card.
+  - Scrolling, focusing, hovering or dwelling on a card under the playing video never navigates into it or replaces the playing video; only a deliberate OK, click or Play opens it.
+  - Playback-end autoplay and queueing, and genuine previews on browse pages, are unchanged.
+  - Long-press was not involved: it only ever opened a card's menu, and a long focus is not a long press.
+- DeArrow replacement is validated for reliable application.
+  - A late or slow result can no longer rename a card the frontend has recycled to show another video.
+  - Lookups stay prefix-only and private; no full-video-id fallback is added; the thumbnail replacement remains a separate opt-in.
+### Added
+- A positive shrunken-thumbnail layout control.
+  - "Enable shrunken thumbnails" keeps video thumbnails smaller and consistently sized on home, search, recommendations and the under-player rail, and restores standard YouTube sizing when off.
+### Changed
+- "Who's watching" is now one clear checkbox row.
+  - Checked = on; the preference key and its stored true/false are unchanged, and the automatic prompt still waits for the stored choice to load.
+- Startup initialization is guarded against a re-evaluated script.
+  - A retry cannot double-install remote listeners, managed CSS or the readiness loop.
+### Removed
+- The two custom colour settings and their dead implementation.
+  - Appearance → "Navigation colours" and "Content colours" are gone; the standard YouTube/YTArk chrome styling returns, and stale stored colour values are safely ignored and dropped at migration.
+- The confusing negative enlarged-thumbnail toggle.
+  - Its effective visual choice is migrated once into the positive shrunken-thumbnail control.
+### Known limitations
+- TV playback, focus-dwell preview adoption, DeArrow display and the shrunken-thumbnail layout on a physical TV remain UNVERIFIED until their recorded device checks run; this candidate is validated by host tests, the built bundle and source inspection only.
+### Validation
+- Regression coverage is added for the focus-preview guard, the retired colour settings, the shrunken-thumbnail layout effect and its one-time migration, the Who's-watching checkbox row, and DeArrow late-result and recycled-tile safety.
+- Executed host-test results and unavailable device checks are recorded in `docs/YTARK-4.0.0-EVIDENCE.md`.
+
+## [3.9.0] — 2026-10-19
+
+> Published 2026-10-19 15:05 UTC as [YTArk 3.9](https://github.com/2archiver/YTArk/releases/tag/v3.9.0) · tag `v3.9.0` · versionCode 3090000 · userscript `s40` · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.
 
 Reliable updates, simpler profiles, compact diagnostics.
 

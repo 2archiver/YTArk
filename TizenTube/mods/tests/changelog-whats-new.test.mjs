@@ -26,7 +26,7 @@ resolve.patchResolveCommand();
 const resolveCommand = resolve.default;
 
 const PUBLISHED_TAGS = [
-  'v3.8.0', 'v3.7.0', 'v3.6.0', 'v3.5.2', 'v3.5.1', 'v3.5.0', 'v3.4.0', 'v3.3.0', 'v3.2.0', 'v3.1.0', 'v3.0.0','v2.9.0', 'v2.8.0', 'v2.7.0', 'v2.6.0', 'v2.5.0', 'v2.4.0', 'v2.3.0', 'v2.2.0', 'v2.1.2', 'v2.1.1', 'v2.1.0', 'v2.0.4-ytark.17',
+  'v3.9.0', 'v3.8.0', 'v3.7.0', 'v3.6.0', 'v3.5.2', 'v3.5.1', 'v3.5.0', 'v3.4.0', 'v3.3.0', 'v3.2.0', 'v3.1.0', 'v3.0.0','v2.9.0', 'v2.8.0', 'v2.7.0', 'v2.6.0', 'v2.5.0', 'v2.4.0', 'v2.3.0', 'v2.2.0', 'v2.1.2', 'v2.1.1', 'v2.1.0', 'v2.0.4-ytark.17',
   'v2.0.4-ytark.16', 'v2.0.3-ytark.15', 'v2.0.2-personal.14'];
 
 beforeEach(() => {
@@ -48,7 +48,7 @@ describe('bundled changelog data', () => {
       return 0;
     });
     assert.deepEqual(keys, sorted, 'newest first');
-    assert.equal(entries[0].version, '3.9.0');
+    assert.equal(entries[0].version, '4.0.0');
     assert.equal(entries[0].status, 'unreleased');
     assert.equal(entries[0].date, null, 'no invented date for unpublished work');
     const published = entries.filter(entry => entry.status === 'published');
@@ -84,7 +84,7 @@ describe('in-app reader', () => {
       const expected = reader.headlineFor(entry) + (entry.version === '2.3.0' ? '  ·  Installed' : '');
       assert.equal(versionRows[i], expected);
     }
-    assert.equal(versionRows[0], '3.9 — Reliable updates, simpler profiles, compact diagnostics');
+    assert.equal(versionRows[0], '4.0 — Browsing no longer hijacks playback, and settings are clearer');
     assert.equal(rowTitle(modalItems(modal)[selectedIndex(modal)]), versionRows.find(title => title.endsWith('  ·  Installed')));
     assert.match(rowSubtitle(findRow(modal, item => rowTitle(item).startsWith('2.2 — '))), /Published .*2026 · v2\.2\.0/);
     assert.match(header(modal).subtitle, /installed 2\.3\.0/);
@@ -118,14 +118,14 @@ describe('in-app reader', () => {
     // also the source of its own future release notes.
     resolveCommand({ customAction: { action: 'YTARK_CHANGELOG_SHOW', parameters: { update: true } } });
     await press(resolveCommand, findRow(lastModal(recorded, reader.CHANGELOG_MODAL_ID),
-      item => rowTitle(item).startsWith('3.9 — ')));
+      item => rowTitle(item).startsWith('4.0 — ')));
     const current = modalItems(lastModal(recorded, reader.CHANGELOG_VERSION_MODAL_ID))
       .map(messageText).join('\n');
     // The reader paginates long sections ("Added (continued)"), so assert the
     // content is present rather than which page a bullet happens to land on.
     assert.match(current, /Changed\b/);
-    assert.match(current, /Off\/On setting/);
-    assert.match(current, /manual account and sign-in flows remain available/);
+    assert.match(current, /checkbox row/);
+    assert.match(current, /only a deliberate OK, click or Play opens it/);
     assert.match(current, /Known limitations/);
   });
 

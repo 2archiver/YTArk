@@ -30,9 +30,19 @@ import { isSafeStartupDestination } from './features/startupDestination.js';
 //                replaces three profile-selector controls with one automatic
 //                prompt preference, and removes the guest sign-in reminder. Old
 //                valid diagnostic samples remain readable; accounts are untouched.
+//   9            Retires the two custom-colour overrides (navigation bar and
+//                main-content colours). They were never applied to the player
+//                or the video and only recoloured two chrome surfaces; the
+//                stored values are discarded so the standard YouTube/YTArk
+//                styling returns. Every other appearance setting is kept.
+//                Also retires the negative "Disable enlarged thumbnails"
+//                toggle in favour of one positive "Enable shrunken
+//                thumbnails" layout control; the old toggle's effective
+//                visual choice (thumbnails that do not enlarge on focus)
+//                is migrated once into the new setting.
 
 const CONFIG_KEY = 'ytaf-configuration';
-export const CONFIG_SCHEMA_VERSION = 8;
+export const CONFIG_SCHEMA_VERSION = 9;
 
 /**
  * Preferences that no longer exist, with the schema that retired them.
@@ -52,8 +62,7 @@ export const CONFIG_SCHEMA_VERSION = 8;
  *                         dropped (see migrateConfig)
  *   uiTheme               the OLED/youtube theme choice (the OLED theme was
  *                         removed in 3.0; the stored value is discarded, the
- *                         app keeps the normal YouTube/YTArk theming and the
- *                         user's custom colours)
+ *                         app keeps the normal YouTube/YTArk theming)
  *   enableWhoIsWatchingMenu / permanentlyEnableWhoIsWatchingMenu /
  *   enableWhosWatchingMenuOnAppExit
  *                         legacy selector controls, merged into the single
@@ -62,6 +71,19 @@ export const CONFIG_SCHEMA_VERSION = 8;
  *                         flows remain owned by YouTube
  *   startupDiagnosticRunKind
  *                         removed user-supplied cold/warm launch label
+ *   focusContainerColor / routeColor
+ *                         the custom navigation-bar and main-content
+ *                         colour overrides (the retired "Navigation
+ *                         colours" and "Content colours" controls).
+ *                         The stored values are discarded and the
+ *                         standard YouTube/YTArk chrome styling returns.
+ *   disableEnlargingThumbnails
+ *                         the negative "Disable enlarged thumbnails"
+ *                         toggle, replaced by the positive
+ *                         "Enable shrunken thumbnails" layout control
+ *                         (`enableShrinkingThumbnails`); its effective
+ *                         visual choice is migrated once first
+ *                         (see migrateConfig)
  */
 export const RETIRED_KEYS = Object.freeze([
   'userAgentProfile',
@@ -78,6 +100,9 @@ export const RETIRED_KEYS = Object.freeze([
   'enableWhosWatchingMenuOnAppExit',
   'enableSigninReminder',
   'startupDiagnosticRunKind',
+  'focusContainerColor',
+  'routeColor',
+  'disableEnlargingThumbnails',
 ]);
 /** Presence of YouTube TV's own storage means the app has run before. Only the
  * existence of the key is checked; its contents are never read. */
@@ -119,8 +144,6 @@ const defaultConfig = {
   preferredVideoQuality: 'auto',
   enableDeArrow: true,
   enableDeArrowThumbnails: false,
-  focusContainerColor: '#0f0f0f',
-  routeColor: '#0f0f0f',
   enableHqThumbnails: false,
   enableChapters: true,
   enableLongPress: true,
@@ -175,7 +198,6 @@ const defaultConfig = {
   isClock12HourFormat: false,
   clockShowSeconds: false,
   clockHideWhenVideoPlaying: false,
-  disableEnlargingThumbnails: false,
   enableShrinkingThumbnails: false,
   hideRelatedVideosPlayer: false,
 
@@ -347,6 +369,18 @@ export function migrateConfig(stored, env = {}) {
     if (config.preferredVideoCodec === undefined && typeof config.videoPreferredCodec === 'string'
         && config.videoPreferredCodec !== 'any') {
       config.preferredVideoCodec = config.videoPreferredCodec;
+    }
+    if (schema < 9
+        && !Object.prototype.hasOwnProperty.call(config, 'enableShrinkingThumbnails')
+        && Object.prototype.hasOwnProperty.call(config, 'disableEnlargingThumbnails')) {
+      // Migrate the retired negative toggle's effective visual choice
+      // once. "Disable enlarged thumbnails" on meant the user did not
+      // want focus enlargement; the positive "Enable shrunken
+      // thumbnails" now provides that same non-enlarging behaviour as
+      // part of the smaller, consistently sized layout. An explicit
+      // new-setting choice is never overridden, and an explicit old
+      // false still maps to the standard layout.
+      config.enableShrinkingThumbnails = config.disableEnlargingThumbnails === true;
     }
     // Retire removed preferences. Only these keys go; every retained
     // preference keeps the value the user (or an applied preset) left behind,

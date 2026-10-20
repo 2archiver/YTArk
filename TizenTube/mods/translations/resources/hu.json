@@ -172,7 +172,6 @@
                             "clockHideWhenVideoPlaying": "Hide Clock While Video is Playing"
                         }
                     },
-                    "disableEnlargingThumbnails": "Disable Enlarged Thumbnails",
                     "enableShrinkingThumbnails": "Enable Shrinked Thumbnails",
                     "sortSidebarContents": {
                         "title": "Sort Sidebar Contents",
