@@ -391,8 +391,18 @@ function processShelves(shelves, shouldAddPreviews = true) {
   for (const shelve of shelves) {
     if (shelve.shelfRenderer) {
       if (!shelve.shelfRenderer.tvhtml5Style) shelve.shelfRenderer.tvhtml5Style = { effects: {} };
-      if (configRead('disableEnlargingThumbnails')) shelve.shelfRenderer.tvhtml5Style.effects.enlarge = false;
-      if (configRead('enableShrinkingThumbnails')) shelve.shelfRenderer.tvhtml5Style.effects.shrink = true;
+      // One positive layout control: "Enable shrunken thumbnails"
+      // keeps shelf thumbnails smaller and consistently sized (they
+      // do not enlarge when focused). Off leaves the shelf at the
+      // standard YouTube sizing. The effect is set on the shelf data
+      // the frontend renders, so it covers home, search,
+      // recommendation and under-player shelves and any cards the
+      // frontend recycles into them, and it is applied once per
+      // response rather than injected as duplicate styles.
+      if (configRead('enableShrinkingThumbnails')) {
+        shelve.shelfRenderer.tvhtml5Style.effects.shrink = true;
+        shelve.shelfRenderer.tvhtml5Style.effects.enlarge = false;
+      }
       if (!shelve.shelfRenderer.content?.horizontalListRenderer?.items) continue;
       hqify(shelve.shelfRenderer.content.horizontalListRenderer.items);
       addLongPress(shelve.shelfRenderer.content.horizontalListRenderer.items);

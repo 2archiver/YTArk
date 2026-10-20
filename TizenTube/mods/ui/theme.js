@@ -6,20 +6,20 @@
  *   - `ytark-no-player-scrim`  "Remove player dimming"
  *   - `ytark-hide-watermark`   "Hide channel watermark" (DOM safety net)
  *
- * The stylesheet holds the user's saved custom colours plus the static,
- * class-scoped feature rules from appearanceStyles.js. Switching a feature
- * flips a class; the custom colours are independent of the feature classes
- * and are never overwritten. The Premium wordmark keeps resolving its ink
- * from the live header colour through its own (single) theme observer, which
- * already reacts to class changes on <html>.
+ * The stylesheet holds the static, class-scoped feature rules from
+ * appearanceStyles.js. Switching a feature flips a class. The Premium
+ * wordmark keeps resolving its ink from the live header colour through its
+ * own (single) theme observer, which already reacts to class changes on
+ * <html>. (The retired navigation/content colour overrides never reached
+ * the player or the video and are no longer applied.)
  */
 
 import { configRead, configChangeEmitter } from '../config.js';
-import { ROOT_CLASSES, buildAppearanceCss, buildCustomColorCss } from './appearanceStyles.js';
+import { ROOT_CLASSES, buildAppearanceCss } from './appearanceStyles.js';
 
 const STYLE_ATTRIBUTE = 'data-ytark-managed-theme';
 const STYLE_SELECTOR = `style[${STYLE_ATTRIBUTE}="true"]`;
-const WATCHED_KEYS = ['removePlayerScrim', 'hidePlayerWatermark', 'focusContainerColor', 'routeColor'];
+const WATCHED_KEYS = ['removePlayerScrim', 'hidePlayerWatermark'];
 const STATIC_CSS = buildAppearanceCss();
 
 let managedStyle = null;
@@ -159,10 +159,9 @@ export function updateStyle() {
   const style = getManagedStyle(d);
   if (style) {
     copyNonce(style, d);
-    const css = `${buildCustomColorCss(configRead('focusContainerColor'), configRead('routeColor'))}\n${STATIC_CSS}`;
-    if (css !== lastWrittenCss || style.textContent !== css) {
-      style.textContent = css;
-      lastWrittenCss = css;
+    if (STATIC_CSS !== lastWrittenCss || style.textContent !== STATIC_CSS) {
+      style.textContent = STATIC_CSS;
+      lastWrittenCss = STATIC_CSS;
     }
   }
   applyRootClasses(d);

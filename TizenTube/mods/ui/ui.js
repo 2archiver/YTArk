@@ -7,7 +7,7 @@ import { installStartupIntentGuard } from '../features/startupIntentGuard.js';
 import { createSettingsInputOwner } from './settingsInputOwnership.js';
 import { createStartupGuideRefresh } from '../features/startupGuideRefresh.js';
 import css from './ui.css';
-import { configRead, configWrite, configWriteMany, configChangeEmitter } from '../config.js';
+import { configRead, configChangeEmitter } from '../config.js';
 import updateStyle from './theme.js';
 import {
   showToast, hasVisibleYtarkModal, hasVisibleYtarkSettingsPanel, ytarkModalBackCommand,
@@ -52,6 +52,17 @@ const startupSteps = {
 };
 
 const diagnosticMark = (event, outcome = 'observed') => browserDiagnostics.record(event, outcome, 'observed');
+// The userscript bundle can be evaluated more than once in one page
+// context (a re-injected script tag or a retry). Every module guards
+// its own side effects; this guard keeps the startup orchestration -
+// the readiness loop, the one-shot startup navigation, the intent
+// guard's document listeners and the guide refresh - from installing
+// a second copy of itself, which would otherwise add duplicate
+// keydown listeners, duplicate managed CSS and a second readiness
+// timer on the next evaluation.
+if (typeof window !== 'undefined' && !window.__ytarkStartupInstalled) {
+window.__ytarkStartupInstalled = true;
+
 // Navigation waits for the resolver. The guide refresh has its own dependency
 // check for both executor and command constructor and is bounded independently
 // of the controls/navigation effects.
@@ -128,6 +139,8 @@ startReadiness({
   },
 });
 
+} // end one-shot startup orchestration guard
+
 let keyTimeout = null;
 
 // One notice per session when settings cannot be saved (no toast spam).
@@ -138,12 +151,6 @@ configChangeEmitter.addEventListener('configPersistError', () => {
     /* the toast is best effort */
   }
 });
-
-/** Save a red-button colour pick and repaint the managed stylesheet. */
-function saveCustomColor(key, value) {
-  configWrite(key, value);
-  updateStyle();
-}
 
 const keys = {
   49: 1,
@@ -273,21 +280,9 @@ function execute_once_dom_loaded() {
   if (!startupSteps.panel) try {
     uiContainer.innerHTML = `
 <h1>YTArk Settings</h1>
-<label for="__barColor">Navigation Bar Color: <input type="text" id="__barColor"/></label>
-<label for="__routeColor">Main Content Color: <input type="text" id="__routeColor"/></label>
 <div><small>Sponsor segments skipping - https://sponsor.ajay.app</small></div>
 `;
     document.querySelector('body').appendChild(uiContainer);
-
-    uiContainer.querySelector('#__barColor').value = configRead('focusContainerColor');
-    uiContainer.querySelector('#__barColor').addEventListener('change', (evt) => {
-      saveCustomColor('focusContainerColor', evt.target.value);
-    });
-
-    uiContainer.querySelector('#__routeColor').value = configRead('routeColor');
-    uiContainer.querySelector('#__routeColor').addEventListener('change', (evt) => {
-      saveCustomColor('routeColor', evt.target.value);
-    });
     startupSteps.panel = true;
   } catch (e) { }
 

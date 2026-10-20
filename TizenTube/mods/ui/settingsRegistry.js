@@ -307,22 +307,6 @@ function aboutProjectPanel() {
 }
 
 
-function colorsPanel() {
-  const lines = [
-    tx('ytark.appearance.colors.saved', 'Saved colours: navigation {{focus}}, content {{route}}.', {
-      focus: String(configRead('focusContainerColor')),
-      route: String(configRead('routeColor')),
-    }),
-    tx('ytark.appearance.colors.edit', 'Change them in the colour panel opened with the remote\'s red button, or with the focus and route colour settings.'),
-    tx('ytark.appearance.colors.youtube', 'YouTube default is active, so these colours are in use.'),
-  ];
-  return {
-    title: tx('ytark.appearance.colors.title', 'Navigation and content colours'),
-    subtitle: tx('ytark.appearance.colors.subtitle', 'Your saved custom colours'),
-    content: scrollPaneRenderer(lines.map(line => overlayMessageRenderer(line))),
-  };
-}
-
 /** Build the complete settings tree for the current state and device. */
 export function buildSettingsTree() {
   const caps = runtimeCapabilities();
@@ -483,10 +467,10 @@ export function buildSettingsTree() {
       id: 'appearance',
       type: 'menu',
       title: tx('ytark.appearance.title', 'Appearance'),
-      description: tx('ytark.appearance.description', 'Colours, player look and screen behaviour'),
+      description: tx('ytark.appearance.description', 'Player look, thumbnails and screen behaviour'),
       icon: 'DARK_THEME',
       menuId: 'ytark-appearance',
-      resetKeys: ['hidePlayerWatermark', 'removePlayerScrim', 'enableScreenDimming', 'dimmingTimeout', 'dimmingOpacity', 'enableHideWatchedVideos', 'hideWatchedVideosThreshold', 'hideWatchedVideosPages', 'enableClock', 'isClock12HourFormat', 'clockShowSeconds', 'clockHideWhenVideoPlaying', 'disableEnlargingThumbnails', 'enableShrinkingThumbnails', 'enableHqThumbnails'],
+      resetKeys: ['hidePlayerWatermark', 'removePlayerScrim', 'enableScreenDimming', 'dimmingTimeout', 'dimmingOpacity', 'enableHideWatchedVideos', 'hideWatchedVideosThreshold', 'hideWatchedVideosPages', 'enableClock', 'isClock12HourFormat', 'clockShowSeconds', 'clockHideWhenVideoPlaying', 'enableShrinkingThumbnails', 'enableHqThumbnails'],
       children: [
         {
           id: 'appearance.player',
@@ -538,14 +522,6 @@ export function buildSettingsTree() {
           icon: 'VIDEO_YOUTUBE',
           key: 'enablePremiumLogo',
           },
-        {
-          id: 'appearance.colors',
-          type: 'panel',
-          title: tx('ytark.appearance.colors.title', 'Navigation and content colours'),
-          description: tx('ytark.appearance.colors.subtitle', 'Your saved custom colours'),
-          icon: 'LENS_BLUE',
-          panel: colorsPanel,
-        },
             {
               id: 'ui.screenDimming',
               type: 'menu',
@@ -626,8 +602,14 @@ export function buildSettingsTree() {
                 { id: 'ui.clock.hideInPlayer', type: 'toggle', title: t('settings.options.uiSettings.options.clock.options.clockHideWhenVideoPlaying'), icon: 'EYE_OFF', key: 'clockHideWhenVideoPlaying', dependsOn: { key: 'enableClock', title: t('settings.options.uiSettings.options.clock.options.enableClock') } },
               ],
             },
-            { id: 'ui.disableEnlargingThumbnails', type: 'toggle', title: t('settings.options.uiSettings.options.disableEnlargingThumbnails'), key: 'disableEnlargingThumbnails' },
-            { id: 'ui.enableShrinkingThumbnails', type: 'toggle', title: t('settings.options.uiSettings.options.enableShrinkingThumbnails'), key: 'enableShrinkingThumbnails' },
+            {
+              id: 'ui.enableShrinkingThumbnails',
+              type: 'toggle',
+              title: t('settings.options.uiSettings.options.enableShrinkingThumbnails'),
+              description: tx('ytark.appearance.enableShrinkingThumbnails.description',
+                'Keep video thumbnails smaller and consistently sized.'),
+              key: 'enableShrinkingThumbnails',
+            },
             { id: 'misc.hqThumbnails', type: 'toggle', title: t('settings.options.misc.options.hqThumbnails'), icon: 'VIDEO_QUALITY', key: 'enableHqThumbnails' },
       ],
     },
@@ -809,7 +791,6 @@ export function buildSettingsTree() {
             description: tx('ytark.navigation.profilePicker.description', 'Show the automatic profile picker.'),
             icon: 'ACCOUNT_CIRCLE',
             key: 'showAutomaticProfilePicker',
-            statusOnly: true,
           },
           { id: 'misc.reloadHome', type: 'toggle', title: t('settings.options.misc.options.reloadHomeOnStartup'), key: 'reloadHomeOnStartup' },
           {

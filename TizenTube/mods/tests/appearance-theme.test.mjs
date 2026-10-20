@@ -1,7 +1,7 @@
-// The 3.0 appearance sheet: the saved custom colours, "Remove player dimming"
-// and "Hide channel watermark", their composition with the Premium wordmark,
-// and proof that the retired OLED theme left no trace (ui/theme.js,
-// ui/appearanceStyles.js).
+// The appearance sheet: "Remove player dimming" and "Hide channel
+// watermark", their composition with the Premium wordmark, and proof that
+// the retired OLED theme and the retired navigation/content colour
+// overrides left no trace (ui/theme.js, ui/appearanceStyles.js).
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
@@ -35,11 +35,17 @@ function rulesFor(css, rootClass) {
 }
 
 describe('appearance stylesheet', () => {
-  it('publishes the saved custom colours and the feature rules in one managed stylesheet', () => {
+  it('publishes the feature rules in one managed stylesheet, with no colour override', () => {
     assert.equal(managedStyles().length, 1);
     const css = managedStyles()[0].textContent;
-    assert.match(css, /ytlr-guide-response yt-focus-container \{ background-color: #0f0f0f; \}/);
-    assert.match(css, /#container \{ background-color: #0f0f0f !important; \}/);
+    // The navigation/content colour overrides were retired in 4.0:
+    // the standard YouTube/YTArk chrome styling is used, so no rule
+    // paints a custom colour onto the guide focus container or the
+    // content root.
+    assert.doesNotMatch(css, /yt-focus-container/, 'no navigation-bar colour rule');
+    assert.doesNotMatch(css, /#container\s*\{[^}]*background-color:\s*#/i,
+      'no content-root colour rule');
+    assert.doesNotMatch(css, /background-color:\s*#[0-9a-f]{3,8}/i, 'no custom hex colour paint');
     assert.doesNotMatch(css, /filter\s*:|backdrop-filter|mix-blend|opacity\s*:/i,
       'no filters, tints or opacity changes');
   });
@@ -52,12 +58,15 @@ describe('appearance stylesheet', () => {
       'non-player elements with the same internal attribute keep their own appearance');
   });
 
-  it('rebuilds the stylesheet when a saved colour changes, and flips classes when a feature changes', () => {
+  it('ignores stale stored colour values and flips classes when a feature changes', () => {
+    // Stale values left behind by the retired colour settings must
+    // not be applied: every consumer stopped reading them, so the
+    // standard YouTube/YTArk chrome styling is used instead.
     configWrite('focusContainerColor', '#0a1628');
     configWrite('routeColor', '#0d1f3c');
     let css = managedStyles()[0].textContent;
-    assert.match(css, /ytlr-guide-response yt-focus-container \{ background-color: #0a1628; \}/);
-    assert.match(css, /#container \{ background-color: #0d1f3c !important; \}/);
+    assert.doesNotMatch(css, /#0a1628|#0d1f3c/, 'stale colours are not painted');
+    assert.doesNotMatch(css, /yt-focus-container/, 'no navigation-bar colour rule');
 
     // Feature rules are static in the sheet: switching a feature off only
     // drops the root class, the rule stays in place, inert.
@@ -65,8 +74,6 @@ describe('appearance stylesheet', () => {
     css = managedStyles()[0].textContent;
     assert.equal(has(styles.ROOT_CLASSES.hideWatermark), false);
     assert.match(css, /html\.ytark-hide-watermark/, 'the rule stays in the sheet, inert');
-    assert.match(css, /ytlr-guide-response yt-focus-container \{ background-color: #0a1628; \}/,
-      'the custom colours are kept across feature switches');
 
     configWrite('hidePlayerWatermark', true);
     assert.ok(has(styles.ROOT_CLASSES.hideWatermark));

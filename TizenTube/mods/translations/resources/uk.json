@@ -178,7 +178,6 @@
                             "clockHideWhenVideoPlaying": "Приховувати годинник під час перегляду відео"
                         }
                     },
-                    "disableEnlargingThumbnails": "Вимкнути збільшення мініатюр",
                     "enableShrinkingThumbnails": "Увімкнути зменшення мініатюр",
                     "sortSidebarContents": {
                         "title": "Упорядкування бокового меню",
