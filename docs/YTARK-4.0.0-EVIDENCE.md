@@ -234,10 +234,11 @@ entry because it has a thumbnail; `tests/config-migration.test.mjs` and
 | Python tooling suite | `python3 -m unittest discover -s tools/tests` | PASS — 266 tests (3 skipped) |
 | Changelog/generated assets | `python3 tools/build_changelog.py --check` | PASS — 28 versions, newest 4.0.0 |
 | Shell syntax | `bash -n tools/*.sh` | PASS |
-| Java host updater suites | `tools/test_android_updater.sh` | NOT RUN — no `javac` in this environment; CI runs them |
-| Android-source type check | `DownloadController.kt` and `UpdateCoordinator.kt` compiled with the pinned Kotlin compiler against minimal host stubs | PASS (stubs only prove types/syntax; not an Android build) |
-| Android Kotlin/D8/APK build | `tools/build_android_updater.sh` | NOT RUN — no Android SDK |
-| Signed APK inspection / real install | CI + TV | NOT RUN / NOT MEASURED |
+| Java host updater suites | `tools/test_android_updater.sh` | NOT RUN locally (no `javac`); **PASS in CI** (PR #73 check run) |
+| Android-source type check | `DownloadController.kt` and `UpdateCoordinator.kt` compiled with the pinned Kotlin compiler against minimal host stubs | PASS locally (types/syntax only) |
+| Android Kotlin/D8/APK build | `tools/build_android_updater.sh` | NOT RUN locally (no Android SDK); **PASS in CI** (signed ARMv7 candidate build, PR #73) |
+| Signed APK inspection / real install | CI + TV | Package/signer checks pass in CI; real install NOT RUN |
+| CI workflows | `gh api .../check-runs` for the PR head | **PASS** — both required jobs succeeded |
 | TV startup timing (normal vs Faster) | Device procedure in `docs/DEVICE-ACCEPTANCE.md` | NOT MEASURED |
 | Exact failing storage syscall on the reporter's TV | logcat/technical details | UNVERIFIED |
 
