@@ -26,12 +26,12 @@ Conventions:
 
 > Not yet published. Candidate tag `v4.2.0` · versionCode 4020000 · userscript `s43` · TizenTubeCobalt v2.0.3.
 
-Original launcher artwork, clearer Google TV icons and an updated Cobalt engine.
+Original artwork, Google TV icons and Cobalt 2.0.3.
 
 ### Changed
-- **Original launcher artwork replaces the vector approximation.** The supplied image keeps its shading, orbit and transparency.
-- **Google TV menu icons use the same artwork with safe padding.** The TV banner pairs the image with readable YTArk lettering.
-- **Release history correctly records the published 4.1 update.** Both in-app readers share the corrected record.
+- **Original image replaces the launcher approximation.** The supplied image keeps its shading, orbit and transparency.
+- **Google TV menu icons gain safe padding.** The TV banner pairs the image with readable YTArk lettering.
+- **Published 4.1 history is corrected.** Both in-app readers share the corrected record.
 ### Fixed
 - Explicitly assign the round icon even when the upstream manifest omits it, keeping launcher and app-info branding consistent.
 - Upstream APK verification rejects a requested tag that differs from the configured engine version, in addition to checking the pinned size, SHA-256 and ABI.

@@ -4,7 +4,7 @@ export const YTARK_CHANGELOG = {
   "schema": 1,
   "source": "CHANGELOG.md",
   "summaryFallback": "No short highlights available for this version.",
-  "sourceSha256": "5758d5b20f6ec9110320e3e7c37aa22dbc792ef00a84b1da6917d4e119e94052",
+  "sourceSha256": "7c63255a49bfd842339e9172dd9078d67eff74a677e0711b97c10b852b53ca44",
   "entries": [
     {
       "version": "4.2.0",
@@ -18,14 +18,14 @@ export const YTARK_CHANGELOG = {
       "title": "YTArk 4.2",
       "releaseUrl": null,
       "facts": "Not yet published. Candidate tag v4.2.0 · versionCode 4020000 · userscript s43 · TizenTubeCobalt v2.0.3.",
-      "summary": "Original launcher artwork, clearer Google TV icons and an updated Cobalt engine.",
+      "summary": "Original artwork, Google TV icons and Cobalt 2.0.3.",
       "sections": [
         {
           "heading": "Changed",
           "items": [
-            "Original launcher artwork replaces the vector approximation. The supplied image keeps its shading, orbit and transparency.",
-            "Google TV menu icons use the same artwork with safe padding. The TV banner pairs the image with readable YTArk lettering.",
-            "Release history correctly records the published 4.1 update. Both in-app readers share the corrected record."
+            "Original image replaces the launcher approximation. The supplied image keeps its shading, orbit and transparency.",
+            "Google TV menu icons gain safe padding. The TV banner pairs the image with readable YTArk lettering.",
+            "Published 4.1 history is corrected. Both in-app readers share the corrected record."
           ]
         },
         {

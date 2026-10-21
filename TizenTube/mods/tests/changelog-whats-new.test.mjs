@@ -84,7 +84,7 @@ describe('in-app reader', () => {
       const expected = reader.headlineFor(entry) + (entry.version === '2.3.0' ? '  ·  Installed' : '');
       assert.equal(versionRows[i], expected);
     }
-    assert.equal(versionRows[0], '4.2 — Original launcher artwork, clearer Google TV icons and an updated Cobalt engine');
+    assert.equal(versionRows[0], '4.2 — Original artwork, Google TV icons and Cobalt 2.0.3');
     assert.equal(rowTitle(modalItems(modal)[selectedIndex(modal)]), versionRows.find(title => title.endsWith('  ·  Installed')));
     assert.match(rowSubtitle(findRow(modal, item => rowTitle(item).startsWith('2.2 — '))), /Published .*2026 · v2\.2\.0/);
     assert.match(header(modal).subtitle, /installed 2\.3\.0/);
@@ -124,7 +124,7 @@ describe('in-app reader', () => {
     // The reader paginates long sections ("Added (continued)"), so assert the
     // content is present rather than which page a bullet happens to land on.
     assert.match(current, /Changed\b/);
-    assert.match(current, /Original launcher artwork/);
+    assert.match(current, /Original image/);
     assert.match(current, /safe padding/);
     assert.match(current, /Known limitations/);
   });
