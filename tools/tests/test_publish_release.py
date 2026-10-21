@@ -20,7 +20,7 @@ import urllib.parse
 import urllib.request
 import zipfile
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "tools"))
@@ -48,6 +48,40 @@ _RENDERED_NOTICE: bytes | None = None
 COMMIT = "a" * 40
 RUN_ID = "38120854970"
 ASSET_ID_BASE = 700
+
+
+class PublishedSourceTests(unittest.TestCase):
+    def check_source(self, files, status="ahead"):
+        github = Mock(repository="2archiver/YTArk")
+        github.json.return_value = {"status": status, "files": files}
+        release = {"tag_name": "v4.0.0", "body":
+                   '<!-- ytark-release-identity/v1 {"commit":"' + "a" * 40 + '"} -->'}
+        publish_release.require_unchanged_release_source(github, release, "b" * 40)
+        return github
+
+    def test_packaged_changes_cannot_verify_an_old_release(self):
+        for path in ("TizenTube/mods/main.js", "android-updater/src/main/Updater.kt",
+                     "release/version.properties", "tools/repack_apk.py", ".github/workflows/build-apk.yml"):
+            with self.subTest(path=path), self.assertRaisesRegex(publish_release.ReleaseConflict, "Advance versionName"):
+                self.check_source([{"filename": path}])
+
+    def test_docs_only_commit_can_verify_the_release(self):
+        self.check_source([{"filename": "README.md"}, {"filename": "docs/evidence.md"}])
+
+    def test_renamed_packaged_file_is_still_a_source_change(self):
+        with self.assertRaises(publish_release.ReleaseConflict):
+            self.check_source([{"filename": "docs/old.js", "previous_filename": "TizenTube/mods/old.js"}])
+
+    def test_incomplete_or_diverged_comparison_fails_closed(self):
+        for files, status in ((None, "ahead"), ([{}] * 300, "ahead"), ([], "diverged")):
+            with self.subTest(status=status), self.assertRaises(publish_release.ReleaseConflict):
+                self.check_source(files, status)
+
+    def test_exact_commit_rerun_needs_no_comparison(self):
+        github = Mock()
+        release = {"body": '<!-- ytark-release-identity/v1 {"commit":"' + "a" * 40 + '"} -->'}
+        publish_release.require_unchanged_release_source(github, release, "a" * 40)
+        github.json.assert_not_called()
 
 
 def sha256(data: bytes) -> str:
@@ -873,8 +907,8 @@ class PublicationTests(PublishReleaseTestCase):
             self.run_publish(None, scenario=scenario)
         self.assertIn("asset upload refused", str(caught.exception))
         version, code = publish_release.next_patch_version(CONFIG)
-        # The next patch above the configured 4.0.0 candidate.
-        self.assertEqual((version, code), ("4.0.1", 4000100))
+        # The next patch above the configured 4.1.0 candidate.
+        self.assertEqual((version, code), ("4.1.1", 4010100))
 
     def test_repair_refuses_a_rebuild_that_disagrees_with_published_checksums(self):
         published = release_payload(
@@ -888,7 +922,7 @@ class PublicationTests(PublishReleaseTestCase):
                 manifest=str(rebuilt.manifest), run_id=rebuilt.run_id,
             )
         self.assertIn("next patch version", str(caught.exception))
-        self.assertIn("4000100", str(caught.exception))
+        self.assertIn("4010100", str(caught.exception))
 
     def test_repair_guard_rejects_bytes_the_published_checksums_refuse(self):
         """The published checksum file decides whether a rebuild may repair an APK."""

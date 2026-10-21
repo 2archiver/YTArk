@@ -40,7 +40,7 @@ These features originate in the upstream TizenTube userscript; YTArk maintains a
 - **SponsorBlock** skips supported community-submitted segments when enabled and when the service has matching data.
 - **DeArrow** can use community title alternatives; thumbnail replacements are a separate opt-in setting.
 - **Playback controls** include preferred video quality, speed and codec options, plus a video queue.
-- **Navigation options** include sidebar customization and a guide entry for direct Settings access. Shorts remain available through YouTube's normal navigation. "Disable channels on sidebar" was removed in 4.0: it hid every entry with a thumbnail instead of controlling individual channels, so the normal guide returns and a stale stored value is dropped at migration.
+- **Navigation options** include sidebar customization and a guide entry for direct Settings access. Shorts remain available through YouTube's normal navigation. "Disable channels on sidebar" was removed in 4.1: it hid every entry with a thumbnail instead of controlling individual channels, so the normal guide returns and a stale stored value is dropped at migration.
 
 ### YTArk additions
 

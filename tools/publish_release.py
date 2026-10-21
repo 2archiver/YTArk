@@ -1187,12 +1187,49 @@ def summarise(lines: Iterable[str]) -> None:
             stream.write(text + "\n")
 
 
+def require_unchanged_release_source(github: GitHub, release: dict[str, Any], head_sha: str) -> None:
+    """A complete old APK cannot satisfy a new source release with the same version.
+
+    Compare both filename sides so renaming/deleting packaged inputs counts.
+    Documentation-only commits and reruns can still verify existing bytes.
+    """
+    identity = parse_identity(release) or {}
+    released_sha = str(identity.get("commit", ""))
+    if not re.fullmatch(r"[0-9a-f]{40}", released_sha):
+        raise ReleaseConflict("Published release lacks a valid source commit; refusing a verify-only success.")
+    if released_sha == head_sha:
+        return
+    comparison = github.json(
+        "GET", f"/repos/{github.repository}/compare/{released_sha}...{head_sha}"
+    )
+    files = comparison.get("files") if isinstance(comparison, dict) else None
+    # GitHub's compare endpoint returns at most 300 files. Refuse to infer
+    # unchanged source from a potentially truncated or divergent comparison.
+    if (not isinstance(files, list) or len(files) >= 300
+            or comparison.get("status") not in ("ahead", "identical")):
+        raise ReleaseConflict("Cannot establish unchanged published source; advance release/version.properties.")
+    prefixes = ("TizenTube/", "android-updater/", "tools/", "release/", "signing/", "branding/", ".github/workflows/")
+    changed = [
+        path for item in files
+        for path in (item.get("filename", ""), item.get("previous_filename", ""))
+        if path.startswith(prefixes)
+    ]
+    if changed:
+        raise ReleaseConflict(
+            f"{release.get('tag_name')} already publishes source {released_sha}, but release inputs changed "
+            f"at {head_sha}: {', '.join(changed[:8])}. Advance versionName, versionCode, versionTag "
+            "and scriptTag in release/version.properties and regenerate build metadata/changelog. "
+            "The existing release and immutable script tag must not be overwritten."
+        )
+
+
 def plan_command(args: argparse.Namespace) -> int:
     config = validate_release.load_config()
     github = GitHub(token=args.token, repository=args.repository, api_url=args.api_url)
     release = github.release_by_tag(config["VERSION_TAG"])
     plan = classify(release, config, head_sha=args.head_sha)
     if plan.state == "published-complete":
+        require_unchanged_release_source(github, release, args.head_sha)
         latest = github.latest_release()
         try:
             validate_release.verify_release_record(
@@ -1261,6 +1298,8 @@ def publish_command(args: argparse.Namespace) -> int:
     # release may use that release's own bytes as the reference, because nothing
     # is uploaded. Anything else needs the real build artefact.
     preliminary = classify(release, config, head_sha=args.commit, candidate=None)
+    if preliminary.action == ACTION_VERIFY_ONLY:
+        require_unchanged_release_source(github, release, args.commit)
     if args.candidate_dir and args.manifest:
         candidate = load_candidate(
             Path(args.manifest),

@@ -42,17 +42,17 @@ class Armv7OnlyReleaseContractTests(unittest.TestCase):
 
     def test_expected_clean_semver_version_and_asset_names(self):
         config = validate_release.load_config()
-        # The 4.0.0 candidate identity is the next numeric release after the
-        # published 3.9.0 (3090000). Keep these literals so the test checks the
+        # The 4.1.0 candidate identity is the next numeric release after the
+        # published 4.0.0 (4000000). Keep these literals so the test checks the
         # release contract itself rather than echoing the configured values.
-        self.assertEqual(config["VERSION_NAME"], "4.0.0")
-        self.assertEqual(config["DISPLAY_VERSION"], "4.0")
-        self.assertEqual(config["VERSION_CODE"], "4000000")
-        self.assertEqual(config["VERSION_TAG"], "v4.0.0")
-        self.assertEqual(config["RELEASE_NAME"], "YTArk 4.0")
+        self.assertEqual(config["VERSION_NAME"], "4.1.0")
+        self.assertEqual(config["DISPLAY_VERSION"], "4.1")
+        self.assertEqual(config["VERSION_CODE"], "4010000")
+        self.assertEqual(config["VERSION_TAG"], "v4.1.0")
+        self.assertEqual(config["RELEASE_NAME"], "YTArk 4.1")
         # The public filename carries the full ABI suffix; the internal
         # architecture key stays in build tooling and CLI flags.
-        self.assertEqual(config["APK_ARMV7"], "YTArk-v4.0.0-armeabi-v7a.apk")
+        self.assertEqual(config["APK_ARMV7"], "YTArk-v4.1.0-armeabi-v7a.apk")
         self.assertEqual(validate_release.apk_filename(config["VERSION_NAME"], "armv7"), config["APK_ARMV7"])
         self.assertTrue(config["APK_ARMV7"].endswith("-armeabi-v7a.apk"))
         # Only one architecture is published from 2.1.2 onwards.
@@ -134,10 +134,10 @@ class Armv7OnlyReleaseContractTests(unittest.TestCase):
             releases_path.write_text(json.dumps([releases[:5], releases[5:]]), encoding="utf-8")
             validate_release.check_version(str(latest_path), str(releases_path))
 
-            # A published release above the candidate (4.0.1 = 4000100) must block it.
+            # A published release above the candidate (4.1.1 = 4010100) must block it.
             too_high = dict(releases[1])
-            too_high["tag_name"] = "v4.0.1"
-            too_high["body"] = "Version 4.0.1 (versionCode 4000100)"
+            too_high["tag_name"] = "v4.1.1"
+            too_high["body"] = "Version 4.1.1 (versionCode 4010100)"
             releases_path.write_text(json.dumps(releases + [too_high]), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "must exceed every published release|must be newer"):
                 validate_release.check_version(str(latest_path), str(releases_path))
