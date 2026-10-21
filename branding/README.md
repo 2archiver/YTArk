@@ -9,6 +9,10 @@ Install `python3 -m pip install -r tools/requirements-branding.txt` and run
 `python3 tools/render_launcher_art.py --write`. CI uses `--check` to verify
 source integrity and every generated resource.
 
+The original source and packaged full-resolution image must match byte for
+byte. Resized PNGs must match dimensions, color mode and decoded pixels;
+lossless PNG compression may differ between Windows and Linux Pillow wheels.
+
 - Legacy icons: Lanczos downsampling to Android's 48–192 px mipmap sizes.
 - Adaptive icon (Google TV long-press/app info): original PNG centered in a
   62dp foreground on the 108dp layer with a white background. The artwork's

@@ -105,6 +105,22 @@ def artifacts():
     return files
 
 
+def artifact_matches(path, data):
+    if not path.is_file():
+        return False
+    if path.suffix == '.png' and path.name != 'ytark_artwork.png':
+        # Pillow wheels can use different zlib implementations on Windows and
+        # Linux. Require identical pixels, mode and dimensions, not identical
+        # lossless compression. The original supplied PNG stays byte-exact.
+        try:
+            with Image.open(path) as actual, Image.open(io.BytesIO(data)) as expected:
+                return (actual.mode == expected.mode and actual.size == expected.size
+                        and actual.tobytes() == expected.tobytes())
+        except OSError:
+            return False
+    return path.read_bytes() == data
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group(required=True)
@@ -118,7 +134,7 @@ def main():
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(data)
             print(f'wrote {path.relative_to(ROOT)}')
-        elif not path.is_file() or path.read_bytes() != data:
+        elif not artifact_matches(path, data):
             stale.append(str(path.relative_to(ROOT)))
     if stale:
         print('Stale branding artifacts: ' + ', '.join(stale), file=sys.stderr)

@@ -19,6 +19,18 @@ ANDROID = '{http://schemas.android.com/apk/res/android}'
 
 
 class LauncherArtworkTests(unittest.TestCase):
+    def test_lossless_png_compression_can_vary_but_pixels_cannot(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / 'derived.png'
+            expected = art.render_png(48)
+            with Image.open(io.BytesIO(expected)) as image:
+                image.save(path, compress_level=0)
+                self.assertNotEqual(path.read_bytes(), expected)
+                self.assertTrue(art.artifact_matches(path, expected))
+                image.putpixel((24, 24), (0, 0, 0, 255))
+                image.save(path)
+                self.assertFalse(art.artifact_matches(path, expected))
+
     def test_packaged_art_is_the_exact_supplied_image(self):
         source = art.SOURCE.read_bytes()
         self.assertEqual(hashlib.sha256(source).hexdigest(),
