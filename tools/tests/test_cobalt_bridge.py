@@ -5,7 +5,46 @@ import tempfile
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from patch_cobalt_bridge import canonical_smali, verify_roundtrip
+from patch_cobalt_bridge import canonical_smali, verify_roundtrip, patch, BODY
+
+
+class Cobalt203BridgeTests(unittest.TestCase):
+    # Extracted with pinned Apktool 3.0.3 from cobalt-arm.apk v2.0.3,
+    # SHA-256 72a3527f520db3a1b414916ad96481244e451c41e272ae33344ae5e79abb37dd.
+    original = (Path(__file__).parent / 'data/smali/cobalt-2.0.3-installAppFromURL.smali').read_text(encoding='utf-8')
+
+    def make_host(self, root, method=None, parent='BaseStarboardBridge'):
+        directory = root / 'smali_classes2/dev/cobalt/coat'
+        directory.mkdir(parents=True)
+        base = directory / 'BaseStarboardBridge.smali'
+        base.write_text('.class public Ldev/cobalt/coat/BaseStarboardBridge;\n'
+                        '.super Ljava/lang/Object;\n' + (method or self.original), encoding='utf-8')
+        wrapper = directory / 'StarboardBridge.smali'
+        wrapper.write_text('.class public Ldev/cobalt/coat/StarboardBridge;\n'
+                           f'.super Ldev/cobalt/coat/{parent};\n', encoding='utf-8')
+        return base, wrapper
+
+    def test_patches_the_real_cobalt27_parent_method_and_preserves_subclass(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base, wrapper = self.make_host(Path(temp))
+            original_wrapper = wrapper.read_bytes()
+            self.assertEqual(patch(temp), base)
+            self.assertIn(BODY, base.read_text(encoding='utf-8'))
+            self.assertEqual(wrapper.read_bytes(), original_wrapper)
+            with self.assertRaisesRegex(ValueError, 'method changed'):
+                patch(temp)
+
+    def test_upstream_opcode_changes_fail_closed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            self.make_host(Path(temp), self.original.replace('const/4 v2, 0x1', 'const/4 v2, 0x0'))
+            with self.assertRaisesRegex(ValueError, 'method changed'):
+                patch(temp)
+
+    def test_upstream_inheritance_changes_fail_closed(self):
+        with tempfile.TemporaryDirectory() as temp:
+            self.make_host(Path(temp), parent='AnotherBridge')
+            with self.assertRaisesRegex(ValueError, 'inheritance changed'):
+                patch(temp)
 
 
 class CobaltRoundtripTests(unittest.TestCase):

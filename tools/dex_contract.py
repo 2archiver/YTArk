@@ -63,7 +63,7 @@ def verify_apk_dex(apk):
     updater = defined['Lio/github/twoarchiver/ytark/updater/UpdateCoordinator;']
     if any(name.lstrip('[').startswith('Lkotlin/') for name in updater.types):
         raise ValueError('Updater still references the host Kotlin runtime')
-    host='Ldev/cobalt/coat/StarboardBridge;'
+    host='Ldev/cobalt/coat/BaseStarboardBridge;'
     if host not in defined: raise ValueError('Missing Cobalt host bridge')
     dex=defined[host]; code=dex.code(host,'installAppFromURL')
     # invoke-static {p1}, NativeUpdatesBridge.open ; move-result v0 ; return v0

@@ -33,6 +33,7 @@ Original artwork, Google TV icons and Cobalt 2.0.3.
 - **Google TV menu icons gain safe padding.** The TV banner pairs the image with readable YTArk lettering.
 - **Published 4.1 history is corrected.** Both in-app readers share the corrected record.
 ### Fixed
+- Adapt the native updater hand-off to Cobalt 27's shared bridge class, with an exact audited-method check that rejects unexpected upstream bytecode changes.
 - Explicitly assign the round icon even when the upstream manifest omits it, keeping launcher and app-info branding consistent.
 - Upstream APK verification rejects a requested tag that differs from the configured engine version, in addition to checking the pinned size, SHA-256 and ABI.
 ### Notes

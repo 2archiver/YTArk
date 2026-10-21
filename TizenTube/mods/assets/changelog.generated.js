@@ -4,7 +4,7 @@ export const YTARK_CHANGELOG = {
   "schema": 1,
   "source": "CHANGELOG.md",
   "summaryFallback": "No short highlights available for this version.",
-  "sourceSha256": "7c63255a49bfd842339e9172dd9078d67eff74a677e0711b97c10b852b53ca44",
+  "sourceSha256": "d882966e1c60682032a328646b21ed6f40bb016d224c15f0b996fd7c3c35249d",
   "entries": [
     {
       "version": "4.2.0",
@@ -31,6 +31,7 @@ export const YTARK_CHANGELOG = {
         {
           "heading": "Fixed",
           "items": [
+            "Adapt the native updater hand-off to Cobalt 27's shared bridge class, with an exact audited-method check that rejects unexpected upstream bytecode changes.",
             "Explicitly assign the round icon even when the upstream manifest omits it, keeping launcher and app-info branding consistent.",
             "Upstream APK verification rejects a requested tag that differs from the configured engine version, in addition to checking the pinned size, SHA-256 and ABI."
           ]
