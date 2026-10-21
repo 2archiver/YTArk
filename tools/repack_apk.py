@@ -410,7 +410,7 @@ def patch_apktool_yml(path: str, version_code: int, version_name: str) -> None:
 
 
 # ---------------------------------------------------------------------------
-# YTArk launcher icon (Alternative 2 branding artifacts)
+# YTArk launcher icon (source-image branding artifacts)
 # ---------------------------------------------------------------------------
 
 YTARK_ICON_SOURCES = (
@@ -419,6 +419,8 @@ YTARK_ICON_SOURCES = (
     ("ytark_launcher_bg.xml", "drawable/ytark_launcher_bg.xml"),
     ("ytark_launcher_monochrome.xml", "drawable/ytark_launcher_monochrome.xml"),
     ("ytark_banner.xml", "drawable/ytark_banner.xml"),
+    ("drawable-nodpi/ytark_artwork.png", "drawable-nodpi/ytark_artwork.png"),
+    ("drawable-nodpi/ytark_tv_banner.png", "drawable-nodpi/ytark_tv_banner.png"),
     ("mipmap-anydpi-v26/ytark_launcher.xml", "mipmap-anydpi-v26/ytark_launcher.xml"),
     ("mipmap-mdpi/ytark_launcher.png", "mipmap-mdpi/ytark_launcher.png"),
     ("mipmap-hdpi/ytark_launcher.png", "mipmap-hdpi/ytark_launcher.png"),
@@ -449,6 +451,7 @@ def patch_launcher_icon(decoded_dir: str) -> None:
         raise SystemExit("ERROR: cannot set YTArk launcher artwork without <application>.")
     app_block = app_tag.group(0)
     for attribute, value in (("icon", "@mipmap/ytark_launcher"),
+                             ("roundIcon", "@mipmap/ytark_launcher"),
                              ("banner", "@drawable/ytark_banner")):
         pattern = re.compile(rf'(?<![\w:])(?:android:)?{attribute}(?:\([^)]*\))?="[^"]*"')
         if pattern.search(app_block):
@@ -469,7 +472,7 @@ def patch_launcher_icon(decoded_dir: str) -> None:
         os.makedirs(os.path.dirname(target), exist_ok=True)
         shutil.copyfile(source, target)
     print(f"[*] Launcher: rebranded {icon_count} icon and {banner_count} banner reference(s); "
-          f"installed {len(YTARK_ICON_SOURCES)} Alternative 2 artwork resources")
+          f"installed {len(YTARK_ICON_SOURCES)} source-image artwork resources")
 
 
 # ---------------------------------------------------------------------------
@@ -865,7 +868,7 @@ def self_test() -> None:
         for _source, target in YTARK_ICON_SOURCES
     ]
     if all(passed for passed, _what in artwork_checks):
-        print("PASS: Alternative 2 launcher artwork set installed into res/")
+        print("PASS: source-image launcher artwork set installed into res/")
     else:
         for passed, what in artwork_checks:
             if not passed:

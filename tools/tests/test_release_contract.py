@@ -42,17 +42,17 @@ class Armv7OnlyReleaseContractTests(unittest.TestCase):
 
     def test_expected_clean_semver_version_and_asset_names(self):
         config = validate_release.load_config()
-        # The 4.1.0 candidate identity is the next numeric release after the
+        # The 4.2.0 candidate identity is the next numeric release after the
         # published 4.0.0 (4000000). Keep these literals so the test checks the
         # release contract itself rather than echoing the configured values.
-        self.assertEqual(config["VERSION_NAME"], "4.1.0")
-        self.assertEqual(config["DISPLAY_VERSION"], "4.1")
-        self.assertEqual(config["VERSION_CODE"], "4010000")
-        self.assertEqual(config["VERSION_TAG"], "v4.1.0")
-        self.assertEqual(config["RELEASE_NAME"], "YTArk 4.1")
+        self.assertEqual(config["VERSION_NAME"], "4.2.0")
+        self.assertEqual(config["DISPLAY_VERSION"], "4.2")
+        self.assertEqual(config["VERSION_CODE"], "4020000")
+        self.assertEqual(config["VERSION_TAG"], "v4.2.0")
+        self.assertEqual(config["RELEASE_NAME"], "YTArk 4.2")
         # The public filename carries the full ABI suffix; the internal
         # architecture key stays in build tooling and CLI flags.
-        self.assertEqual(config["APK_ARMV7"], "YTArk-v4.1.0-armeabi-v7a.apk")
+        self.assertEqual(config["APK_ARMV7"], "YTArk-v4.2.0-armeabi-v7a.apk")
         self.assertEqual(validate_release.apk_filename(config["VERSION_NAME"], "armv7"), config["APK_ARMV7"])
         self.assertTrue(config["APK_ARMV7"].endswith("-armeabi-v7a.apk"))
         # Only one architecture is published from 2.1.2 onwards.
@@ -134,10 +134,10 @@ class Armv7OnlyReleaseContractTests(unittest.TestCase):
             releases_path.write_text(json.dumps([releases[:5], releases[5:]]), encoding="utf-8")
             validate_release.check_version(str(latest_path), str(releases_path))
 
-            # A published release above the candidate (4.1.1 = 4010100) must block it.
+            # A published release above the candidate (4.2.1 = 4020100) must block it.
             too_high = dict(releases[1])
-            too_high["tag_name"] = "v4.1.1"
-            too_high["body"] = "Version 4.1.1 (versionCode 4010100)"
+            too_high["tag_name"] = "v4.2.1"
+            too_high["body"] = "Version 4.2.1 (versionCode 4020100)"
             releases_path.write_text(json.dumps(releases + [too_high]), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "must exceed every published release|must be newer"):
                 validate_release.check_version(str(latest_path), str(releases_path))
@@ -150,56 +150,56 @@ class Armv7OnlyReleaseContractTests(unittest.TestCase):
 
     def test_pinned_upstream_asset_names_urls_and_digests(self):
         release = {
-            "tag_name": "v2.0.2",
+            "tag_name": "v2.0.3",
             "draft": False,
             "prerelease": False,
             "assets": [
                 {
                     "name": "cobalt-arm.apk",
-                    "size": 97_195_140,
-                    "digest": "sha256:ff90c6e85c37246b809cca80282910509782c1384eccfbb6066da3b497dd9fd2",
-                    "browser_download_url": "https://github.com/reisxd/TizenTubeCobalt/releases/download/v2.0.2/cobalt-arm.apk",
+                    "size": 80_570_825,
+                    "digest": "sha256:72a3527f520db3a1b414916ad96481244e451c41e272ae33344ae5e79abb37dd",
+                    "browser_download_url": "https://github.com/reisxd/TizenTubeCobalt/releases/download/v2.0.3/cobalt-arm.apk",
                 },
                 {
                     "name": "cobalt-arm64.apk",
-                    "size": 168_173_905,
-                    "digest": "sha256:0e8a9cffc77a08cd116d38e262c3e9d7f261ba2093b5b2d2ef905f509c99133c",
-                    "browser_download_url": "https://github.com/reisxd/TizenTubeCobalt/releases/download/v2.0.2/cobalt-arm64.apk",
+                    "size": 153_048_724,
+                    "digest": "sha256:4e3df211abb243cb06b06ba3676fe62c3d5b59baa47c1a0050cb180b3493e539",
+                    "browser_download_url": "https://github.com/reisxd/TizenTubeCobalt/releases/download/v2.0.3/cobalt-arm64.apk",
                 },
             ],
         }
-        armv7 = fetch_base_apks.validate_release_asset(release, "v2.0.2", "armv7")
+        armv7 = fetch_base_apks.validate_release_asset(release, "v2.0.3", "armv7")
         self.assertEqual(armv7["abi"], "armeabi-v7a")
         self.assertEqual(armv7["library"], "lib/armeabi-v7a/libchrobalt.so")
         self.assertEqual(list(fetch_base_apks.BASE_ASSETS), ["armv7"])
         # The upstream ARM64 asset still exists, but it is not packageable.
         with self.assertRaises(ValueError):
-            fetch_base_apks.validate_release_asset(release, "v2.0.2", "arm64")
+            fetch_base_apks.validate_release_asset(release, "v2.0.3", "arm64")
 
         bad = json.loads(json.dumps(release))
         bad["assets"][0]["browser_download_url"] = "https://example.invalid/cobalt-arm.apk"
         with self.assertRaises(ValueError):
-            fetch_base_apks.validate_release_asset(bad, "v2.0.2", "armv7")
+            fetch_base_apks.validate_release_asset(bad, "v2.0.3", "armv7")
         with self.assertRaises(ValueError):
-            fetch_base_apks.validate_release_asset(release, "v2.0.3", "armv7")
+            fetch_base_apks.validate_release_asset(release, "v2.0.2", "armv7")
         changed_digest = json.loads(json.dumps(release))
         changed_digest["assets"][0]["digest"] = "sha256:" + "a" * 64
         with self.assertRaises(ValueError):
-            fetch_base_apks.validate_release_asset(changed_digest, "v2.0.2", "armv7")
+            fetch_base_apks.validate_release_asset(changed_digest, "v2.0.3", "armv7")
         missing_digest = json.loads(json.dumps(release))
         missing_digest["assets"][0].pop("digest")
         with self.assertRaises(ValueError):
-            fetch_base_apks.validate_release_asset(missing_digest, "v2.0.2", "armv7")
+            fetch_base_apks.validate_release_asset(missing_digest, "v2.0.3", "armv7")
         changed_size = json.loads(json.dumps(release))
         changed_size["assets"][0]["size"] += 1
         with self.assertRaises(ValueError):
-            fetch_base_apks.validate_release_asset(changed_size, "v2.0.2", "armv7")
+            fetch_base_apks.validate_release_asset(changed_size, "v2.0.3", "armv7")
         duplicate = json.loads(json.dumps(release))
         duplicate["assets"].append(dict(duplicate["assets"][0]))
         with self.assertRaises(ValueError):
-            fetch_base_apks.validate_release_asset(duplicate, "v2.0.2", "armv7")
+            fetch_base_apks.validate_release_asset(duplicate, "v2.0.3", "armv7")
         with self.assertRaises(ValueError):
-            fetch_base_apks.validate_release_asset(release, "v2.0.2", "x86")
+            fetch_base_apks.validate_release_asset(release, "v2.0.3", "x86")
 
     def test_base_native_abi_and_dex_checks_reject_mismatched_architecture(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -382,7 +382,7 @@ resource 0x7f080003 io.github.twoarchiver.ytark:drawable/ytark_launcher_monochro
         body = f"""# YTArk {config['DISPLAY_VERSION']}
 Android package `{validate_release.APP_ID}`
 Version {config['DISPLAY_VERSION']} ({config['VERSION_NAME']}; versionCode {config['VERSION_CODE']})
-TizenTubeCobalt v2.0.2
+TizenTubeCobalt {config['BASE_TAG']}
 {config['APK_ARMV7']} armeabi-v7a
 Only ARMv7 is published; an Android userspace whose abilist contains only
 arm64-v8a (a 64-bit-only system) cannot install this release.

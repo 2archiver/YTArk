@@ -22,9 +22,27 @@ Conventions:
 - Capabilities inherited from TizenTube and TizenTubeCobalt are listed under
   "Upstream base and inherited capabilities", not as YTArk additions.
 
-## [4.1.0] — Unreleased
+## [4.2.0] — Unreleased
 
-> Not yet published. Candidate tag `v4.1.0` · versionCode 4010000 · userscript `s42` · ARMv7 on the unchanged TizenTubeCobalt v2.0.2 engine.
+> Not yet published. Candidate tag `v4.2.0` · versionCode 4020000 · userscript `s43` · TizenTubeCobalt v2.0.3.
+
+Original launcher artwork, clearer Google TV icons and an updated Cobalt engine.
+
+### Changed
+- **Original launcher artwork replaces the vector approximation.** The supplied image keeps its shading, orbit and transparency.
+- **Google TV menu icons use the same artwork with safe padding.** The TV banner pairs the image with readable YTArk lettering.
+- **Release history correctly records the published 4.1 update.** Both in-app readers share the corrected record.
+### Fixed
+- Explicitly assign the round icon even when the upstream manifest omits it, keeping launcher and app-info branding consistent.
+- Upstream APK verification rejects a requested tag that differs from the configured engine version, in addition to checking the pinned size, SHA-256 and ABI.
+### Notes
+- Upstream base and inherited capabilities: updated to [TizenTubeCobalt v2.0.3](https://github.com/reisxd/TizenTubeCobalt/releases/tag/v2.0.3): Cobalt 27 LTS Stable, a JSDelivr connection-error message and connection-menu translations.
+### Known limitations
+- Physical Google TV long-press presentation, playback and in-place installation remain UNVERIFIED; launcher caching and masks vary by firmware.
+
+## [4.1.0] — 2026-10-21
+
+> Published 2026-10-21 08:45 UTC as [YTArk 4.1](https://github.com/2archiver/YTArk/releases/tag/v4.1.0) · tag `v4.1.0` · versionCode 4010000 · userscript `s42` · TizenTubeCobalt v2.0.2.
 
 Retryable updater storage, staged startup and correct 4.1 publication.
 
