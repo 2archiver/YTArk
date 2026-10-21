@@ -181,7 +181,6 @@
                         "searchResults": "搜索结果"
                     },
                     "sortSubscriptionsByAlphabet": "按字母顺序排列订阅",
-                    "disableChannelsOnSidebar": "禁用侧边栏频道",
                     "clock": {
                         "title": "时钟",
                         "subtitle": "在屏幕上显示时钟",

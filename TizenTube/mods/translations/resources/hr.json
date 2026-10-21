@@ -145,7 +145,6 @@
                         "subtitle": "Odaberite zadanu stranicu koja se otvara pri pokretanju YTArka"
                     },
                     "sortSubscriptionsByAlphabet": "Poredaj pretplate abecedno",
-                    "disableChannelsOnSidebar": "Onemogući kanale na bočnoj traci",
                     "clock": {
                         "title": "Sat",
                         "subtitle": "Prikaži sat na zaslonu",

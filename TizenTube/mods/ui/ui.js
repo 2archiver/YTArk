@@ -1,6 +1,7 @@
 /*global navigate*/
 import '../spatial-navigation-polyfill.js';
 import { startReadiness } from '../features/startupReadiness.js';
+import { createStartupStages, createSharedDiscovery, startDeferredStage } from '../features/startupPipeline.js';
 import { browserDiagnostics, remoteKeyCategory } from '../features/browserDiagnostics.js';
 import { createStartupNavigation } from '../features/startupNavigation.js';
 import { installStartupIntentGuard } from '../features/startupIntentGuard.js';
@@ -63,6 +64,20 @@ const diagnosticMark = (event, outcome = 'observed') => browserDiagnostics.recor
 if (typeof window !== 'undefined' && !window.__ytarkStartupInstalled) {
 window.__ytarkStartupInstalled = true;
 
+// Startup is a dependency-ordered pipeline. Controls, resolver discovery and
+// navigation are the critical path. The optional guide refresh is part of that
+// path in Normal mode; Faster startup (opt-in) moves it after the controls are
+// ready so a late command executor cannot hold the critical path, and probes
+// the shared dependency cache more often. It never skips or accelerates
+// YouTube's own engine, splash or session restore.
+const fasterStartup = (() => {
+  try { return configRead('fasterStartup') === true; } catch (_) { return false; }
+})();
+const resolverDiscovery = createSharedDiscovery({
+  probe: hasCommandResolver,
+  minIntervalMs: fasterStartup ? 25 : 100,
+});
+
 // Navigation waits for the resolver. The guide refresh has its own dependency
 // check for both executor and command constructor and is bounded independently
 // of the controls/navigation effects.
@@ -70,8 +85,17 @@ const startupNavigation = createStartupNavigation({
   configRead,
   resolveCommand,
   hasResolver: hasCommandResolver,
+  isHomeRoute: () => {
+    try {
+      const route = String(window.location.hash || '').replace(/^#/, '').split('?')[0];
+      return route === '' || route === '/';
+    } catch (_) {
+      return false;
+    }
+  },
   mark: (event, outcome) => {
     if (event === 'startup-navigation-dispatched') browserDiagnostics.recordNavigation(outcome);
+    else if (event === 'startup-navigation-skipped') diagnosticMark(event, outcome);
     else if (event === 'startup-navigation-failed') diagnosticMark(event, 'failed');
     else if (event === 'startup-navigation-cancelled') diagnosticMark(event, outcome);
   },
@@ -87,14 +111,98 @@ const startupGuideRefresh = createStartupGuideRefresh({
   warn: () => console.warn('[YTArk] The optional guide refresh failed; startup navigation and controls remain available.'),
 });
 
+const startupStages = createStartupStages({
+  warn: (stage) => console.warn('[YTArk] A startup stage failed; the remaining startup work continues (' + stage + ').'),
+  stages: [
+    {
+      id: 'controls',
+      run: () => {
+        if (controlsInitialized) return true;
+        if (!document.body) return false;
+        diagnosticMark('dom-body-available');
+        try {
+          execute_once_dom_loaded();
+        } catch (_) {
+          // A partially mounted DOM stays retryable inside the bounded window;
+          // the one-shot guards inside the function keep it idempotent.
+          console.warn('[YTArk] TV controls are waiting for the app DOM.');
+          return false;
+        }
+        controlsInitialized = true;
+        diagnosticMark('controls-ready');
+        return true;
+      },
+    },
+    {
+      id: 'resolver',
+      run: () => {
+        if (!resolverDiscovery.read()) return false;
+        resolverObserved = true;
+        diagnosticMark('resolver-ready');
+        if (!resolverPatchAttempted) {
+          // A patch attempt may have partially wrapped a resolver before
+          // throwing; never repeat it and risk duplicate handlers/effects.
+          resolverPatchAttempted = true;
+          try { patchResolveCommand(); }
+          catch (_) { console.warn('[YTArk] The TV command resolver could not be patched.'); }
+        }
+        return true;
+      },
+    },
+    {
+      id: 'navigation',
+      requires: ['controls', 'resolver'],
+      run: () => {
+        startupNavigation.tryRun();
+        if (startupNavigation.done) startupIntentGuard.dispose();
+        return startupNavigation.done;
+      },
+    },
+    {
+      id: 'guideRefresh',
+      // Optional in Faster mode: it is dispatched by the bounded deferred
+      // runner after readiness instead of delaying the critical path.
+      critical: !fasterStartup,
+      requires: ['controls', 'resolver'],
+      run: () => {
+        startupGuideRefresh.tryDispatch();
+        return startupGuideRefresh.done;
+      },
+    },
+  ],
+});
+
+let optionalRefresh = null;
+const finishDeferredRefresh = (reason) => {
+  optionalRefresh = null;
+  if (reason === 'timeout' && !startupGuideRefresh.done) {
+    startupGuideRefresh.timeOut();
+    console.warn('[YTArk] The optional guide refresh did not become available after startup.');
+  }
+};
+
 startReadiness({
-  enabled: configRead('fasterStartup') === true,
+  enabled: fasterStartup,
   storage: startupStorage,
   onInterrupted: () => diagnosticMark('startup-readiness-interrupted', 'interrupted'),
   onMode: mode => browserDiagnostics.recordStartupReadinessMode(mode),
-  onReady: () => diagnosticMark('startup-readiness-complete', 'complete'),
+  onReady: () => {
+    diagnosticMark('startup-readiness-complete', 'complete');
+    if (fasterStartup && !startupGuideRefresh.done && optionalRefresh === null) {
+      optionalRefresh = startDeferredStage({
+        run: () => {
+          startupGuideRefresh.tryDispatch();
+          return startupGuideRefresh.done;
+        },
+        deadlineMs: 10_000,
+        delayMs: 250,
+        onDone: finishDeferredRefresh,
+      });
+    }
+  },
   onGiveUp: () => {
     startupIntentGuard.dispose();
+    if (optionalRefresh !== null) { optionalRefresh.stop(); optionalRefresh = null; }
     if (!startupNavigation.done) {
       startupNavigation.timeOut();
       diagnosticMark('startup-navigation-failed', 'failed');
@@ -103,40 +211,7 @@ startReadiness({
     if (!startupGuideRefresh.done) startupGuideRefresh.timeOut();
     diagnosticMark('startup-readiness-timeout', 'timeout');
   },
-  tick: () => {
-    if (!controlsInitialized && document.body) {
-      diagnosticMark('dom-body-available');
-      try {
-        execute_once_dom_loaded();
-        controlsInitialized = true;
-        diagnosticMark('controls-ready');
-      } catch (_) {
-        console.warn('[YTArk] TV controls are waiting for the app DOM.');
-      }
-    }
-
-    if (!resolverObserved && hasCommandResolver()) {
-      resolverObserved = true;
-      diagnosticMark('resolver-ready');
-    }
-    if (resolverObserved && !resolverPatchAttempted) {
-      // A patch attempt may have partially wrapped a resolver before throwing;
-      // never repeat it and risk duplicate handlers/effects.
-      resolverPatchAttempted = true;
-      try { patchResolveCommand(); }
-      catch (_) { console.warn('[YTArk] The TV command resolver could not be patched.'); }
-    }
-
-    // Guide refresh needs getCommandExecutor()'s executor AND constructor. A
-    // missing dependency stays pending; a late arrival can be used by a later
-    // readiness tick. Invocation failure is terminal to avoid duplicate effects.
-    startupGuideRefresh.tryDispatch();
-    if (controlsInitialized) startupNavigation.tryRun();
-    if (startupNavigation.done) startupIntentGuard.dispose();
-
-    return controlsInitialized && resolverObserved && resolverPatchAttempted
-      && startupNavigation.done && startupGuideRefresh.done;
-  },
+  tick: () => startupStages.run().criticalDone,
 });
 
 } // end one-shot startup orchestration guard

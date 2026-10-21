@@ -6,7 +6,9 @@ export function readStartupDestination(raw, warn = null) {
   return parseStartupDestination(raw, warn);
 }
 
-export function createStartupNavigation({ configRead, resolveCommand, hasResolver, mark = () => {}, warn = null }) {
+export function createStartupNavigation({
+  configRead, resolveCommand, hasResolver, isHomeRoute = null, mark = () => {}, warn = null,
+}) {
   let status = 'pending';
   let dispatched = null;
   let errorCategory = null;
@@ -53,6 +55,20 @@ export function createStartupNavigation({ configRead, resolveCommand, hasResolve
       try { destination = readStartupDestination(configRead('launchToOnStartup'), warn); }
       catch (error) {
         if (typeof warn === 'function') { try { warn(error); } catch (_) { /* best effort */ } }
+      }
+      // A cold start that already sits on Home does not need the soft reload:
+      // it would rebuild the same feed the app just loaded. An explicit
+      // destination always wins, and a non-Home or unknown route keeps the
+      // old reload so a restored session still returns to Home.
+      if (!destination && typeof isHomeRoute === 'function') {
+        let home = false;
+        try { home = isHomeRoute() === true; } catch (_) { home = false; }
+        if (home) {
+          status = 'skipped';
+          dispatched = 'already-home';
+          mark('startup-navigation-skipped', 'already-home');
+          return true;
+        }
       }
       const category = destination ? 'explicit-destination' : 'soft-reload';
       const command = destination || { signalAction: { signal: 'SOFT_RELOAD_PAGE' } };

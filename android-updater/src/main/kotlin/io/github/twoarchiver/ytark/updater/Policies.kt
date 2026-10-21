@@ -312,8 +312,15 @@ object UpdateGuards {
     @JvmStatic @Throws(IOException::class) fun isWithinCacheRoot(root: File?, f: File?) = root != null && f != null && (f.canonicalFile == root.canonicalFile || f.canonicalPath.startsWith(root.canonicalPath + File.separator))
     @JvmStatic fun retainCacheFile(modified: Long, cutoff: Long) = modified <= 0 || modified >= cutoff
     @JvmStatic fun isStaleUpdateFile(name: String?, vararg keep: String?): Boolean = name != null && name.matches(Regex("YTArk-v(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)\\.(?:0|[1-9]\\d*)-(?:armeabi-v7a|armv7)\\.apk(?:\\.part(?:\\.properties)?)?")) && keep.none { !it.isNullOrEmpty() && (name == it || name.startsWith("$it.")) }
-    @JvmStatic @Throws(IOException::class) fun isSafeUpdateDirectory(files: File?, dir: File?) = files != null && dir != null && files.canonicalFile == files.absoluteFile && dir.canonicalFile == dir.absoluteFile && dir.canonicalFile.parentFile == files.canonicalFile
-    @JvmStatic @Throws(IOException::class) fun isSafeUpdateFile(dir: File?, f: File?) = dir != null && f != null && dir.canonicalFile == dir.absoluteFile && f.canonicalFile == f.absoluteFile && f.canonicalFile.parentFile == dir.canonicalFile
+    /**
+     * Canonical containment, not symlink-free path equality. Android firmware
+     * may expose the app's data directory through a symlink; requiring
+     * absolute == canonical rejected a writable, app-private directory. The
+     * update directory must still resolve to a direct child of files/, and an
+     * update file to a direct child of the update directory.
+     */
+    @JvmStatic @Throws(IOException::class) fun isSafeUpdateDirectory(files: File?, dir: File?) = files != null && dir != null && dir.canonicalFile.parentFile == files.canonicalFile
+    @JvmStatic @Throws(IOException::class) fun isSafeUpdateFile(dir: File?, f: File?) = dir != null && f != null && f.canonicalFile.parentFile == dir.canonicalFile
     @JvmStatic fun deviceMeetsMinSdk(min: Int, sdk: Int) = min <= 0 || sdk >= min
     @JvmStatic @Throws(IOException::class) fun officialReleasePage(tag: String?): String { requireUpdate(tag?.startsWith("v") == true, "Invalid tag."); UpdateReleaseContract.expectedVersionCodeForVersion(tag!!.drop(1)); return "$OFFICIAL_RELEASES_URL/tag/$tag" }
 }

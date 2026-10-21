@@ -14,6 +14,7 @@ POLICY_SOURCES=(
   NativeDiagnosticsCore.kt
   UpdatePresentation.kt
   UpdateReliability.kt
+  UpdateStorage.kt
   UpdateRepository.kt
   ReleaseHighlights.generated.kt
 )
@@ -37,7 +38,9 @@ TEST_CLASSES=(
 mkdir -p "$OUT"
 sources=()
 for name in "${POLICY_SOURCES[@]}"; do sources+=("$SRC/$name"); done
-"${KOTLINC[@]}" -jvm-target 1.8 -no-reflect -classpath "$STDLIB" -d "$OUT/policies.jar" "${sources[@]}" "$ROOT/android-updater/src/test/kotlin/StateTest.kt"
+"${KOTLINC[@]}" -jvm-target 1.8 -no-reflect -classpath "$STDLIB" -d "$OUT/policies.jar" "${sources[@]}" \
+  "$ROOT/android-updater/src/test/kotlin/StateTest.kt" "$ROOT/android-updater/src/test/kotlin/UpdateStorageTest.kt"
 javac --release 8 -classpath "$OUT/policies.jar:$STDLIB" -d "$OUT" "$TESTS"/*Test.java
 for name in "${TEST_CLASSES[@]}"; do java -Dytark.test.root="$ROOT" -Dytark.test.resources="$ROOT/android-updater/src/test/resources" -cp "$OUT:$OUT/policies.jar:$STDLIB" "io.github.twoarchiver.ytark.updater.$name"; done
-java -cp "$OUT/policies.jar:$STDLIB" io.github.twoarchiver.ytark.updater.StateTestKt
+java -Dytark.test.root="$ROOT" -cp "$OUT/policies.jar:$STDLIB" io.github.twoarchiver.ytark.updater.StateTestKt
+java -Dytark.test.root="$ROOT" -cp "$OUT/policies.jar:$STDLIB" io.github.twoarchiver.ytark.updater.UpdateStorageTestKt

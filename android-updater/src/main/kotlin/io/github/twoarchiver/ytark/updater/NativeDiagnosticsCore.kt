@@ -41,6 +41,7 @@ object NativeDiagnosticsPolicy {
         "rate_limited", "cancelled", "validated", "invalid", "granted", "denied", "unknown",
         "unavailable", "blocked", "returned", "accepted", "requested", "completed", "failed",
         "success", "user_action", "signature", "space", "network", "timeout", "available", "invalid",
+        "permission", "read_only", "path", "io", "ok",
     )
 
     fun cleanEvent(

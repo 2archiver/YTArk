@@ -161,7 +161,6 @@
                         "searchResults": "Search Results"
                     },
                     "sortSubscriptionsByAlphabet": "Sort Subscriptions Alphabetically",
-                    "disableChannelsOnSidebar": "Disable Channels on Sidebar",
                     "clock": {
                         "title": "Clock",
                         "subtitle": "Display a clock on the screen",

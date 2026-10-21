@@ -395,9 +395,29 @@ public final class UpdateReliabilityTest {
         assertMapped(new java.net.ConnectException("Connection refused"), "connection", "Could not connect");
         assertMapped(new IOException("could not reach the service", new java.net.UnknownHostException("api.github.com")), "offline", "Network unavailable");
         assertMapped(new IOException("No compatible APK found. Release v9 has no ARMv7 package."), "no_compatible_apk", "No compatible APK found");
-        assertMapped(new IOException("Not enough storage. Free space and retry."), "storage", "Update storage is unavailable or full");
+        assertMapped(new IOException("Not enough storage. Free space and retry."), "storage_full", "Not enough storage");
         assertMapped(new IOException("Download interrupted. Retry to continue the download."), "download_interrupted", "Download interrupted");
         assertMapped(new IOException("APK checksum failed; retry download."), "verification", "APK verification failed");
+        // A typed storage failure keeps the exact problem: a denied write, a
+        // read-only mount, a blocked path and an I/O error must never be shown
+        // as "not enough space".
+        assertMapped(new UpdateStorageFailure("Write denied.", null, StorageProblem.PERMISSION, "write-probe"),
+                "storage_permission", "YTArk could not write its private update folder");
+        assertMapped(new UpdateStorageFailure("Read-only mount.", null, StorageProblem.READ_ONLY, "write-probe"),
+                "storage_read_only", "The TV's internal storage is read-only");
+        assertMapped(new UpdateStorageFailure("Path blocked.", null, StorageProblem.PATH_BLOCKED, "rename-blocker"),
+                "storage_path", "The update folder is blocked");
+        assertMapped(new UpdateStorageFailure("Create failed.", null, StorageProblem.CREATE_FAILED, "mkdirs"),
+                "storage_create", "YTArk could not create its update folder");
+        assertMapped(new UpdateStorageFailure("Unsafe path.", null, StorageProblem.UNSAFE, "containment"),
+                "storage_unsafe", "The update folder is not inside YTArk's private files directory");
+        assertMapped(new UpdateStorageFailure("No space.", null, StorageProblem.FULL, "write-probe"),
+                "storage_full", "Not enough storage");
+        assertMapped(new UpdateStorageFailure("I/O error.", new IOException("bad sector"), StorageProblem.IO, "write-probe"),
+                "storage_io", "Writing the update failed");
+        MappedError typedDetail = UpdateErrorMapper.map(
+                new UpdateStorageFailure("Write denied.", null, StorageProblem.PERMISSION, "write-probe"), "download", now, "v3.4.0");
+        assertTrue(typedDetail.detail.contains("Storage operation: write-probe"), typedDetail.detail);
         assertMapped(new IOException("APK signer is incompatible with the installed app."), "signature_mismatch", "App signature mismatch");
         assertMapped(new IOException("Install permission required."), "permission", "Install permission required");
         assertMapped(new IOException("Installation cancelled."), "install_cancelled", "Installation cancelled");

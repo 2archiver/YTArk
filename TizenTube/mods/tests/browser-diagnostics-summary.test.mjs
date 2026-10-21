@@ -89,7 +89,6 @@ describe('bounded local startup summary', () => {
       sample('missing-end', { missingEnd: true }),
       sample('partial', { capture: 'partial' }),
       sample('active', { status: 'active', readiness: null, missingEnd: true }),
-      sample('interrupted', { status: 'interrupted' }),
       sample('timeout', { readinessTimeout: true }),
       sample('truncated', { truncated: true }),
       sample('date-clock', { clockQuality: 'degraded' }),
@@ -100,14 +99,32 @@ describe('bounded local startup summary', () => {
       assert.equal(measured.measured, false, invalid.id);
       assert.notEqual(measured.durationMs, 0, 'invalid timing is not rewritten as zero');
     }
-    assert.match(measureStartupSample(invalids[0]).reason, /start\/end mark is missing or ambiguous/);
-    assert.match(measureStartupSample(invalids[1]).reason, /Partial sample/);
-    assert.match(measureStartupSample(invalids[4]).reason, /timed out or was interrupted/);
-    assert.match(measureStartupSample(invalids[5]).reason, /Event limit reached/);
-    assert.match(measureStartupSample(invalids[6]).reason, /monotonic browser clock/);
+    const reason = (id) => measureStartupSample(invalids.find((item) => item.id === id)).reason;
+    assert.match(reason('missing-end'), /start\/end mark is missing or ambiguous/);
+    assert.match(reason('partial'), /Partial sample/);
+    assert.match(reason('timeout'), /timed out or was interrupted/);
+    assert.match(reason('truncated'), /Event limit reached/);
+    assert.match(reason('date-clock'), /monotonic browser clock/);
     const summary = summarizeStartupSessions({ sessions: invalids });
     assert.match(summary, /Valid startup duration for latest sample: unavailable/);
     assert.doesNotMatch(summary, /Valid startup duration for latest sample: \d|0\.0 ms/);
+  });
+
+  test('a completed startup survives the five-minute session and a later interruption', () => {
+    // The recording runs for up to five minutes and may end as interrupted
+    // when the viewer closes the app. Once readiness completed, the startup
+    // interval is final and must still be shown.
+    const stillActive = sample('active-after-startup', { status: 'active', readiness: 'complete' });
+    const interruptedLater = sample('interrupted-after-startup', { status: 'interrupted' });
+    for (const completed of [stillActive, interruptedLater]) {
+      const measured = measureStartupSample(completed);
+      assert.equal(measured.measured, true, completed.id);
+      assert.equal(measured.durationMs, 100, completed.id);
+    }
+    const replaced = measureStartupSample(sample('replaced', { status: 'replaced' }));
+    assert.equal(replaced.measured, false, 'a replaced capture is not a launch measurement');
+    const summary = summarizeStartupSessions({ sessions: [interruptedLater] });
+    assert.match(summary, /Valid startup duration for latest sample: 100\.0 ms/);
   });
 
   test('reports the latest sample rather than borrowing a valid interval from an older sample', () => {

@@ -135,7 +135,6 @@ JSON.parse = function () {
     }
 
     const disabledSidebarContents = configRead('disabledSidebarContents');
-    const disableChannelsOnSidebar = configRead('disableChannelsOnSidebar');
     if (r.items?.[0]?.guideSectionRenderer) {
         for (let i = 0; i < r.items.length; i++) {
             const section = r.items[i].guideSectionRenderer;
@@ -143,11 +142,10 @@ JSON.parse = function () {
             for (let j = 0; j < section.items.length; j++) {
                 const item = section.items[j].guideEntryRenderer;
                 if (!item) continue;
-                if ((disabledSidebarContents?.length &&
+                if (disabledSidebarContents?.length &&
                     disabledSidebarContents.includes(item.navigationEndpoint?.browseEndpoint ?
                         item.navigationEndpoint.browseEndpoint.browseId :
-                        'search'))
-                    || (disableChannelsOnSidebar && item?.thumbnail)) {
+                        'search')) {
                     section.items.splice(j, 1);
                     j--;
                 }
@@ -162,7 +160,7 @@ JSON.parse = function () {
 }
 
 configChangeEmitter.addEventListener('configChange', (e) => {
-    if (e.detail.key === 'disabledSidebarContents' || e.detail.key === 'disableChannelsOnSidebar' ||
+    if (e.detail.key === 'disabledSidebarContents' ||
         e.detail.key === 'sidebarContentsOrder' || e.detail.key === 'enableYtarkGuideEntry') {
         const commandExecutor = getCommandExecutor();
         if (commandExecutor) {

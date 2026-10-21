@@ -97,11 +97,15 @@ export function startReadiness({
   if (interrupted && typeof onInterrupted === 'function') {
     try { onInterrupted(); } catch (_) { /* diagnostics cannot block startup */ }
   }
-  const finish = (gaveUp) => {
+  const stop = () => {
     if (stopped) return;
     stopped = true;
-    if (timer !== undefined) cancel(timer);
+    if (timer !== undefined) { cancel(timer); timer = undefined; }
     try { if (storage) storage.removeItem(marker); } catch (_) { /* startup remains independent */ }
+  };
+  const finish = (gaveUp) => {
+    if (stopped) return;
+    stop();
     const callback = gaveUp ? onGiveUp : onReady;
     if (typeof callback === 'function') {
       try { callback(); } catch (_) { /* reporting is best effort */ }
@@ -128,12 +132,18 @@ export function startReadiness({
     if (ready) { finish(false); return; }
     if (elapsed >= 40_000 || tickCount >= 202) { finish(true); return; }
     if (elapsed >= 2_000) useNormalFallback();
-    scheduledDelay = accelerated ? 50 : 250;
+    // The first two seconds cover a normal control hand-off. After that the
+    // remaining window is a bounded recovery path, so a fixed 250 ms wake-up
+    // is wasted work: back off to one probe per second at most.
+    scheduledDelay = accelerated ? 50
+      : elapsed < 6_000 ? 500
+      : elapsed < 15_000 ? 750 : 1_000;
     timer = later(run, scheduledDelay);
   };
   scheduledDelay = accelerated ? 0 : 250;
   timer = later(run, scheduledDelay);
-  return () => finish(false);
+  // Teardown is not readiness: disposing the loop must not report success.
+  return stop;
 }
 
 export default startReadiness;
