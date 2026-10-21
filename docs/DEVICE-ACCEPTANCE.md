@@ -102,3 +102,17 @@ SHA-256, installed-before version and device before attempting these flows. The
 | 88 | Foreground/background cadence | Foreground resume runs only when due and coalesces with the scheduled check; disabled checks/downloads stay disabled; network loss/restart never starts duplicate transfers | NOT RUN |
 | 89 | Settings/search/focus matrix | Audit settings navigation, search, IME and DPAD focus at supported 720p/1080p/4K scaling; text entry, OK/Done, Back hierarchy and return focus remain usable | NOT RUN |
 | 90 | Updater cleanup path boundary | Pending and resumable APKs survive cleanup; symlink/path traversal and files outside the private updater root cannot be removed | NOT RUN |
+
+## YTArk 4.0 updater-storage and startup-staging checks (NOT RUN)
+
+Record the APK sha256, the exact Android build and the observed technical-details
+text for every failure row. A check is **NOT RUN** until it is recorded here.
+
+| # | Check | Expected | Result |
+|---|---|---|---|
+| 91 | Updater with the app's private storage intact (existing `files/ytark-updates-v31`) | Check finds a newer release; Download starts; technical details name the last storage operation only if preparation fails; no storage permission is requested | NOT RUN |
+| 92 | Updater with a stray *file* named `ytark-updates-v31` in the private files directory | The file is renamed to `ytark-updates-v31.blocked`, the download proceeds, and nothing is deleted | NOT RUN |
+| 93 | Updater storage failure surfaced precisely | A denied write, read-only mount or blocked path shows its own message and a `Storage operation:` line; "Not enough storage" appears only when capacity/ENOSPC proves it | NOT RUN |
+| 94 | Resident playback during a check/download | Playback and account/session are untouched; a completed startup remains measurable in About → Diagnostics after more than five minutes of playback | NOT RUN |
+| 95 | Sidebar channel toggle retired | Navigation no longer lists "Disable channels on sidebar"; after upgrading an install that had it on, the guide shows its normal channel entries and every other guide preference is kept | NOT RUN |
+| 96 | Home soft reload on cold start | A cold start already on Home records a skipped startup navigation instead of a soft reload; an explicit launch destination still navigates, and a restored non-Home route still returns Home | NOT RUN |

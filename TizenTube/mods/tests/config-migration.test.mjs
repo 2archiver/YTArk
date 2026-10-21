@@ -158,14 +158,14 @@ describe('malformed saved settings', () => {
 });
 
 describe('browser diagnostics migration', () => {
-  it('adds a missing opt-in as false, retains explicit choices, and upgrades through schema 9', async () => {
+  it('adds a missing opt-in as false, retains explicit choices, and upgrades to the current schema', async () => {
     const storage = propertyStorage({ [CONFIG_KEY]: JSON.stringify({
       configSchemaVersion: 7, enableAdBlock: false,
     }) });
     const missing = await loadConfig(storage);
     assert.equal(missing.configRead('recordBrowserDiagnostics'), false);
     assert.equal(missing.configRead('enableAdBlock'), false);
-    assert.equal(missing.configRead('configSchemaVersion'), 9);
+    assert.equal(missing.configRead('configSchemaVersion'), 10);
     assert.equal(missing.configRead('startupDiagnosticRunKind'), undefined);
     assert.equal(Object.hasOwn(stored(storage), 'startupDiagnosticRunKind'), false);
 
@@ -192,6 +192,28 @@ describe('browser diagnostics migration', () => {
       assert.equal(Object.hasOwn(stored(storage), 'startupDiagnosticRunKind'), false);
       assert.equal(storage['ytark-browser-diagnostics-v1'], 'old valid samples remain in their independent key');
     }
+  });
+});
+
+describe('sidebar channel toggle retirement', () => {
+  it('drops a stored disableChannelsOnSidebar value and keeps the rest of the guide settings', async () => {
+    const storage = propertyStorage({ [CONFIG_KEY]: JSON.stringify({
+      configSchemaVersion: 9,
+      disableChannelsOnSidebar: true,
+      disabledSidebarContents: ['FEhistory'],
+      sidebarContentsOrder: ['FEhome'],
+      enableYtarkGuideEntry: true,
+    }) });
+    const config = await loadConfig(storage);
+    assert.equal(config.configRead('disableChannelsOnSidebar'), undefined);
+    assert.equal(config.configKeys().includes('disableChannelsOnSidebar'), false);
+    assert.equal(Object.hasOwn(stored(storage), 'disableChannelsOnSidebar'), false);
+    assert.deepEqual(config.configRead('disabledSidebarContents'), ['FEhistory']);
+    assert.deepEqual(config.configRead('sidebarContentsOrder'), ['FEhome']);
+    assert.equal(config.configRead('enableYtarkGuideEntry'), true);
+    assert.equal(config.configRead('configSchemaVersion'), 10);
+    assert.equal(config.getConfigMeta().migratedFrom, 9);
+    assert.deepEqual(config.getConfigMeta().retiredValues, { disableChannelsOnSidebar: true });
   });
 });
 

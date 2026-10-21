@@ -136,7 +136,9 @@ class PendingUpdateProvider : ReadOnlyProvider() {
         val c=context ?: throw FileNotFoundException()
         if(uri.scheme!="content" || uri.authority!=c.packageName+".ytarkupdater.files" || uri.path!="/update.apk" || uri.query!=null || uri.fragment!=null) throw FileNotFoundException("Unknown update URI")
         val path=UpdateStore(c).prefs.getString("installer_file",null) ?: throw FileNotFoundException("No staged APK")
-        val f=File(path); val root=File(c.filesDir,"ytark-updates-v31")
+        val f=File(path); val root=UpdateStorage.directoryFor(c.filesDir) ?: throw FileNotFoundException("No update storage")
+        // Only the exact app-owned staged APK is readable. Containment is
+        // canonical (not symlink-free), matching the downloader's checks.
         if(!UpdateGuards.isSafeUpdateFile(root,f) || !f.name.matches(Regex("[0-9]+-[0-9a-f]{64}\\.apk")) || !f.isFile) throw FileNotFoundException("No safe staged APK")
         return f
     }

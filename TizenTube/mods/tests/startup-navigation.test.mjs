@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createStartupNavigation, readStartupDestination } from '../features/startupNavigation.js';
 
-function harness({ reload = true, destination = null, resolver = false } = {}) {
+function harness({ reload = true, destination = null, resolver = false, home = false } = {}) {
   const commands = [];
   const marks = [];
   let hasResolver = resolver;
@@ -15,6 +15,7 @@ function harness({ reload = true, destination = null, resolver = false } = {}) {
     configRead: (key) => (key === 'reloadHomeOnStartup' ? reload : destination),
     resolveCommand: (cmd) => { commands.push(cmd); return true; },
     hasResolver: () => hasResolver,
+    isHomeRoute: () => home,
     mark: (name, detail) => marks.push([name, detail]),
   });
   return { nav, commands, marks, setResolver: (value) => { hasResolver = value; } };
@@ -49,6 +50,30 @@ test('a deliberate user input cancels delayed startup navigation without issuing
   assert.equal(h.nav.tryRun(), true);
   assert.deepEqual(h.commands, [], 'no saved destination or soft reload overrides the user');
   assert.deepEqual(h.marks, [['startup-navigation-cancelled', 'user-input']]);
+});
+
+test('a cold start that already sits on Home skips the redundant soft reload', () => {
+  const h = harness({ resolver: true, home: true });
+  assert.equal(h.nav.tryRun(), true);
+  assert.deepEqual(h.commands, [], 'no duplicate Home reload');
+  assert.equal(h.nav.status, 'skipped');
+  assert.equal(h.nav.dispatched, 'already-home');
+  assert.deepEqual(h.marks, [['startup-navigation-skipped', 'already-home']]);
+  assert.equal(h.nav.tryRun(), true, 'a skipped navigation stays one-shot');
+});
+
+test('a restored non-Home route still receives the soft reload', () => {
+  const h = harness({ resolver: true, home: false });
+  assert.equal(h.nav.tryRun(), true);
+  assert.deepEqual(h.commands, [{ signalAction: { signal: 'SOFT_RELOAD_PAGE' } }]);
+});
+
+test('an explicit startup destination keeps priority over the Home check', () => {
+  const destination = JSON.stringify({ browseEndpoint: { browseId: 'FEsubscriptions' } });
+  const h = harness({ destination, resolver: true, home: true });
+  assert.equal(h.nav.tryRun(), true);
+  assert.deepEqual(h.commands, [{ browseEndpoint: { browseId: 'FEsubscriptions' } }]);
+  assert.equal(h.nav.dispatched, 'explicit-destination');
 });
 
 test('an explicit startup destination keeps priority over the soft reload', () => {

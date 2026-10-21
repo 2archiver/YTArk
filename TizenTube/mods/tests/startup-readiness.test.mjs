@@ -32,11 +32,39 @@ test('crashed accelerated launch falls back normally once and exposes the interr
   assert.deepEqual(h.modes, ['normal-interrupted']);
 });
 test('slow readiness and acceleration exceptions use a recorded bounded normal fallback', () => {
-  const h=harness(true,false,10000); assert.ok(h.delays.includes(250)); assert.equal(h.time,10000);
+  const h=harness(true,false,10000); assert.ok(h.delays.includes(500), 'the recovery window backs off after the faster fallback');
+  assert.ok(h.time >= 10000 && h.time < 11500, `readiness is observed on the next bounded tick (${h.time})`);
   assert.deepEqual(h.modes, ['faster', 'normal-fallback']);
-  const e=harness(true,false,10000,true); assert.equal(e.time,40000); assert.ok(e.count<170); assert.equal(e.data.size,0);
+  const e=harness(true,false,10000,true); assert.ok(e.time >= 40000 && e.time < 41500, `the window ends at 40 s (${e.time})`);
+  assert.ok(e.count<170); assert.equal(e.data.size,0);
   assert.deepEqual(e.modes, ['faster', 'normal-fallback']);
 });
+test('the recovery window backs off instead of waking every 250 ms for the whole 40 s', () => {
+  const h = harness(false, false, 39000);
+  assert.equal(h.delays[0], 250, 'the first check stays prompt');
+  assert.ok(h.delays.includes(500) && h.delays.includes(750) && h.delays.includes(1000),
+    'later checks use the bounded backoff cadence');
+  assert.ok(h.count < 90, `a slow launch uses fewer wake-ups: ${h.count}`);
+});
+
+test('disposing the loop stops the timer without reporting readiness', () => {
+  let ready = 0, giveUps = 0, pending = null;
+  const stop = startReadiness({
+    enabled: false,
+    storage: null,
+    now: () => 0,
+    later: (fn, ms) => { pending = { fn, ms }; return 1; },
+    cancel: () => { pending = null; },
+    onReady: () => { ready += 1; },
+    onGiveUp: () => { giveUps += 1; },
+    tick: () => false,
+  });
+  stop();
+  assert.equal(pending, null, 'the terminal timer is cleared');
+  assert.equal(ready, 0, 'teardown is not readiness');
+  assert.equal(giveUps, 0, 'teardown is not a give-up');
+});
+
 test('the bounded window reports give-up exactly once and success never does', () => {
   let giveUps = 0;
   const timedOut = harnessWithGiveUp(true, 50000, () => { giveUps++; });

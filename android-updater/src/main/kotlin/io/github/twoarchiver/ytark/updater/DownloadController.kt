@@ -9,76 +9,61 @@ import java.util.Properties
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
- * Writes only to an app-owned .part file and renames it after validation.
+ * Writes only to an app-owned `.part` file and renames it after validation.
  * An incomplete file is never handed to the installer.
  *
+ * Storage is app-private (`Context.filesDir`) and needs no storage permission.
+ * The 3.9 readiness probe wrote a temporary file, fsynced it and treated a
+ * failed delete as unavailable storage; that probe is gone. Preparation now
+ * requires only what a download actually needs: a contained directory that can
+ * be created and can accept a plain one-byte write. Free-space reporting is
+ * advisory when the platform reports an unknown capacity, and a full disk is
+ * reported only from a known total/usable pair or a real ENOSPC.
+ *
  * Resume requires a stored ETag plus a 206/Content-Range match. Anything else
- * restarts. A download does not survive process death as an in-flight transfer;
- * a leftover .part can be resumed on the next attempt when the ETag still matches.
- * DownloadManager is not used: this build must not add a notification permission,
- * and process-death survival is not claimed.
+ * restarts. DownloadManager is not used: this build must not add a notification
+ * permission, and process-death survival is not claimed.
  */
 class DownloadController(context: Context, private val validator: ApkValidator) {
-    private val filesDirectory = context.filesDir
-    val directory = File(filesDirectory, "ytark-updates-v31")
+    private val filesDirectory: File? = context.filesDir
+    val directory: File = UpdateStorage.directoryFor(filesDirectory) ?: File(UpdateStorage.DIRECTORY_NAME)
     private val cancel = CancelHandle()
     @Volatile private var prepared = false
 
     /** Called by the retryable coordinator gate, never on the UI thread. */
-    @Synchronized fun prepareStorage() {
-        try {
-            if (!directory.exists() && !directory.mkdirs() && !directory.isDirectory) {
-                throw UpdateStorageFailure("Cannot create update storage.")
-            }
-            if (!directory.isDirectory || !UpdateGuards.isSafeUpdateDirectory(filesDirectory, directory)) {
-                throw UpdateStorageFailure("Update storage is unsafe or unavailable.")
-            }
-            // One bounded write/readiness check per successful initialization. It
-            // is not a polling loop; a failed preparation is retried only when the
-            // coordinator is explicitly reacquired by a later operation.
-            val probe = try {
-                File.createTempFile(".ytark-write-", ".tmp", directory)
-            } catch (error: Exception) {
-                throw UpdateStorageFailure("Cannot write to update storage.", error)
-            }
-            try {
-                FileOutputStream(probe).use { output ->
-                    output.write(0)
-                    output.fd.sync()
-                }
-            } catch (error: Exception) {
-                throw UpdateStorageFailure("Cannot write to update storage.", error)
-            } finally {
-                if (probe.exists() && !probe.delete()) {
-                    throw UpdateStorageFailure("Cannot clean the update-storage readiness file.")
-                }
-            }
-            prepared = true
-        } catch (error: Throwable) {
-            prepared = false
-            if (error is VirtualMachineError || error is ThreadDeath) throw error
-            if (error is UpdateStorageFailure) throw error
-            throw UpdateStorageFailure("Cannot prepare update storage.", error)
+    @Synchronized
+    fun prepareStorage() {
+        prepared = false
+        val preparation = UpdateStorage.prepare(filesDirectory, UpdateStorage.directoryFor(filesDirectory))
+        if (!preparation.ok) {
+            throw UpdateStorageFailure(
+                preparation.message(), preparation.cause,
+                preparation.problem, preparation.operation,
+            )
         }
+        prepared = true
     }
 
-    /** Cheaply recheck a ready controller; re-run the bounded probe only after storage changes. */
+    /** Cheap recheck; a real write probe runs only after the storage state changes. */
     fun ensureStorageAvailable() {
         if (!prepared || !directory.isDirectory || !directory.canWrite()
-            || !UpdateGuards.isSafeUpdateDirectory(filesDirectory, directory)) {
+            || !UpdateStorage.isContained(filesDirectory, directory)) {
             prepareStorage()
         }
     }
 
     private fun requirePrepared() {
-        if (!prepared || !directory.isDirectory || !UpdateGuards.isSafeUpdateDirectory(filesDirectory, directory)) {
-            throw UpdateStorageFailure("Update storage is no longer available. Retry after restoring app storage access.")
+        if (!prepared || !directory.isDirectory || !UpdateStorage.isContained(filesDirectory, directory)) {
+            throw UpdateStorageFailure(
+                "Update storage is no longer available. Retry after restoring app storage access.",
+                null, StorageProblem.UNAVAILABLE, "check",
+            )
         }
     }
 
     fun file(c: Candidate): File {
         requirePrepared()
-        return File(directory, "${c.code}-${c.sha256}.apk")
+        return File(directory, UpdateStorage.apkName(c.code, c.sha256))
             .also { requireUpdate(UpdateGuards.isSafeUpdateFile(directory, it), "Unsafe APK path.") }
     }
 
@@ -110,17 +95,18 @@ class DownloadController(context: Context, private val validator: ApkValidator) 
             val meta = File(target.path + ".part.properties")
             requireUpdate(UpdateGuards.isSafeUpdateFile(directory, part), "Unsafe APK path.")
             val props = Properties()
-            if (meta.isFile) meta.inputStream().use { props.load(it) }
+            if (meta.isFile) try { meta.inputStream().use { props.load(it) } } catch (_: Exception) { props.clear() }
             val storedEtag = props.getProperty("etag").orEmpty()
-            val resume = UpdateResumeContract.metadataMatches(props, c.asset, c.url, c.sha256, c.size, "armeabi-v7a") &&
-                storedEtag.isNotBlank() && part.length() in 1 until c.size
-            val start = if (resume) part.length() else 0L
-            if (!resume) {
+            val plan = UpdateStorage.planResume(
+                UpdateResumeContract.metadataMatches(props, c.asset, c.url, c.sha256, c.size, "armeabi-v7a"),
+                storedEtag, part.length(), c.size,
+            )
+            val start = plan.start
+            if (!plan.resume) {
                 part.delete()
                 meta.delete()
             }
-            val remaining = c.size - start
-            requireUpdate(UpdateGuards.hasEnoughFreeSpace(directory.usableSpace, remaining.coerceAtLeast(1), 0), "Not enough storage. Free space and retry.")
+            requireFreeSpace(c.size, start)
             cancel.cancelled.set(cancelled.get())
             val startedAt = System.currentTimeMillis()
             var lastBytes = start
@@ -131,7 +117,7 @@ class DownloadController(context: Context, private val validator: ApkValidator) 
                     object : HeaderSink {
                         override fun onHeaders(status: Int, etag: String, contentRange: String, contentType: String) {
                             if (etag.isBlank()) return
-                            saveMeta(meta, c, etag)
+                            try { saveMeta(meta, c, etag) } catch (_: Exception) { /* resume is optional */ }
                         }
                     },
                     object : ProgressSink {
@@ -164,23 +150,74 @@ class DownloadController(context: Context, private val validator: ApkValidator) 
                 validating()
                 validator.validate(part, c)
                 if (cancelled.get()) throw InterruptedIOException("Download cancelled. Retry when ready.")
-                if (target.exists()) target.delete()
-                requireUpdate(part.renameTo(target), "Could not finalize APK. Check storage.")
+                finalize(part, target, c)
                 meta.delete()
                 return target
             } catch (e: InterruptedIOException) {
-                part.delete()
-                meta.delete()
+                // A viewer cancel keeps a resumable partial when the bytes on
+                // disk are still inside the expected size; the next attempt
+                // resumes only after the ETag and Range checks pass.
+                if (!(part.isFile && UpdateStorage.keepPartialOnCancel(part.length(), c.size) && meta.isFile)) {
+                    part.delete()
+                    meta.delete()
+                }
                 throw e
             } catch (e: IOException) {
-                val keep = part.isFile && part.length() in 1 until c.size && meta.isFile && e !is HttpFailure && !e.message.orEmpty().contains("exceeds") && !e.message.orEmpty().contains("Not enough storage") && !e.message.orEmpty().contains("error page")
+                val problem = if (e is UpdateStorageFailure) e.problem else UpdateStorage.classify(e)
+                val fatal = problem == StorageProblem.FULL || problem == StorageProblem.PERMISSION ||
+                    problem == StorageProblem.READ_ONLY || problem == StorageProblem.UNAVAILABLE
+                val keep = !fatal && part.isFile && part.length() in 1 until c.size && meta.isFile &&
+                    e !is HttpFailure && !e.message.orEmpty().contains("exceeds") &&
+                    !e.message.orEmpty().contains("Not enough storage") && !e.message.orEmpty().contains("error page")
                 if (!keep) {
                     part.delete()
                     meta.delete()
                 }
-                if (e.message.orEmpty().contains("No space") || e.message.orEmpty().contains("ENOSPC")) throw IOException("Not enough storage. Free space and retry.")
+                if (e is UpdateStorageFailure) throw e
+                if (fatal) throw UpdateStorageFailure(
+                    if (problem == StorageProblem.FULL) "Not enough storage. Free space and retry."
+                    else "Update storage is no longer writable.",
+                    e, problem, "write",
+                )
                 throw e
             }
+        }
+    }
+
+    /**
+     * Reports a genuinely unavailable download before the first byte, using
+     * both the total and usable figures. An unknown capacity (0/0 or a
+     * negative answer) never blocks the transfer.
+     */
+    private fun requireFreeSpace(size: Long, partial: Long) {
+        val total = try { directory.totalSpace } catch (_: Exception) { 0L }
+        val usable = try { directory.usableSpace } catch (_: Exception) { 0L }
+        val required = UpdateStorage.requiredBytes(size, partial)
+        when (UpdateStorage.spaceState(total, usable, required)) {
+            SpaceState.FULL, SpaceState.SHORT -> throw UpdateStorageFailure(
+                "Not enough storage. Free space and retry.", null,
+                StorageProblem.FULL, "free-space",
+            )
+            SpaceState.UNKNOWN, SpaceState.ENOUGH -> Unit
+        }
+    }
+
+    private fun finalize(part: File, target: File, c: Candidate) {
+        if (target.exists()) target.delete()
+        if (part.renameTo(target)) return
+        // A same-directory rename can fail on a storage driver even though a
+        // copy still works. Copy, then revalidate the result: a truncated copy
+        // is never handed to the installer.
+        try {
+            part.copyTo(target, overwrite = true)
+            validator.validate(target, c)
+            part.delete()
+        } catch (error: Exception) {
+            try { target.delete() } catch (_: Exception) { }
+            throw UpdateStorageFailure(
+                "Could not finalize the verified APK. Check storage and retry.",
+                error, UpdateStorage.classify(error), "finalize",
+            )
         }
     }
 
@@ -195,13 +232,17 @@ class DownloadController(context: Context, private val validator: ApkValidator) 
         meta.outputStream().use { props.store(it, "ytark update resume") }
     }
 
+    /**
+     * Deletes only updater-owned artifacts. The current candidate, its resume
+     * pair and the staged installer are retained; other partials become
+     * eligible only after the bounded age/count/size rules in [UpdateStorage].
+     * Unknown files in the directory are never touched.
+     */
     fun clean(keep: Set<String>) {
         requirePrepared()
-        val retained = keep.filter { it.isNotEmpty() }.flatMap { listOf(it, "$it.part", "$it.part.properties") }.toSet()
-        directory.listFiles()?.forEach { file ->
-            if (file.path in retained || !UpdateGuards.isSafeUpdateFile(directory, file)) return@forEach
-            val managed = file.name.matches(Regex("[0-9]+-[0-9a-f]{64}\\.apk(?:\\.part(?:\\.properties)?)?")) || UpdateGuards.isStaleUpdateFile(file.name)
-            if (managed) file.delete()
+        val candidates = UpdateStorage.cleanupCandidates(directory, keep, System.currentTimeMillis())
+        candidates.forEach { file ->
+            try { file.delete() } catch (_: Exception) { /* cleanup is best effort */ }
         }
     }
 }

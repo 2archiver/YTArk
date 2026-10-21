@@ -50,9 +50,17 @@ function startupMeasurement(input) {
   const session = safeSession(input);
   if (!session) return { session: null, measured: false, reason: 'Sample is invalid or unsupported.' };
   if (session.capture !== 'launch') return { session, measured: false, reason: 'Partial sample; not a launch capture.' };
-  if (session.status === 'active') return { session, measured: false, reason: 'Launch sample is still in progress.' };
-  if (session.status !== 'complete') return { session, measured: false, reason: `Launch sample ${String(session.status)}; not complete.` };
-  if (session.truncated === true) return { session, measured: false, reason: 'Event limit reached; sample is incomplete.' };
+  // A completed startup is final. The recording itself continues for up to
+  // five minutes and may end as complete, interrupted or still active; that
+  // later lifetime must not invalidate the startup interval.
+  if (session.status === 'replaced') return { session, measured: false, reason: 'Launch sample was replaced by a later capture.' };
+  if (session.truncated === true || session.status === 'truncated') {
+    return { session, measured: false, reason: 'Event limit reached; sample is incomplete.' };
+  }
+  const completed = session.events.filter(event => event.event === 'startup-readiness-complete');
+  if (completed.length !== 1) {
+    return { session, measured: false, reason: 'Startup readiness did not complete in this sample.' };
+  }
   if (session.clockDomain !== 'performance' || session.clockQuality !== 'monotonic') {
     return { session, measured: false, reason: 'Reliable monotonic browser clock is unavailable.' };
   }
@@ -93,7 +101,9 @@ function completionResult(session) {
   if (readiness?.event === 'startup-readiness-interrupted') return 'Startup readiness was interrupted.';
   const navigation = [...session.events].reverse().find(event => [
     'startup-navigation-cancelled', 'startup-navigation-failed', 'startup-navigation-dispatched',
+    'startup-navigation-skipped',
   ].includes(event.event));
+  if (navigation?.event === 'startup-navigation-skipped') return 'Startup navigation was skipped because Home was already open.';
   if (navigation?.event === 'startup-navigation-cancelled') return 'Startup navigation was cancelled by input.';
   if (navigation?.event === 'startup-navigation-failed') return 'Startup navigation failed.';
   if (navigation?.event === 'startup-navigation-dispatched') return 'Startup navigation was dispatched.';

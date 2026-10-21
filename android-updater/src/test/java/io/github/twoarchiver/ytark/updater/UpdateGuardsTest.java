@@ -98,6 +98,10 @@ public final class UpdateGuardsTest {
             java.nio.file.Files.createSymbolicLink(dirLink, outside);
             assertFalse(UpdateGuards.isSafeUpdateDirectory(files.toFile(), dirLink.toFile()),
                     "a directory symlink outside files/ is refused");
+            java.nio.file.Path filesLink = base.resolve("app-files");
+            java.nio.file.Files.createSymbolicLink(filesLink, files);
+            assertTrue(UpdateGuards.isSafeUpdateDirectory(filesLink.toFile(), updates.toFile()),
+                    "a symlinked app-files ancestor is accepted when the directory still resolves inside it");
         } catch (IOException | UnsupportedOperationException | SecurityException unsupported) {
             // File and cache-root confinement tests still run when symlinks are disabled.
         }

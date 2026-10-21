@@ -51,7 +51,12 @@ class UpdateCoordinator private constructor(context: Context) {
                 when (val storage = storageAccess.optional()) {
                     is DependencyResult.Ready -> recover(saved)
                     is DependencyResult.Unavailable -> {
-                        val error = UpdateStorageFailure("Update storage could not be prepared while restoring the saved APK.", storage.cause)
+                        val cause = storage.cause
+                        val error = UpdateStorageFailure("Update storage could not be prepared while restoring the saved APK.",
+                            cause,
+                            (cause as? UpdateStorageFailure)?.problem ?: UpdateStorage.classify(cause),
+                            (cause as? UpdateStorageFailure)?.operation ?: "prepare",
+                        )
                         val mapped = UpdateErrorMapper.map(error, "restore", System.currentTimeMillis(), saved.candidate.tag)
                         // A persisted path is not install authorization: if storage
                         // cannot be prepared, force the user back through retry/download.
@@ -93,10 +98,21 @@ class UpdateCoordinator private constructor(context: Context) {
     }
     private fun requiredFiles(): DownloadController = storageAccess.required()
     private fun reportStorageFailure(event: String, error: Throwable) {
-        AndroidDiagnostics.record(event, if (event == "storage_cleanup") "failed" else "unavailable")
+        val problem = if (error is UpdateStorageFailure) error.problem else UpdateStorage.classify(error)
+        val outcome = when (problem) {
+            StorageProblem.FULL -> "space"
+            StorageProblem.PERMISSION -> "permission"
+            StorageProblem.READ_ONLY -> "read_only"
+            StorageProblem.PATH_BLOCKED -> "path"
+            StorageProblem.IO -> "io"
+            StorageProblem.UNAVAILABLE, StorageProblem.CREATE_FAILED, StorageProblem.UNSAFE -> "unavailable"
+            StorageProblem.NONE -> if (event == "storage_cleanup") "failed" else "ok"
+        }
+        AndroidDiagnostics.record(event, outcome)
         // Keep log output bounded and path/URL-free; user-facing details come from
         // the structured updater state rather than arbitrary exception messages.
-        Log.w("YTArkUpdater", "${event.replace('_', ' ')} failed (${error.javaClass.simpleName}).")
+        val operation = (error as? UpdateStorageFailure)?.operation?.takeIf { it.isNotBlank() }?.let { " at $it" }.orEmpty()
+        Log.w("YTArkUpdater", "${event.replace('_', ' ')} failed (${error.javaClass.simpleName}$operation).")
     }
     private fun optionalFiles(): DownloadController? = when (val storage = storageAccess.optional()) {
         is DependencyResult.Ready -> storage.value
@@ -303,7 +319,13 @@ class UpdateCoordinator private constructor(context: Context) {
         set(UpdateStates.available(state, candidate, now, if (same) state.verifiedPath else null).copy(releaseTag = candidate.tag))
         val controller = optionalFiles()
         if (controller == null) {
-            val failure = UpdateStorageFailure("Update metadata is valid, but local update storage is unavailable.")
+            val cause = storageAccess.lastFailure()
+            val failure = (cause as? UpdateStorageFailure) ?: UpdateStorageFailure(
+                "Update storage could not be prepared for this download.",
+                cause,
+                cause?.let { UpdateStorage.classify(it) } ?: StorageProblem.UNAVAILABLE,
+                "prepare",
+            )
             val mapped = UpdateErrorMapper.map(failure, "download", System.currentTimeMillis(), candidate.tag)
             set(state.copy(
                 message = "YTArk ${candidate.version} is available. ${mapped.message}",

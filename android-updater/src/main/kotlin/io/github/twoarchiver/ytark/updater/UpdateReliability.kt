@@ -30,7 +30,18 @@ import java.util.concurrent.atomic.AtomicReference
 
 class HttpFailure(val status: Int, val retryAt: Long, message: String, val category: String) : IOException(message)
 class ReleaseMetadataFailure @JvmOverloads constructor(message: String, cause: Throwable? = null) : IOException(message, cause)
-class UpdateStorageFailure @JvmOverloads constructor(message: String, cause: Throwable? = null) : IOException(message, cause)
+/**
+ * A typed storage failure. The problem kind survives to the error mapper and
+ * the technical-details view, so a denied permission or an I/O error is never
+ * presented as "not enough space". The failing operation is recorded, not the
+ * absolute path.
+ */
+class UpdateStorageFailure @JvmOverloads constructor(
+    message: String,
+    cause: Throwable? = null,
+    @JvmField val problem: StorageProblem = StorageProblem.IO,
+    @JvmField val operation: String = "",
+) : IOException(message, cause)
 
 /** A retryable, synchronized dependency gate shared by initialization and later operations. */
 sealed class DependencyResult<out T> {
@@ -78,14 +89,29 @@ class UpdateStorageAccess<T>(
     private val dependency: RetryableDependency<T>,
     private val ensureAvailable: (T) -> Unit,
 ) {
+    @Volatile private var failure: Throwable? = null
+
+    /**
+     * The real cause behind the last unavailable result. Preparation failures
+     * happen in [ensureAvailable] after the dependency has been acquired, so
+     * this gate must remember them itself instead of only reading the
+     * dependency's last failure.
+     */
+    fun lastFailure(): Throwable? = failure ?: dependency.lastFailure()
+
     fun optional(): DependencyResult<T> = when (val acquired = dependency.acquire()) {
-        is DependencyResult.Unavailable -> acquired
+        is DependencyResult.Unavailable -> {
+            failure = acquired.cause
+            acquired
+        }
         is DependencyResult.Ready -> try {
             ensureAvailable(acquired.value)
+            failure = null
             acquired
         } catch (error: Throwable) {
             if (error is VirtualMachineError || error is ThreadDeath) throw error
             if (error is InterruptedException) Thread.currentThread().interrupt()
+            failure = error
             DependencyResult.Unavailable(error)
         }
     }
@@ -93,7 +119,9 @@ class UpdateStorageAccess<T>(
     fun required(): T = when (val result = optional()) {
         is DependencyResult.Ready -> result.value
         is DependencyResult.Unavailable -> throw UpdateStorageFailure(
-            "Update storage is unavailable. Free space or restore app storage access, then retry.", result.cause,
+            "Update storage is unavailable. Retry after restoring app storage access.", result.cause,
+            (result.cause as? UpdateStorageFailure)?.problem ?: UpdateStorage.classify(result.cause),
+            (result.cause as? UpdateStorageFailure)?.operation ?: "prepare",
         )
     }
 }
@@ -471,10 +499,17 @@ object UpdateErrorMapper {
             cursor = cursor.cause
         }
         val http = chain.filterIsInstance<HttpFailure>().firstOrNull()
+        val storage = chain.filterIsInstance<UpdateStorageFailure>().firstOrNull()
         val names = chain.joinToString(" ") { it.javaClass.simpleName }
         val raw = chain.joinToString(" ") { it.message ?: "" }
         val lower = raw.lowercase(Locale.US)
         val detail = buildString {
+            // The failing operation is kept even when the exception text is
+            // sanitized or replaced; it is the difference between "mkdir was
+            // denied" and "the disk is full".
+            storage?.operation?.takeIf { it.isNotBlank() && it.length <= 32 }?.let {
+                append("Storage operation: ").append(it).append('\n')
+            }
             append("Cause chain:")
             chain.forEachIndexed { index, cause ->
                 append("\n").append(index + 1).append(". ")
@@ -502,7 +537,16 @@ object UpdateErrorMapper {
             http != null && http.status in 500..599 -> "server"
             hasLinkageFailure -> "runtime"
             chain.any { it is ReleaseMetadataFailure } -> "metadata"
-            chain.any { it is UpdateStorageFailure } -> "storage"
+            storage != null -> when (storage.problem) {
+                StorageProblem.FULL -> "storage_full"
+                StorageProblem.PERMISSION -> "storage_permission"
+                StorageProblem.READ_ONLY -> "storage_read_only"
+                StorageProblem.PATH_BLOCKED -> "storage_path"
+                StorageProblem.CREATE_FAILED -> "storage_create"
+                StorageProblem.UNSAFE -> "storage_unsafe"
+                StorageProblem.UNAVAILABLE -> "storage_unavailable"
+                StorageProblem.IO, StorageProblem.NONE -> "storage_io"
+            }
             // TLS/SSL failures are distinct from plain connection errors.
             hasTlsFailure -> "tls"
             // Name-resolution and connect-refusal failures are network
@@ -517,7 +561,7 @@ object UpdateErrorMapper {
                 || lower.contains("no verifiable apk checksum") || lower.contains("no trusted apk checksum")
                 || lower.contains("malformed release digest") -> "metadata"
             lower.contains("no compatible") || lower.contains("armeabi-v7a") || lower.contains("no unique compatible") -> "no_compatible_apk"
-            lower.contains("not enough storage") || lower.contains("no space") || lower.contains("enospc") -> "storage"
+            lower.contains("not enough storage") || lower.contains("no space") || lower.contains("enospc") -> "storage_full"
             lower.contains("signer is incompatible") || lower.contains("signature mismatch") || lower.contains("signatures do not match") -> "signature_mismatch"
             lower.contains("apk checksum failed") || lower.contains("corrupt apk") || lower.contains("malformed apk") || names.contains("ApkFormat") || names.contains("ZipException") -> "verification"
             lower.contains("signature verification") -> "verification"
@@ -539,7 +583,15 @@ object UpdateErrorMapper {
             "metadata" -> "The release response was incomplete or invalid. Your installed app is unchanged; retry the check."
             "runtime" -> "The updater could not run on this app build. Reopen Updates and retry; your installed app is unchanged."
             "no_compatible_apk" -> firstSafe(raw, "No compatible APK found. This release has no ARMv7 package for this device.")
-            "storage" -> "Update storage is unavailable or full. Free space or restore app storage access, then retry; the installed app is unchanged."
+            "storage_full" -> "Not enough storage. Free space and retry; the installed app is unchanged."
+            "storage_permission" -> "YTArk could not write its private update folder (permission denied). Retry; no storage permission is required."
+            "storage_read_only" -> "The TV's internal storage is read-only right now. Restart the TV and retry; the installed app is unchanged."
+            "storage_path" -> "The update folder is blocked by an unexpected file. Restart the TV and retry; nothing was deleted."
+            "storage_create" -> "YTArk could not create its update folder. Retry; the installed app is unchanged."
+            "storage_unsafe" -> "The update folder is not inside YTArk's private files directory. Retry; the installed app is unchanged."
+            "storage_unavailable" -> "Update storage is unavailable. Retry; the installed app is unchanged."
+            "storage_io" -> "Writing the update failed (I/O error). Retry; the installed app is unchanged."
+            "storage" -> "Update storage could not be prepared. Retry; the installed app is unchanged."
             "signature_mismatch" -> "App signature mismatch. The installed app was not removed or replaced."
             "verification" -> "APK verification failed. The file was discarded and was not installed."
             "permission" -> "Install permission required. Enable Allow from this source for YTArk, then select Install update."

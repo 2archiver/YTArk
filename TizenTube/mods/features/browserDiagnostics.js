@@ -32,6 +32,7 @@ const EVENT_OUTCOMES = Object.freeze({
   'guide-refresh-failed': ['failed'],
   'guide-refresh-timeout': ['timeout'],
   'startup-navigation-dispatched': ['explicit-destination', 'soft-reload', 'disabled'],
+  'startup-navigation-skipped': ['already-home'],
   'startup-navigation-failed': ['failed'],
   'startup-navigation-cancelled': ['user-input'],
   'startup-readiness-mode': [

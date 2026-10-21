@@ -181,7 +181,6 @@
                         "searchResults": "検索結果"
                     },
                     "sortSubscriptionsByAlphabet": "登録しているチャンネルをアルファベット順に並べ替える",
-                    "disableChannelsOnSidebar": "サイドバーのチャンネルを無効にする",
                     "clock": {
                         "title": "時計",
                         "subtitle": "画面に時計を表示します",

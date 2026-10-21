@@ -33,7 +33,6 @@ const titlesOf = parsed => itemsOf(parsed).map(item => item.guideEntryRenderer.f
 beforeEach(() => {
   configWrite('enableYtarkGuideEntry', true);
   configWrite('disabledSidebarContents', []);
-  configWrite('disableChannelsOnSidebar', false);
   configWrite('sidebarContentsOrder', []);
 });
 
@@ -72,7 +71,6 @@ describe('YTArk guide entry', () => {
 
   it('stays reachable when sidebar items are hidden', () => {
     configWrite('disabledSidebarContents', ['FEsubscriptions', 'FEhistory']);
-    configWrite('disableChannelsOnSidebar', true);
     const parsed = parseGuide();
     assert.deepEqual(titlesOf(parsed), ['Home', 'Search', 'YTArk Settings']);
     const entry = ytarkEntries(parsed)[0].guideEntryRenderer;
@@ -86,6 +84,15 @@ describe('YTArk guide entry', () => {
     assert.ok(Array.isArray(section.originalItems));
     assert.ok(!section.originalItems.some(item => item.__ytarkGuideEntry === true), 'originalItems stays stock-only');
     assert.ok(!section.originalItems.some(item => item.guideEntryRenderer?.formattedTitle?.simpleText === 'YTArk Settings'));
+  });
+
+  it('no longer hides channel entries from a stored retired preference', () => {
+    // A 4.0 install could have persisted the retired setting. It must be
+    // harmless: the guide keeps every channel entry and the key is removed by
+    // the schema migration.
+    configWrite('disableChannelsOnSidebar', true);
+    const parsed = parseGuide();
+    assert.deepEqual(titlesOf(parsed), ['Home', 'Subscriptions', 'History', 'Search', 'YTArk Settings']);
   });
 
   it('does not touch guides without a guide section', () => {

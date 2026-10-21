@@ -733,7 +733,7 @@ export function buildSettingsTree() {
       icon: 'MENU',
       menuId: 'ytark-navigation',
       header: { title: tx('ytark.categories.navigation.title', 'Navigation'), subtitle: tx('ytark.categories.navigation.description', 'Guide, startup and the YouTube Settings page') },
-      resetKeys: ['launchToOnStartup', 'sortSubscriptionsByAlphabet', 'disableChannelsOnSidebar', 'enableYtarkGuideEntry', 'showAutomaticProfilePicker', 'reloadHomeOnStartup'],
+      resetKeys: ['launchToOnStartup', 'sortSubscriptionsByAlphabet', 'enableYtarkGuideEntry', 'showAutomaticProfilePicker', 'reloadHomeOnStartup'],
       children: [
           {
             id: 'ui.disableSidebar',
@@ -775,7 +775,6 @@ export function buildSettingsTree() {
             ],
           },
           { id: 'ui.sortSubscriptions', type: 'toggle', title: t('settings.options.uiSettings.options.sortSubscriptionsByAlphabet'), icon: 'SUBSCRIPTIONS', key: 'sortSubscriptionsByAlphabet' },
-          { id: 'ui.disableChannelsOnSidebar', type: 'toggle', title: t('settings.options.uiSettings.options.disableChannelsOnSidebar'), key: 'disableChannelsOnSidebar' },
           {
             id: 'nav.guideEntry',
             type: 'toggle',
@@ -798,7 +797,7 @@ export function buildSettingsTree() {
             type: 'toggle',
             key: 'fasterStartup',
             title: 'Faster startup (Experimental)',
-            description: 'Applies on the next app start. Checks YTArk controls sooner; slow readiness returns to normal pacing.',
+            description: 'Applies on the next app start. Controls are ready before the optional guide refresh, and the dependency check runs sooner; slow readiness returns to normal pacing. Does not speed up YouTube itself.',
             icon: 'SPEED',
           },
     ],

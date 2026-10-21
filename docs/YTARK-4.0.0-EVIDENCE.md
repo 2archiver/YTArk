@@ -8,7 +8,7 @@ what was actually executed.
 
 | Field | Candidate |
 |---|---|
-| Branch | `arena/79279920-ytark` |
+| Branch | `arena/3bb1f679-ytark` (follow-up; includes the earlier candidate work) |
 | Base commit | `59141ffcd2966a2f82396d824dab8d951a3d6628` |
 | Package | `io.github.twoarchiver.ytark` |
 | Version / display version | `4.0.0` / `4.0` |
@@ -148,6 +148,99 @@ in CI via `build-candidate.yml`. On a real ARMv7 Android TV, record device/build
 identifiers and each scenario result before changing any runtime row from
 **UNVERIFIED**.
 
+## 4.0 updater-storage repair, startup staging and sidebar retirement
+
+This section was added on the follow-up branch `arena/3bb1f679-ytark` after the
+reported 3.9.0 → 4.0.0 updater failure ("Failure stage: download · category:
+storage"). No release, tag or version bump is part of this branch.
+
+### Updater storage: what is proven and what is not
+
+- The failure path is `UpdateCoordinator.applyCandidate()` →
+  `optionalFiles()` → `UpdateStorageAccess.optional()` →
+  `DownloadController.ensureStorageAvailable()` → `prepareStorage()`. Metadata
+  and network work had already succeeded, which is why the report showed a
+  valid release but a local storage failure. `git diff v3.9.0..v4.0.0 --
+  android-updater` shows the updater sources (including `UpdateCoordinator`,
+  `DownloadController` and `UpdateReliability`) are unchanged; only
+  `ReleaseHighlights.generated.kt` differs. This is not a 4.0 regression; it is
+  a long-standing probe fragility that surfaced on this TV.
+- The old probe created a temp file, wrote one byte, called `FileDescriptor.sync()`
+  and treated a failed probe delete as a storage failure. Any of those can fail
+  on TV firmware without meaning "no space". The exact failing syscall on the
+  reporter's TV is **UNVERIFIED** (no device, no logcat).
+- The generic wording is explained by code, not guesswork: the old
+  `applyCandidate()` built a fresh `UpdateStorageFailure("Update metadata is
+  valid, but local update storage is unavailable.")` **with no cause and no
+  operation**, and `reportStorageFailure` recorded every initialization failure
+  as the same `unavailable` outcome. The real exception therefore never reached
+  the error mapper or diagnostics. The new path passes
+  `storageAccess.lastFailure()` (a gate-owned failure, not the dependency's
+  stale one) and records `space`/`permission`/`read_only`/`path`/`io` outcomes.
+- Preparation now requires only what a real download needs: a contained
+  directory under `filesDir`, `mkdirs` if absent, a stray blocker renamed (never
+  deleted), and one plain create/write/close probe with the cleanup treated as
+  best effort. Unknown capacity is reported as unknown; `requiredBytes`
+  saturates; cleanup touches only updater-owned names inside the directory.
+- New typed failures (`StorageProblem`) and the failing operation reach the
+  technical-details panel. Categories are distinct: `storage_full`,
+  `storage_permission`, `storage_read_only`, `storage_path`, `storage_create`,
+  `storage_unsafe`, `storage_unavailable`, `storage_io`.
+- A viewer cancel keeps a resumable partial; resume still requires matching
+  metadata plus a stored ETag and a 206/Content-Range, otherwise the partial is
+  discarded. The final rename falls back to a copy plus full revalidation.
+- `UpdateGuards.isSafeUpdateDirectory/File` now use canonical containment, so a
+  symlinked ancestor of the app data directory is accepted while an escaping
+  directory link is refused.
+
+### Startup remaster
+
+- `features/startupPipeline.js` adds dependency-ordered, one-shot stages and a
+  shared discovery cache. Controls, resolver and navigation are the critical
+  path; a stage that throws is terminal and cannot duplicate side effects.
+- The optional guide refresh no longer decides when controls are ready. In
+  Faster mode it runs in a bounded (10 s) post-readiness runner with cleared
+  timers; in Normal mode it remains part of readiness.
+- The readiness loop keeps its 40 s ceiling and adds backoff (250 ms → 500 ms →
+  750 ms → 1 s after the faster fallback), and teardown clears the timer without
+  reporting readiness.
+- A cold start already on Home records `startup-navigation-skipped`
+  (`already-home`) instead of sending `SOFT_RELOAD_PAGE`; an explicit
+  destination and a restored non-Home route are unchanged.
+- `browserDiagnosticsSummary` no longer requires the five-minute recording to
+  finish (or to be 'complete') before showing a startup duration. A sample with
+  exactly one `startup-readiness-complete` mark is measured even if the session
+  is still active or later interrupted; replaced/truncated samples stay invalid.
+- No speed number is claimed. The `442.1 ms` value in older notes remains a
+  userscript-evaluation → controls-ready interval, not a full launch duration.
+  TV timing remains **NOT MEASURED** on this branch.
+
+### Navigation sidebar toggle
+
+`ui.disableChannelsOnSidebar` and its guide filter are removed from the settings
+tree, reset list, config defaults and translations. Config schema 10 adds
+`disableChannelsOnSidebar` to `RETIRED_KEYS`, so an old stored value is dropped
+once while the other guide preferences are kept. The guide now never hides an
+entry because it has a thumbnail; `tests/config-migration.test.mjs` and
+`tests/guide-entry.test.mjs` pin the migration and the normal guide.
+
+### Evidence table
+
+| Check | Command | Result |
+|---|---|---|
+| Kotlin storage policy suite | `UpdateStorageTestKt` (JRE 17, Kotlin 2.1.20) | PASS — 100 checks |
+| Kotlin state/presentation suite | `StateTestKt` | PASS |
+| Node userscript suite | `cd TizenTube/mods && node --test tests/*.test.mjs` | PASS — 415 tests |
+| Python tooling suite | `python3 -m unittest discover -s tools/tests` | PASS — 266 tests (3 skipped) |
+| Changelog/generated assets | `python3 tools/build_changelog.py --check` | PASS — 28 versions, newest 4.0.0 |
+| Shell syntax | `bash -n tools/*.sh` | PASS |
+| Java host updater suites | `tools/test_android_updater.sh` | NOT RUN — no `javac` in this environment; CI runs them |
+| Android-source type check | `DownloadController.kt` and `UpdateCoordinator.kt` compiled with the pinned Kotlin compiler against minimal host stubs | PASS (stubs only prove types/syntax; not an Android build) |
+| Android Kotlin/D8/APK build | `tools/build_android_updater.sh` | NOT RUN — no Android SDK |
+| Signed APK inspection / real install | CI + TV | NOT RUN / NOT MEASURED |
+| TV startup timing (normal vs Faster) | Device procedure in `docs/DEVICE-ACCEPTANCE.md` | NOT MEASURED |
+| Exact failing storage syscall on the reporter's TV | logcat/technical details | UNVERIFIED |
+
 ## Checklist
 
 - [x] Preserve package/base/version/signing configuration and ARMv7-only target.
@@ -159,6 +252,9 @@ identifiers and each scenario result before changing any runtime row from
 - [x] Replace the tiny On/Off Who's-watching text with one clear checkbox row, preserving the preference key and stored values.
 - [x] Regenerate 4.0.0 build/changelog assets; prepare release notes (109 words).
 - [x] Run available JS, Python, build, generator, release-policy, version-gate and hygiene checks.
+- [x] Diagnose the reported updater storage path, add typed storage failures and host regression tests, and keep private app-owned storage (no broad permission).
+- [x] Stage startup initialization, skip the redundant cold Home reload, and keep a completed startup measurable after a five-minute session.
+- [x] Remove the sidebar channel toggle and migrate its stored value safely.
 - [ ] Build/sign and inspect the ARMv7 candidate — **NOT RUN**, no Android SDK/Java and base-APK fetch is outside the sandbox allowlist.
 - [ ] Record remote CI workflow runs — **NOT RUN** at authoring time; observe after the PR is opened.
 - [ ] Validate behavior on Android TV / Google TV — **UNVERIFIED**, no device evidence.

@@ -31,8 +31,15 @@ This is a **custom Kotlin/JAR/D8/repack pipeline**, not Gradle:
 `UpdateRepository` bounds and validates GitHub release metadata/redirects.
 `UpdateCoordinator` serializes application-scoped operations and exposes one
 immutable state. `UpdateStore` writes one snapshot; validated paths are reconciled,
-not trusted across launches. `DownloadController` restarts interrupted partial
-files rather than append unsafe ranges. `ApkValidator` checks checksum, all ZIP
+not trusted across launches. `UpdateStorage` holds the host-testable storage rules:
+canonical containment under `filesDir`, a plain create/write/close readiness probe
+(no fsync, no delete-as-failure), a stray blocker renamed rather than deleted,
+saturating free-space arithmetic, an unknown capacity treated as unknown, typed
+failure causes and bounded cleanup of updater-owned names only. `DownloadController`
+restarts interrupted partial files rather than append unsafe ranges; a viewer cancel
+keeps a resumable partial, and resume still requires matching metadata, a stored ETag
+and a valid 206/Content-Range. The final rename falls back to a copy plus full
+revalidation. `ApkValidator` checks checksum, all ZIP
 CRCs, package, numeric version, SDK/ABI, APK cryptographic signatures and signing
 lineage (including installed-data capability). The exposed community signing key
 provides upgrade continuity, **not publisher authentication**; the canonical HTTPS
@@ -60,5 +67,16 @@ never interprets a result code as success: installed package/version reconciliat
 is authoritative. No runtime dangerous-permission prompt is used.
 
 ## Verification boundary
+
+## Host storage tests
+
+`tools/test_android_updater.sh` compiles the policy sources (including
+`UpdateStorage.kt`) and runs `UpdateStorageTestKt` with the Java assertion classes.
+The Kotlin suite uses real temporary directories for existing/absent/missing
+directories, blocker files, failed `mkdirs`, denied writes, simulated
+ENOSPC/read-only/security errors, unknown capacity, overflow, resume decisions,
+symlinked ancestors, escaping directory links and bounded cleanup. The Java
+`UpdateGuardsTest`/`UpdateReliabilityTest` cover the guard and error-mapping
+contracts. None of this replaces a device run.
 
 See `docs/YTARK-3.1-ACCEPTANCE.md` for the earlier acceptance boundary. Compilation/policy/DEX verification is not proof of Android system UI, Cobalt runtime, TV focus or login-preserving upgrades. The candidate's `s34` userscript endpoint becomes available only after authorized publication; neither script tags nor releases are published by branch CI.

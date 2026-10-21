@@ -40,9 +40,14 @@ import { isSafeStartupDestination } from './features/startupDestination.js';
 //                thumbnails" layout control; the old toggle's effective
 //                visual choice (thumbnails that do not enlarge on focus)
 //                is migrated once into the new setting.
+//   10           Retires "Disable channels on sidebar": it hid every guide
+//                entry with a thumbnail instead of offering a working channel
+//                control, and could not be undone from the TV UI once the
+//                guide had reloaded. The stored value is discarded so the
+//                normal guide returns; every other preference is kept.
 
 const CONFIG_KEY = 'ytaf-configuration';
-export const CONFIG_SCHEMA_VERSION = 9;
+export const CONFIG_SCHEMA_VERSION = 10;
 
 /**
  * Preferences that no longer exist, with the schema that retired them.
@@ -103,6 +108,7 @@ export const RETIRED_KEYS = Object.freeze([
   'focusContainerColor',
   'routeColor',
   'disableEnlargingThumbnails',
+  'disableChannelsOnSidebar',
 ]);
 /** Presence of YouTube TV's own storage means the app has run before. Only the
  * existence of the key is checked; its contents are never read. */
@@ -179,7 +185,6 @@ const defaultConfig = {
   reloadHomeOnStartup: true,
   disabledSidebarContents: [],
   sidebarContentsOrder: [],
-  disableChannelsOnSidebar: false,
   // The guide entry keeps YTArk Settings reachable when the sidebar is minimal.
   enableYtarkGuideEntry: true,
   enableUpdater: true,

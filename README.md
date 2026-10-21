@@ -40,7 +40,7 @@ These features originate in the upstream TizenTube userscript; YTArk maintains a
 - **SponsorBlock** skips supported community-submitted segments when enabled and when the service has matching data.
 - **DeArrow** can use community title alternatives; thumbnail replacements are a separate opt-in setting.
 - **Playback controls** include preferred video quality, speed and codec options, plus a video queue.
-- **Navigation options** include sidebar customization and a guide entry for direct Settings access. Shorts remain available through YouTube's normal navigation.
+- **Navigation options** include sidebar customization and a guide entry for direct Settings access. Shorts remain available through YouTube's normal navigation. "Disable channels on sidebar" was removed in 4.0: it hid every entry with a thumbnail instead of controlling individual channels, so the normal guide returns and a stale stored value is dropped at migration.
 
 ### YTArk additions
 
@@ -70,7 +70,11 @@ Open YTArk Settings from the app's settings entry or the YTArk row in the TV gui
 
 The native updater checks stable releases from GitHub and distinguishes a current installation, a newer release, an installed build ahead of the latest stable version, and check or asset failures. A current result can be checked again; it does not start a download. Android's per-app install authorization is shown and rechecked after returning from Android Settings, but the updater cannot bypass the operating system or promise that every TV exposes a working permission route.
 
-**Faster startup is experimental and opt-in.** Browser diagnostics measure only a narrow userscript/UI-bootstrap interval, not Android app start, playback readiness or first frame. Local comparisons require at least three complete, comparable launches per actual mode; five alternating matched pairs are recommended. No performance benefit is promised.
+The updater downloads into YTArk's own private files directory (`files/ytark-updates-v31`) and needs no storage or "all files" permission. Its readiness probe is a plain create/write/close; it no longer fsyncs a temp file or treats a failed probe cleanup as a storage failure, which were the fragile steps behind the 3.9 "local update storage is unavailable" report. The technical-details panel now names the failing operation (for example `mkdirs` or `write-probe`) and keeps a typed storage cause, so a denied write cannot be described as a full disk. "Not enough storage" is shown only when a reported capacity or a real out-of-space error proves it. A partial download is reused only when its stored ETag, size and hash still match the candidate.
+
+**Startup initialization is staged.** YTArk waits for its own controls, command resolver and navigation in that order, then performs optional work such as the guide refresh. The optional refresh no longer decides when the controls are ready. A cold start that already sits on Home skips the extra Home soft reload; an explicit launch destination and a restored non-Home route keep their normal behaviour.
+
+**Faster startup is experimental and opt-in.** It changes only YTArk's own optional hand-off: the guide refresh is dispatched after the controls are ready instead of holding the critical path, and dependency discovery is probed sooner and shared. It does not skip or accelerate YouTube's engine, splash, session restore or playback. Browser diagnostics measure only a narrow userscript/UI-bootstrap interval, not Android app start, playback readiness or first frame, and a completed startup stays measurable after a long playback session. Local comparisons require at least three complete, comparable launches per actual mode; five alternating matched pairs are recommended. No performance benefit is promised.
 
 ## Privacy and security
 

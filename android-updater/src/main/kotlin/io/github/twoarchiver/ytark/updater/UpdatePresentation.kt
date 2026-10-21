@@ -108,6 +108,8 @@ object UpdatePresentation {
         "offline", "timeout", "connection", "no_compatible_apk", "signature_mismatch", "verification",
         "permission", "install_cancelled", "cancelled", "download_interrupted", "http", "unexpected",
         "blocked", "invalid", "incompatible", "signature", "conflict", "failure",
+        "storage_full", "storage_permission", "storage_read_only", "storage_path",
+        "storage_create", "storage_unsafe", "storage_unavailable", "storage_io",
     )
 
     private fun amount(bytes: Long): String {

@@ -4,7 +4,7 @@ export const YTARK_CHANGELOG = {
   "schema": 1,
   "source": "CHANGELOG.md",
   "summaryFallback": "No short highlights available for this version.",
-  "sourceSha256": "9c068ba9e9ec997452b68f58e01a77b4b227141bd1be449a0be61f1a6670a718",
+  "sourceSha256": "398212e6b067db851eba97fd84bbdad168fce45708e3ed8308130e99aea02052",
   "entries": [
     {
       "version": "4.0.0",
@@ -27,9 +27,16 @@ export const YTARK_CHANGELOG = {
             "– Scrolling, focusing, hovering or dwelling on a card under the playing video never navigates into it or replaces the playing video; only a deliberate OK, click or Play opens it.",
             "– Playback-end autoplay and queueing, and genuine previews on browse pages, are unchanged.",
             "– Long-press was not involved: it only ever opened a card's menu, and a long focus is not a long press.",
-            "DeArrow replacement is validated for reliable application.",
+            "DeArrow replacements are validated before use.",
             "– A late or slow result can no longer rename a card the frontend has recycled to show another video.",
-            "– Lookups stay prefix-only and private; no full-video-id fallback is added; the thumbnail replacement remains a separate opt-in."
+            "– Lookups stay prefix-only and private; no full-video-id fallback is added; the thumbnail replacement remains a separate opt-in.",
+            "Updater storage errors name the failing step.",
+            "– The 3.9 failure path was the readiness probe in the app's private update folder: it fsynced a temp file and treated a failed probe cleanup as unavailable storage. Preparation is now a plain create/write/close with no fsync and no cleanup condition; an existing blocker file is moved aside, never deleted.",
+            "– A typed storage cause and the failing operation (mkdirs, write-probe, free-space, finalize, …) reach the technical-details panel, so a denied write, a read-only mount, a blocked path and a real full disk are shown differently.",
+            "– \"Not enough storage\" appears only when the reported capacity or a real out-of-space error proves it; an unknown capacity no longer blocks a healthy download.",
+            "– A viewer cancel keeps a resumable partial, and the next attempt resumes only after the stored ETag and Range checks still match.",
+            "A completed startup stays measured after a long playback session.",
+            "– The diagnostics sample may continue for five minutes and may end as interrupted or still active; the already-completed startup interval is no longer discarded."
           ]
         },
         {
@@ -42,6 +49,13 @@ export const YTARK_CHANGELOG = {
         {
           "heading": "Changed",
           "items": [
+            "Startup initialization is staged instead of one flat polling loop.",
+            "– Controls, command resolver and navigation run in dependency order, each stage at most once; shared dependency discovery stops after success and has a probe budget; a failed stage cannot add duplicate listeners or effects.",
+            "– The optional guide refresh no longer decides when the controls are ready, and a slow launch backs off to at most one check per second inside the same 40-second bound.",
+            "A cold start that already sits on Home skips the extra Home soft reload.",
+            "– An explicit launch destination still wins, a restored non-Home route still returns Home, and turning \"Reload Home on Startup\" off remains a no-op.",
+            "Faster startup (Experimental) now changes a real behaviour, not only a timer.",
+            "– It moves the optional guide refresh after the controls are ready and shares a faster dependency check; it never accelerates or skips YouTube itself, and no speedup is claimed.",
             "\"Who's watching\" is now one clear checkbox row.",
             "– Checked = on; the preference key and its stored true/false are unchanged, and the automatic prompt still waits for the stored choice to load.",
             "Startup initialization is guarded against a re-evaluated script.",
@@ -51,6 +65,8 @@ export const YTARK_CHANGELOG = {
         {
           "heading": "Removed",
           "items": [
+            "Navigation → \"Disable channels on sidebar\" and its guide filter.",
+            "– It hid every guide entry with a thumbnail instead of offering per-channel control, and could not be undone from the TV once the guide had reloaded. The normal guide returns; a stored value is dropped by schema migration 10.",
             "The two custom colour settings and their dead implementation.",
             "– Appearance → \"Navigation colours\" and \"Content colours\" are gone; the standard YouTube/YTArk chrome styling returns, and stale stored colour values are safely ignored and dropped at migration.",
             "The confusing negative enlarged-thumbnail toggle.",
@@ -67,6 +83,8 @@ export const YTARK_CHANGELOG = {
           "heading": "Validation",
           "items": [
             "Regression coverage is added for the focus-preview guard, the retired colour settings, the shrunken-thumbnail layout effect and its one-time migration, the Who's-watching checkbox row, and DeArrow late-result and recycled-tile safety.",
+            "New storage regressions use real temporary directories: existing/absent directory, blocker file, failed mkdirs, denied write, simulated ENOSPC/read-only/security errors, unknown capacity, saturating size arithmetic, resume decisions, containment with a symlinked ancestor, and bounded cleanup. Startup staging, discovery budgets, Home-reload skip, deferred optional work and the five-minute startup retention have executable Node tests.",
+            "The sidebar toggle is covered by a migration test that drops the stored value while keeping the other guide preferences.",
             "Executed host-test results and unavailable device checks are recorded in docs/YTARK-4.0.0-EVIDENCE.md."
           ]
         }

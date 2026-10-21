@@ -145,7 +145,6 @@
                         "subtitle": "Выберите страницу, которая будет открываться при запуске YTArk"
                     },
                     "sortSubscriptionsByAlphabet": "Сортировать подписки по алфавиту",
-                    "disableChannelsOnSidebar": "Отключить каналы в боковой панели",
                     "clock": {
                         "title": "Часы",
                         "subtitle": "Отображать часы на экране",
