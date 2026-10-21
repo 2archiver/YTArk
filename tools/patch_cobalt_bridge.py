@@ -1,7 +1,11 @@
 """Minimal JNI-preserving host patch. All other upstream smali must round-trip unchanged."""
 from pathlib import Path
 import difflib
+import hashlib
 import re
+
+ORIGINAL_METHOD_SHA256 = '46bd854348db35426c5d04699803286a03172ee39ded48dee61bf1f45b367cae'
+HOST_BRIDGE = 'BaseStarboardBridge.smali'
 
 METHOD = re.compile(r'^\.method protected installAppFromURL\(Ljava/lang/String;\)Z\n.*?^\.end method', re.M | re.S)
 BODY = '''.method protected installAppFromURL(Ljava/lang/String;)Z
@@ -14,13 +18,18 @@ BODY = '''.method protected installAppFromURL(Ljava/lang/String;)Z
 
 
 def patch(decoded):
-    paths = list(Path(decoded).glob('smali*/dev/cobalt/coat/StarboardBridge.smali'))
+    paths = list(Path(decoded).glob('smali*/dev/cobalt/coat/' + HOST_BRIDGE))
     if len(paths) != 1:
-        raise ValueError('Expected exactly one pinned StarboardBridge class')
+        raise ValueError('Expected exactly one pinned BaseStarboardBridge class')
     path = paths[0]
+    # Cobalt 27 moved the implementation to the shared base class. Preserve
+    # StarboardBridge and its inheritance; replace only the audited method.
+    wrapper = path.with_name('StarboardBridge.smali')
+    if not wrapper.is_file() or '.super Ldev/cobalt/coat/BaseStarboardBridge;' not in wrapper.read_text():
+        raise ValueError('Pinned StarboardBridge inheritance changed')
     source = path.read_text()
     methods = METHOD.findall(source)
-    if len(methods) != 1 or 'Ljava/util/concurrent/Executors;->newSingleThreadExecutor' not in methods[0]:
+    if len(methods) != 1 or hashlib.sha256(canonical_smali(methods[0]).encode()).hexdigest() != ORIGINAL_METHOD_SHA256:
         raise ValueError('Pinned installAppFromURL method changed; inspect upstream before patching')
     path.write_text(METHOD.sub(lambda _: BODY, source))
     return path
@@ -66,7 +75,7 @@ def verify_roundtrip(before, after):
         if not built.is_file():
             raise ValueError(f'Base class missing after packaging: {relative}')
         a, b = original.read_text(), built.read_text()
-        if relative.as_posix().endswith('/dev/cobalt/coat/StarboardBridge.smali'):
+        if relative.as_posix().endswith('/dev/cobalt/coat/' + HOST_BRIDGE):
             # The original tree already contains the constrained patch.
             if len(METHOD.findall(b)) != 1 or 'NativeUpdatesBridge;->open' not in METHOD.findall(b)[0]:
                 raise ValueError('Final DEX lacks the JNI Updates screen bridge')

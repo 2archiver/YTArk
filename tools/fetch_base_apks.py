@@ -25,8 +25,8 @@ BASE_ASSETS = {
         "filename": "cobalt-arm.apk",
         "abi": "armeabi-v7a",
         "library": "lib/armeabi-v7a/libchrobalt.so",
-        "size": 97_195_140,
-        "sha256": "ff90c6e85c37246b809cca80282910509782c1384eccfbb6066da3b497dd9fd2",
+        "size": 80_570_825,
+        "sha256": "72a3527f520db3a1b414916ad96481244e451c41e272ae33344ae5e79abb37dd",
     },
 }
 
@@ -48,6 +48,8 @@ def sha256(path: Path) -> str:
 def validate_release_asset(release: dict, base_tag: str, architecture: str) -> dict:
     if architecture not in BASE_ASSETS:
         raise ValueError(f"Unsupported base architecture: {architecture}")
+    if base_tag != validate_release.load_config()["BASE_TAG"]:
+        raise ValueError("Requested upstream tag does not match the configured baseTag")
     if release.get("tag_name") != base_tag or release.get("draft") or release.get("prerelease"):
         raise ValueError("The upstream base metadata does not match the pinned stable tag")
     spec = BASE_ASSETS[architecture]

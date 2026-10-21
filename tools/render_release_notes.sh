@@ -71,7 +71,7 @@ ${WHAT_CHANGED}
 
 ARMv7 (armeabi-v7a) only: [APK](https://github.com/${GITHUB_REPOSITORY}/releases/download/${VERSION_TAG}/${APK_ARMV7}). Not for arm64-v8a-only devices; 64-bit CPU alone is insufficient. 4K does not select an APK architecture.
 
-Keep accounts and data; do not uninstall. If the previously installed updater cannot recover, manually install signed ${VERSION_NAME} APK over it. Package/signing identity and TizenTubeCobalt v2.0.2 stay unchanged.
+Keep accounts and data; do not uninstall. If the previously installed updater cannot recover, manually install signed ${VERSION_NAME} APK over it. Package/signing identity stays unchanged. Engine: TizenTubeCobalt ${BASE_TAG}.
 Notices and licenses: https://github.com/${GITHUB_REPOSITORY}/blob/main/NOTICE.md
 
 Known limitations: TV permission, startup, upgrade, playback and Google TV remain unverified.

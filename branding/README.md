@@ -1,43 +1,30 @@
-# YTArk branding — Alternative 2
+# YTArk launcher artwork
 
-This directory holds the YTArk launcher artwork: the selected **Alternative 2**
-design — a light/white rounded-square tile, a red video play emblem, and a red
-orbital swoosh that tucks behind the emblem at its upper-left and crosses in
-front at the lower-right with a white keyline.
+`branding/ytark-launcher-source.png` is the exact image supplied for 4.2.
+SHA-256: `de815a58125d65b5e0dd8faab7e80cbeaa9d9a06025575b72968dd0884db4e28`.
+Its pixels, gradients, proportions and transparency are preserved. The obsolete
+vector approximation has been removed.
 
-## Source of truth
+Install `python3 -m pip install -r tools/requirements-branding.txt` and run
+`python3 tools/render_launcher_art.py --write`. CI uses `--check` to verify
+source integrity and every generated resource.
 
-`tools/render_launcher_art.py` is the single geometry source for the whole
-artwork set. It deterministically emits every shipped asset:
+The original source and packaged full-resolution image must match byte for
+byte. Resized PNGs must match dimensions, color mode and decoded pixels;
+lossless PNG compression may differ between Windows and Linux Pillow wheels.
 
-| Artifact | Purpose |
-|---|---|
-| `branding/ytark-launcher.svg` | Master vector of the launcher mark |
-| `branding/ytark-launcher-512.png` | Square raster preview of the mark |
-| `android-updater/ytark_launcher_fg.xml` | Adaptive-icon foreground (mark) |
-| `android-updater/ytark_launcher_bg.xml` | Adaptive-icon background (white tile) |
-| `android-updater/mipmap-anydpi-v26/ytark_launcher.xml` | Adaptive icon (API 26+) |
-| `android-updater/mipmap-*/ytark_launcher.png` | Legacy mipmap variants (48–192 px) |
-| `android-updater/ytark_banner.xml` | Android TV banner (320×180) |
+- Legacy icons: Lanczos downsampling to Android's 48–192 px mipmap sizes.
+- Adaptive icon (Google TV long-press/app info): original PNG centered in a
+  62dp foreground on the 108dp layer with a white background. The artwork's
+  visible tile stays inside the central safe circle, preventing mask clipping.
+- TV banner: 640x360 raster for the 320x180dp launcher slot, with the same
+  image and YTArk lettering. No external font dependency.
+- The separate `ytark_launcher_monochrome.xml` remains a simplified themed
+  icon for Android 13+; full-color surfaces always use the supplied image.
 
-Regenerate with `python3 tools/render_launcher_art.py --write`; CI runs
-`--check` to prove the committed assets match the geometry source byte for
-byte. The artwork is deliberately free of any concept-poster text, patch
-notes, or watermarks.
+`tools/repack_apk.py` installs all referenced assets and sets application,
+activity, banner and round-icon references. Google TV may cache launcher
+artwork; visual behavior on a physical TV remains unverified.
 
-## Distinctness and rights notes
-
-- The mark is intentionally **distinct from YouTube branding**: the emblem is
-  red-on-white (not white-on-red), sits on a light rounded-square tile, and is
-  wrapped by an orbital swoosh that no YouTube mark uses. The tile, swoosh and
-  the **YTArk** name are the product identity.
-- The icon contains **no Google or YouTube wordmarks, logos, or names**. The
-  TV banner lettering spells `YTArk` only.
-- A generic rounded rectangle with a play triangle is a widely used video
-  motif; YTArk's combination (white tile + red emblem + orbital swoosh +
-  YTArk name) is its own presentation. YTArk is an independent, unofficial
-  project and must never claim endorsement by or affiliation with YouTube or
-  Google (see the README disclaimer).
-- Do not add YouTube/Google trademarks to YTArk artwork, release names,
-  update notifications, or store listings. Keep the `YTArk` label exactly —
-  never a variant such as “YTArk Solo”.
+YTArk is an independent, unofficial project. The artwork must not imply
+Google or YouTube endorsement; keep the product label `YTArk`.

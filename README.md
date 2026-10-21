@@ -22,7 +22,7 @@
   <a href="https://github.com/2archiver/YTArk"><strong>Star YTArk on GitHub</strong></a>
 </p>
 
-<p align="center"><sub>3.7 documentation refresh · Download links list published builds only.</sub></p>
+<p align="center"><sub>4.2 source update · Original artwork and TizenTubeCobalt 2.0.3 · Download links list published builds only.</sub></p>
 
 YTArk brings the familiar YouTube TV interface to compatible Android TV and Google TV devices, with a remote-friendly settings layer and an Android-native updater. It builds on the TizenTubeCobalt foundation and maintains selected TizenTube userscript features.
 
@@ -53,7 +53,7 @@ No Return YouTube Dislike integration is present in the current source tree, so 
 
 ## Download and installation
 
-Use the [latest published release](https://github.com/2archiver/YTArk/releases/latest) or browse [all releases](https://github.com/2archiver/YTArk/releases). The 3.7 documentation refresh does not itself publish a build.
+Use the [latest published release](https://github.com/2archiver/YTArk/releases/latest) or browse [all releases](https://github.com/2archiver/YTArk/releases). The 4.2 source update is published by the main-branch build pipeline after package validation.
 
 YTArk publishes a **32-bit ARM (`armeabi-v7a`) APK only**. There is no `arm64-v8a` APK. A 64-bit processor alone does not establish that the device's Android system can install 32-bit apps; an arm64-only system is not compatible with this package. 4K capability does not change APK architecture.
 

@@ -89,6 +89,7 @@ jobs:
           # stated reason. Every failing command now names itself as a check
           # annotation, so the failing check is readable from the API alone.
           trap 'code=$?; printf "::error title=Release metadata validation::%s (line %s, exit %s)\n" "$BASH_COMMAND" "$LINENO" "$code"' ERR
+          python3 -m pip install -r tools/requirements-branding.txt
           python3 -m py_compile tools/*.py tools/tests/*.py
           # The name of the failing test and its assertion must be readable from
           # the API: raw job logs expire and are not reachable here, so a bare
@@ -147,7 +148,7 @@ jobs:
           grep -Fxq 'communityRepository=2archiver/Hearth' release/signing.properties
           grep -Fq 'enableAdBlock: true' TizenTube/mods/config.js
           grep -Fq "enablePremiumLogo: true" TizenTube/mods/config.js
-          grep -Fq 'baseTag=v2.0.2' release/version.properties
+          grep -Fq 'baseTag=v2.0.3' release/version.properties
           # The release pipeline is automatic: build-apk.yml publishes the
           # verified candidate itself, and no workflow may gate publication on a
           # manual approval stage or on device-acceptance evidence.
