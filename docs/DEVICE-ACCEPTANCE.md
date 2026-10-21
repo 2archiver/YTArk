@@ -103,7 +103,7 @@ SHA-256, installed-before version and device before attempting these flows. The
 | 89 | Settings/search/focus matrix | Audit settings navigation, search, IME and DPAD focus at supported 720p/1080p/4K scaling; text entry, OK/Done, Back hierarchy and return focus remain usable | NOT RUN |
 | 90 | Updater cleanup path boundary | Pending and resumable APKs survive cleanup; symlink/path traversal and files outside the private updater root cannot be removed | NOT RUN |
 
-## YTArk 4.0 updater-storage and startup-staging checks (NOT RUN)
+## YTArk 4.0/4.1 updater-storage and startup-staging checks (NOT RUN)
 
 Record the APK sha256, the exact Android build and the observed technical-details
 text for every failure row. A check is **NOT RUN** until it is recorded here.

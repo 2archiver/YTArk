@@ -1,8 +1,10 @@
 # YTArk 4.0.0 candidate evidence
 
-**Disposition:** candidate review only. This branch has not been merged and no
-release or tag has been created. Device/runtime claims below are limited to
-what was actually executed.
+**Disposition:** candidate review only, later merged as PR #73. The published
+`v4.0.0` APK was built from the pre-merge commit `17bd00b`, so the changes in
+this evidence document reach devices in `4.1.0`, not in the published 4.0 APK
+(see `docs/YTARK-4.1.0-EVIDENCE.md`). Device/runtime claims below are limited
+to what was actually executed.
 
 ## Candidate identity and repository state
 
