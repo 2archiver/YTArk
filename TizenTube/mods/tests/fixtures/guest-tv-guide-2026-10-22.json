@@ -1,0 +1,232 @@
+{
+  "items": [
+    {
+      "guideSectionRenderer": {
+        "items": [
+          {
+            "guideEntryRenderer": {
+              "navigationEndpoint": {
+                "searchEndpoint": {
+                  "query": ""
+                }
+              },
+              "icon": {
+                "iconType": "SEARCH"
+              },
+              "formattedTitle": {
+                "simpleText": "Search"
+              }
+            }
+          },
+          {
+            "guideEntryRenderer": {
+              "navigationEndpoint": {
+                "browseEndpoint": {
+                  "browseId": "FEtopics"
+                }
+              },
+              "icon": {
+                "iconType": "WHAT_TO_WATCH"
+              },
+              "formattedTitle": {
+                "simpleText": "Home"
+              }
+            }
+          },
+          {
+            "guideEntryRenderer": {
+              "navigationEndpoint": {
+                "reelWatchEndpoint": {
+                  "playerParams": "8AEBuAQPkAcC",
+                  "overlay": {
+                    "reelPlayerOverlayRenderer": {
+                      "style": "REEL_PLAYER_OVERLAY_STYLE_SHORTS",
+                      "reelPlayerNavigationModel": "REEL_PLAYER_NAVIGATION_MODEL_UNSPECIFIED"
+                    }
+                  },
+                  "params": "CA8%3D",
+                  "sequenceProvider": "REEL_WATCH_SEQUENCE_PROVIDER_RPC",
+                  "inputType": "REEL_WATCH_INPUT_TYPE_SEEDLESS",
+                  "updateKey": "EhhTSE9SVFNfU0VFRExFU1NfRU5EUE9JTlQg5gEoAQ%3D%3D",
+                  "ustreamerConfig": "CAw=",
+                  "watchEndpointSource": "REEL_WATCH_ENDPOINT_SOURCE_SHORTS_PIVOT_BAR",
+                  "videoType": "REEL_VIDEO_TYPE_VIDEO"
+                }
+              },
+              "icon": {
+                "iconType": "YOUTUBE_SHORTS_FILL_24"
+              },
+              "formattedTitle": {
+                "simpleText": "Shorts"
+              }
+            }
+          },
+          {
+            "guideEntryRenderer": {
+              "navigationEndpoint": {
+                "browseEndpoint": {
+                  "browseId": "FEsubscriptions"
+                }
+              },
+              "icon": {
+                "iconType": "SUBSCRIPTIONS"
+              },
+              "formattedTitle": {
+                "simpleText": "Subscriptions"
+              }
+            }
+          },
+          {
+            "guideEntryRenderer": {
+              "navigationEndpoint": {
+                "browseEndpoint": {
+                  "browseId": "FElibrary"
+                }
+              },
+              "icon": {
+                "iconType": "TAB_LIBRARY"
+              },
+              "formattedTitle": {
+                "simpleText": "Library"
+              },
+              "dividerStyle": "GUIDE_ENTRY_RENDERER_DIVIDER_STYLE_PADDED_BAR"
+            }
+          },
+          {
+            "guideEntryRenderer": {
+              "navigationEndpoint": {
+                "browseEndpoint": {
+                  "browseId": "FEtopics_music"
+                }
+              },
+              "icon": {
+                "iconType": "YOUTUBE_MUSIC"
+              },
+              "formattedTitle": {
+                "simpleText": "Music"
+              }
+            }
+          },
+          {
+            "guideEntryRenderer": {
+              "navigationEndpoint": {
+                "browseEndpoint": {
+                  "browseId": "FEtopics_movies"
+                }
+              },
+              "icon": {
+                "iconType": "CLAPPERBOARD"
+              },
+              "formattedTitle": {
+                "simpleText": "Movies & TV"
+              }
+            }
+          },
+          {
+            "guideEntryRenderer": {
+              "navigationEndpoint": {
+                "browseEndpoint": {
+                  "browseId": "FEtopics_gaming"
+                }
+              },
+              "icon": {
+                "iconType": "GAMING"
+              },
+              "formattedTitle": {
+                "simpleText": "Gaming"
+              }
+            }
+          },
+          {
+            "guideEntryRenderer": {
+              "navigationEndpoint": {
+                "browseEndpoint": {
+                  "browseId": "FEtopics_news"
+                }
+              },
+              "icon": {
+                "iconType": "NEWS"
+              },
+              "formattedTitle": {
+                "simpleText": "News"
+              }
+            }
+          },
+          {
+            "guideEntryRenderer": {
+              "navigationEndpoint": {
+                "browseEndpoint": {
+                  "browseId": "FEtopics_sports"
+                }
+              },
+              "icon": {
+                "iconType": "TROPHY"
+              },
+              "formattedTitle": {
+                "simpleText": "Sports"
+              }
+            }
+          },
+          {
+            "guideEntryRenderer": {
+              "navigationEndpoint": {
+                "browseEndpoint": {
+                  "browseId": "FEtopics_podcasts"
+                }
+              },
+              "icon": {
+                "iconType": "BROADCAST"
+              },
+              "formattedTitle": {
+                "simpleText": "Podcasts"
+              }
+            }
+          }
+        ],
+        "overflowBehavior": "OVERFLOW_BEHAVIOR_VERTICAL_SCROLL"
+      }
+    }
+  ],
+  "footer": {
+    "guideSectionRenderer": {
+      "items": [
+        {
+          "guideEntryRenderer": {
+            "navigationEndpoint": {
+              "applicationSettingsEndpoint": {
+                "hack": true
+              }
+            },
+            "icon": {
+              "iconType": "SETTINGS"
+            },
+            "formattedTitle": {
+              "simpleText": "Settings"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "topbar": {
+    "guideSectionRenderer": {
+      "items": [
+        {
+          "guideEntryRenderer": {
+            "navigationEndpoint": {
+              "signalNavigationEndpoint": {
+                "signal": "ACCOUNT_SETTINGS"
+              }
+            },
+            "icon": {
+              "iconType": "SIGN_IN"
+            },
+            "formattedTitle": {
+              "simpleText": "Sign in"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

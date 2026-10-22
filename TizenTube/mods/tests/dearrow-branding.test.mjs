@@ -266,6 +266,42 @@ describe('DeArrow tile application', () => {
     assert.equal(lockup.lockupViewModel.contentImage.thumbnailViewModel.image.sources[0].url, `https://i.ytimg.com/vi/${ID_B}/hq.jpg`);
   });
 
+  it('retains each video card geometry instead of fabricating 1280x640 metadata', () => {
+    for (const dimensions of [{ width: 1280, height: 720 }, { width: 480, height: 360 }, {}]) {
+      const fixture = tileFixture(ID_A);
+      fixture.tileRenderer.header.tileHeaderRenderer.thumbnail.thumbnails[0] = {
+        url: `https://i.ytimg.com/vi/${ID_A}/hq720.jpg`, ...dimensions,
+      };
+      fixture.tileRenderer.duration = { simpleText: '3:32' };
+      const endpoint = structuredClone(fixture.tileRenderer.onSelectCommand);
+      const branding = new Map([[ID_A, { thumbnails: [trusted({ timestamp: 3.92349 })] }]]);
+      applyBranding(collectVideoTiles(browsePayload([fixture])), branding, { titles: false, thumbnails: true });
+      const thumb = fixture.tileRenderer.header.tileHeaderRenderer.thumbnail.thumbnails[0];
+      assert.deepEqual({ ...thumb, url: undefined }, { ...dimensions, url: undefined });
+      assert.ok(isDeArrowThumbnailUrl(thumb.url));
+      assert.deepEqual(fixture.tileRenderer.onSelectCommand, endpoint);
+      assert.deepEqual(fixture.tileRenderer.duration, { simpleText: '3:32' });
+    }
+    const lockup = lockupFixture(ID_A);
+    const branding = new Map([[ID_A, { thumbnails: [trusted({ timestamp: 1 })] }]]);
+    applyBranding(collectVideoTiles(lockup), branding, { titles: false, thumbnails: true });
+    const source = lockup.lockupViewModel.contentImage.thumbnailViewModel.image.sources[0];
+    assert.ok(isDeArrowThumbnailUrl(source.url));
+    assert.equal('width' in source, false);
+    assert.equal('height' in source, false);
+  });
+
+  it('keeps movie poster and Shorts artwork untouched', () => {
+    for (const variant of ['TILE_STYLE_YTLR_MOVIE', 'TILE_STYLE_YTLR_SHORTS', 'reel']) {
+      const tile = tileFixture(ID_A);
+      if (variant === 'reel') tile.tileRenderer.onSelectCommand = { reelWatchEndpoint: { videoId: ID_A } };
+      else tile.tileRenderer.style = variant;
+      const before = structuredClone(tile);
+      applyBranding(collectVideoTiles(tile), new Map([[ID_A, { thumbnails: [trusted({ timestamp: 1 })] }]]), { titles: false, thumbnails: true });
+      assert.deepEqual(tile, before);
+    }
+  });
+
   it('leaves thumbnails alone when thumbnail replacement is off', () => {
     const tiles = collectVideoTiles(browsePayload([tileFixture(ID_A)]));
     const branding = new Map([[ID_A, { titles: [trusted({ title: 'T' })], thumbnails: [trusted({ timestamp: 1 })] }]]);

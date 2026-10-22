@@ -294,6 +294,10 @@ function setTitle(tile, title) {
 
 function thumbnailSlot(tile) {
   if (tile.kind === 'tile') {
+    const renderer = tile.item.tileRenderer;
+    // Movie posters and Shorts have their own geometry and artwork contract.
+    if (renderer?.onSelectCommand?.reelWatchEndpoint
+        || (renderer?.style && renderer.style !== 'TILE_STYLE_YTLR_DEFAULT')) return null;
     const thumbnail = tile.item.tileRenderer?.header?.tileHeaderRenderer?.thumbnail;
     return thumbnail && typeof thumbnail === 'object' ? { holder: thumbnail, key: 'thumbnails' } : null;
   }
@@ -304,7 +308,11 @@ function thumbnailSlot(tile) {
 function setThumbnail(tile, url) {
   const slot = thumbnailSlot(tile);
   if (!slot) return false;
-  slot.holder[slot.key] = [{ url, width: 1280, height: 640 }];
+  // URL substitution must not invent a 2:1 aspect ratio. The cache can also
+  // redirect to the original image; retain the renderer's existing geometry
+  // rather than claiming every returned bitmap has the same dimensions.
+  const original = slot.holder[slot.key]?.[0];
+  slot.holder[slot.key] = [{ ...(original && typeof original === 'object' ? original : {}), url }];
   return true;
 }
 

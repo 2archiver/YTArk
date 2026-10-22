@@ -165,7 +165,7 @@ describe('browser diagnostics migration', () => {
     const missing = await loadConfig(storage);
     assert.equal(missing.configRead('recordBrowserDiagnostics'), false);
     assert.equal(missing.configRead('enableAdBlock'), false);
-    assert.equal(missing.configRead('configSchemaVersion'), 10);
+    assert.equal(missing.configRead('configSchemaVersion'), 11);
     assert.equal(missing.configRead('startupDiagnosticRunKind'), undefined);
     assert.equal(Object.hasOwn(stored(storage), 'startupDiagnosticRunKind'), false);
 
@@ -211,7 +211,7 @@ describe('sidebar channel toggle retirement', () => {
     assert.deepEqual(config.configRead('disabledSidebarContents'), ['FEhistory']);
     assert.deepEqual(config.configRead('sidebarContentsOrder'), ['FEhome']);
     assert.equal(config.configRead('enableYtarkGuideEntry'), true);
-    assert.equal(config.configRead('configSchemaVersion'), 10);
+    assert.equal(config.configRead('configSchemaVersion'), 11);
     assert.equal(config.getConfigMeta().migratedFrom, 9);
     assert.deepEqual(config.getConfigMeta().retiredValues, { disableChannelsOnSidebar: true });
   });
