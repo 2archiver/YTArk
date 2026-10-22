@@ -22,9 +22,26 @@ Conventions:
 - Capabilities inherited from TizenTube and TizenTubeCobalt are listed under
   "Upstream base and inherited capabilities", not as YTArk additions.
 
-## [4.2.0] — Unreleased
+## [4.3.0] — Unreleased
 
-> Not yet published. Candidate tag `v4.2.0` · versionCode 4020000 · userscript `s43` · TizenTubeCobalt v2.0.3.
+> Not yet published. Candidate tag `v4.3.0` · versionCode 4030000 · userscript `s44` · TizenTubeCobalt v2.0.3.
+
+Independent sidebar controls and clean TV banner lettering.
+
+### Fixed
+- **Search and Shorts hide independently.** Shared endpoint identities keep unknown entries visible and preserve navigation commands.
+- **Repeated guide loads restore hidden entries without duplicates.** Channel shortcuts and YTArk Settings remain reachable.
+- DeArrow thumbnail substitution retains existing card geometry instead of fabricating 2:1 dimensions; poster and Shorts artwork stays unchanged.
+### Changed
+- **The TV banner gains clean typeset lettering.** Bundled, licensed Barlow Condensed Bold preserves the original logo.
+- Migration clears only the ambiguous legacy hidden Search choice once; reselect Search or Shorts in Navigation settings.
+### Known limitations
+- Physical TV guide endpoints, focus, Search keyboard/results, long-press artwork and in-place installation remain UNVERIFIED.
+- Search card styling is unchanged. The DeArrow metadata fix and the reported appearance still need physical TV verification. Official YouTube APK integration is not demonstrated; Cobalt v2.0.3 remains the base.
+
+## [4.2.0] — 2026-10-21
+
+> Published 2026-10-21 22:35 UTC as [YTArk 4.2](https://github.com/2archiver/YTArk/releases/tag/v4.2.0) · tag `v4.2.0` · versionCode 4020000 · userscript `s43` · TizenTubeCobalt v2.0.3.
 
 Original artwork, Google TV icons and Cobalt 2.0.3.
 

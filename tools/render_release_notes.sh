@@ -51,6 +51,10 @@ cat > NOTICE.md <<EOF
 - Project-specific native updater, release tooling, and TV controls are part of
   YTArk. The base-project attribution is retained; YTArk is not affiliated with
   YouTube, Google, TizenTube, or TizenTubeCobalt.
+- TV banner lettering: Barlow Condensed Bold by The Barlow Project Authors,
+  SIL Open Font License 1.1. Font bytes, pinned provenance and the full license
+  are in branding/fonts/. This substitute is not YouTube's proprietary font.
+  https://github.com/google/fonts/tree/60824dce48f7dd28fe7d65559f2da1f6e04e585b/ofl/barlowcondensed
 - Cosmetic header wordmark: "YouTube Premium logo 2024.svg" from Wikimedia
   Commons (https://commons.wikimedia.org/wiki/File:YouTube_Premium_logo_2024.svg,
   author: Google, Inc., retrieved 2026-10-11, revision SHA-1

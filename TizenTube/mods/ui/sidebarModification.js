@@ -1,3 +1,4 @@
+import { guideEntryIdentity, guideOrderIdentity, guideSections } from './guideIdentity.js';
 import { getGuide } from '../utils/innerTubeCalls.js';
 import { configRead, configWrite } from '../config.js';
 import { buttonItem, overlayPanelItemListRenderer, showModal } from './ytUI.js';
@@ -7,15 +8,9 @@ function showSetting(settingType, parameters) {
     if (settingType === 'MOVE_GUIDE_BUTTON') {
         const order = configRead('sidebarContentsOrder');
 
-        const browseId = parameters.item.guideEntryRenderer.navigationEndpoint?.browseEndpoint?.browseId
-            || (parameters.item.guideEntryRenderer.navigationEndpoint?.searchEndpoint && 'search');
-        const index = order.findIndex(item => {
-            if (typeof item === 'object' && item !== null) {
-                return item.browseId === browseId;
-            } else {
-                return item === browseId;
-            }
-        });
+        const browseId = guideEntryIdentity(parameters?.item);
+        const index = browseId && Array.isArray(order)
+            ? order.findIndex(item => guideOrderIdentity(item) === browseId) : -1;
 
         if (index === -1) {
             return showSetting('', true);
@@ -34,7 +29,7 @@ function showSetting(settingType, parameters) {
 
         return showSetting('', true);
     } else if (settingType === 'SHOW_GUIDE_BUTTONS') {
-        const title = parameters.item.guideEntryRenderer.formattedTitle.simpleText;
+        const title = parameters?.item?.guideEntryRenderer?.formattedTitle?.simpleText || '';
 
         const buttons = [];
         buttons.push(
@@ -105,12 +100,16 @@ function showSetting(settingType, parameters) {
         const buttons = [];
 
         let idx = 0;
-        const guideItems = guide.items[0].guideSectionRenderer.originalItems
-            || guide.items[0].guideSectionRenderer.items;
+        const guideItems = guideSections(guide).flatMap(section => section.originalItems || section.items);
+        const seen = new Set();
         for (const item of guideItems) {
-            const title = item.guideEntryRenderer.formattedTitle.simpleText;
-            const icon = item.guideEntryRenderer.icon?.iconType;
-            const browseId = item.guideEntryRenderer.navigationEndpoint?.browseEndpoint ? item.guideEntryRenderer.navigationEndpoint.browseEndpoint.browseId : 'search';
+            const browseId = guideEntryIdentity(item);
+            const renderer = item?.guideEntryRenderer;
+            if (!browseId || seen.has(browseId) || item?.__ytarkGuideEntry) continue;
+            seen.add(browseId);
+            const title = renderer.formattedTitle?.simpleText
+                || renderer.formattedTitle?.runs?.map(run => run.text || '').join('') || browseId;
+            const icon = renderer.icon?.iconType;
 
             buttons.push(
                 buttonItem(

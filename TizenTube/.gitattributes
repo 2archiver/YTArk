@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization
 * text=auto
+
+# Provenance-pinned vector payloads must retain their exact bytes on Windows.
+mods/assets/youtube-premium-logo-2024*.svg -text

@@ -46,8 +46,11 @@ import { isSafeStartupDestination } from './features/startupDestination.js';
 //                guide had reloaded. The stored value is discarded so the
 //                normal guide returns; every other preference is kept.
 
+//   11           Clears only ambiguous legacy hidden 'search' once. Reselect
+//                Search/Shorts explicitly; other hidden IDs and order survive.
+
 const CONFIG_KEY = 'ytaf-configuration';
-export const CONFIG_SCHEMA_VERSION = 10;
+export const CONFIG_SCHEMA_VERSION = 11;
 
 /**
  * Preferences that no longer exist, with the schema that retired them.
@@ -386,6 +389,10 @@ export function migrateConfig(stored, env = {}) {
       // new-setting choice is never overridden, and an explicit old
       // false still maps to the standard layout.
       config.enableShrinkingThumbnails = config.disableEnlargingThumbnails === true;
+    }
+    if (schema < 11 && Array.isArray(config.disabledSidebarContents)) {
+      // Old non-browse entries all wrote 'search'; intent cannot be recovered.
+      config.disabledSidebarContents = config.disabledSidebarContents.filter(id => id !== 'search');
     }
     // Retire removed preferences. Only these keys go; every retained
     // preference keeps the value the user (or an applied preset) left behind,

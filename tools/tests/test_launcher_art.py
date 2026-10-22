@@ -9,7 +9,7 @@ import tempfile
 import unittest
 import xml.etree.ElementTree as ET
 
-from PIL import Image
+from PIL import Image, ImageChops
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import render_launcher_art as art
@@ -42,6 +42,25 @@ class LauncherArtworkTests(unittest.TestCase):
                 self.assertEqual(icon.size, (size, size))
                 self.assertEqual(icon.mode, 'RGBA')
                 self.assertEqual(icon.getpixel((0, 0))[3], 0)
+
+    def test_banner_font_is_pinned_and_wordmark_has_clear_separation(self):
+        self.assertEqual(hashlib.sha256(art.FONT.read_bytes()).hexdigest(), art.FONT_SHA256)
+        self.assertIn('SIL OPEN FONT LICENSE', (art.FONT.parent / 'OFL.txt').read_text())
+        banner = Image.open(io.BytesIO(art.banner_png()))
+        self.assertEqual(banner.size, (640, 360))
+        # Compare the logo's entire left region to an independently placed copy.
+        expected = Image.new('RGBA', (640, 360), '#F5F6F8')
+        expected.alpha_composite(art.source_image().resize((288, 288), Image.Resampling.LANCZOS), (24, 36))
+        self.assertEqual(banner.crop((0, 0, 320, 360)).tobytes(), expected.crop((0, 0, 320, 360)).tobytes())
+        # The typeset region must have breathing room on every edge at TV size.
+        small = banner.resize((320, 180), Image.Resampling.LANCZOS).convert('RGB')
+        area = small.crop((160, 0, 320, 180))
+        ink = ImageChops.difference(area, Image.new('RGB', area.size, '#F5F6F8')).getbbox()
+        self.assertIsNotNone(ink)
+        self.assertGreater(ink[0], 6)
+        self.assertGreater(ink[1], 30)
+        self.assertLess(ink[2], 154)
+        self.assertLess(ink[3], 150)
 
     def test_visible_art_fits_adaptive_safe_circle(self):
         layer = ET.fromstring(art.launcher_fg_xml()).find('item')

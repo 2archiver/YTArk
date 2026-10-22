@@ -26,7 +26,7 @@ resolve.patchResolveCommand();
 const resolveCommand = resolve.default;
 
 const PUBLISHED_TAGS = [
-  'v4.1.0', 'v4.0.0', 'v3.9.0', 'v3.8.0', 'v3.7.0', 'v3.6.0', 'v3.5.2', 'v3.5.1', 'v3.5.0', 'v3.4.0', 'v3.3.0', 'v3.2.0', 'v3.1.0', 'v3.0.0','v2.9.0', 'v2.8.0', 'v2.7.0', 'v2.6.0', 'v2.5.0', 'v2.4.0', 'v2.3.0', 'v2.2.0', 'v2.1.2', 'v2.1.1', 'v2.1.0', 'v2.0.4-ytark.17',
+  'v4.2.0', 'v4.1.0', 'v4.0.0', 'v3.9.0', 'v3.8.0', 'v3.7.0', 'v3.6.0', 'v3.5.2', 'v3.5.1', 'v3.5.0', 'v3.4.0', 'v3.3.0', 'v3.2.0', 'v3.1.0', 'v3.0.0','v2.9.0', 'v2.8.0', 'v2.7.0', 'v2.6.0', 'v2.5.0', 'v2.4.0', 'v2.3.0', 'v2.2.0', 'v2.1.2', 'v2.1.1', 'v2.1.0', 'v2.0.4-ytark.17',
   'v2.0.4-ytark.16', 'v2.0.3-ytark.15', 'v2.0.2-personal.14'];
 
 beforeEach(() => {
@@ -36,7 +36,7 @@ beforeEach(() => {
 
 describe('bundled changelog data', () => {
   it('is exactly what tools/build_changelog.py derives from CHANGELOG.md', () => {
-    const output = execFileSync('python3', ['tools/build_changelog.py', 'json'], { cwd: REPO_ROOT, encoding: 'utf-8' });
+    const output = execFileSync(process.env.PYTHON || 'python3', ['tools/build_changelog.py', 'json'], { cwd: REPO_ROOT, encoding: 'utf-8' });
     assert.deepEqual(JSON.parse(output), JSON.parse(JSON.stringify(YTARK_CHANGELOG)));
   });
 
@@ -48,7 +48,7 @@ describe('bundled changelog data', () => {
       return 0;
     });
     assert.deepEqual(keys, sorted, 'newest first');
-    assert.equal(entries[0].version, '4.2.0');
+    assert.equal(entries[0].version, '4.3.0');
     assert.equal(entries[0].status, 'unreleased');
     assert.equal(entries[0].date, null, 'no invented date for unpublished work');
     const published = entries.filter(entry => entry.status === 'published');
@@ -84,7 +84,7 @@ describe('in-app reader', () => {
       const expected = reader.headlineFor(entry) + (entry.version === '2.3.0' ? '  ·  Installed' : '');
       assert.equal(versionRows[i], expected);
     }
-    assert.equal(versionRows[0], '4.2 — Original artwork, Google TV icons and Cobalt 2.0.3');
+    assert.equal(versionRows[0], '4.3 — Independent sidebar controls and clean TV banner lettering');
     assert.equal(rowTitle(modalItems(modal)[selectedIndex(modal)]), versionRows.find(title => title.endsWith('  ·  Installed')));
     assert.match(rowSubtitle(findRow(modal, item => rowTitle(item).startsWith('2.2 — '))), /Published .*2026 · v2\.2\.0/);
     assert.match(header(modal).subtitle, /installed 2\.3\.0/);
@@ -118,14 +118,14 @@ describe('in-app reader', () => {
     // also the source of its own future release notes.
     resolveCommand({ customAction: { action: 'YTARK_CHANGELOG_SHOW', parameters: { update: true } } });
     await press(resolveCommand, findRow(lastModal(recorded, reader.CHANGELOG_MODAL_ID),
-      item => rowTitle(item).startsWith('4.2 — ')));
+      item => rowTitle(item).startsWith('4.3 — ')));
     const current = modalItems(lastModal(recorded, reader.CHANGELOG_VERSION_MODAL_ID))
       .map(messageText).join('\n');
     // The reader paginates long sections ("Added (continued)"), so assert the
     // content is present rather than which page a bullet happens to land on.
     assert.match(current, /Changed\b/);
-    assert.match(current, /Original image/);
-    assert.match(current, /safe padding/);
+    assert.match(current, /Search and Shorts hide independently/);
+    assert.match(current, /typeset lettering/);
     assert.match(current, /Known limitations/);
   });
 

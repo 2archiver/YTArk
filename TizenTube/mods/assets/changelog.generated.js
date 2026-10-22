@@ -4,20 +4,58 @@ export const YTARK_CHANGELOG = {
   "schema": 1,
   "source": "CHANGELOG.md",
   "summaryFallback": "No short highlights available for this version.",
-  "sourceSha256": "d882966e1c60682032a328646b21ed6f40bb016d224c15f0b996fd7c3c35249d",
+  "sourceSha256": "d50441969aac73826bba9d491c2f4e2702e77489762223500244f774733e36f1",
   "entries": [
     {
-      "version": "4.2.0",
-      "display": "4.2",
+      "version": "4.3.0",
+      "display": "4.3",
       "status": "unreleased",
       "date": null,
       "publishedAt": null,
+      "tag": "v4.3.0",
+      "versionCode": 4030000,
+      "scriptTag": "s44",
+      "title": "YTArk 4.3",
+      "releaseUrl": null,
+      "facts": "Not yet published. Candidate tag v4.3.0 · versionCode 4030000 · userscript s44 · TizenTubeCobalt v2.0.3.",
+      "summary": "Independent sidebar controls and clean TV banner lettering.",
+      "sections": [
+        {
+          "heading": "Fixed",
+          "items": [
+            "Search and Shorts hide independently. Shared endpoint identities keep unknown entries visible and preserve navigation commands.",
+            "Repeated guide loads restore hidden entries without duplicates. Channel shortcuts and YTArk Settings remain reachable.",
+            "DeArrow thumbnail substitution retains existing card geometry instead of fabricating 2:1 dimensions; poster and Shorts artwork stays unchanged."
+          ]
+        },
+        {
+          "heading": "Changed",
+          "items": [
+            "The TV banner gains clean typeset lettering. Bundled, licensed Barlow Condensed Bold preserves the original logo.",
+            "Migration clears only the ambiguous legacy hidden Search choice once; reselect Search or Shorts in Navigation settings."
+          ]
+        },
+        {
+          "heading": "Known limitations",
+          "items": [
+            "Physical TV guide endpoints, focus, Search keyboard/results, long-press artwork and in-place installation remain UNVERIFIED.",
+            "Search card styling is unchanged. The DeArrow metadata fix and the reported appearance still need physical TV verification. Official YouTube APK integration is not demonstrated; Cobalt v2.0.3 remains the base."
+          ]
+        }
+      ]
+    },
+    {
+      "version": "4.2.0",
+      "display": "4.2",
+      "status": "published",
+      "date": "2026-10-21",
+      "publishedAt": "2026-10-21T22:35Z",
       "tag": "v4.2.0",
       "versionCode": 4020000,
       "scriptTag": "s43",
       "title": "YTArk 4.2",
-      "releaseUrl": null,
-      "facts": "Not yet published. Candidate tag v4.2.0 · versionCode 4020000 · userscript s43 · TizenTubeCobalt v2.0.3.",
+      "releaseUrl": "https://github.com/2archiver/YTArk/releases/tag/v4.2.0",
+      "facts": "Published 2026-10-21 22:35 UTC as YTArk 4.2 · tag v4.2.0 · versionCode 4020000 · userscript s43 · TizenTubeCobalt v2.0.3.",
       "summary": "Original artwork, Google TV icons and Cobalt 2.0.3.",
       "sections": [
         {
