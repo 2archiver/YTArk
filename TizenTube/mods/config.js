@@ -50,7 +50,7 @@ import { isSafeStartupDestination } from './features/startupDestination.js';
 //                Search/Shorts explicitly; other hidden IDs and order survive.
 
 const CONFIG_KEY = 'ytaf-configuration';
-export const CONFIG_SCHEMA_VERSION = 11;
+export const CONFIG_SCHEMA_VERSION = 12;
 
 /**
  * Preferences that no longer exist, with the schema that retired them.
@@ -184,6 +184,13 @@ const defaultConfig = {
   // `preferredVideoCodec` is the one codec preference; the legacy
   // `videoPreferredCodec` key is copied into it and then retired (schema 3).
   preferredVideoCodec: 'any',
+  // 4.4 uses new keys: the broken pre-3.0 uiTheme is never resurrected.
+  oledBlack: false,
+  liquidGlass: false,
+  showQualityNotice: true,
+  enableCaptionFallback: false,
+  preferredAudioLanguage: 'en',
+  fallbackCaptionLanguage: 'en',
   launchToOnStartup: null,
   reloadHomeOnStartup: true,
   disabledSidebarContents: [],
@@ -264,6 +271,12 @@ export function sanitizeLayout(value) {
 }
 
 const SANITIZERS = {
+  preferredAudioLanguage(value, fallback) {
+    return typeof value === 'string' && /^[a-z]{2,3}(?:-[A-Za-z]{2,4})?$/.test(value) ? value : fallback;
+  },
+  fallbackCaptionLanguage(value, fallback) {
+    return typeof value === 'string' && /^[a-z]{2,3}(?:-[A-Za-z]{2,4})?$/.test(value) ? value : fallback;
+  },
   launchToOnStartup(value) {
     return value === null || isSafeStartupDestination(value) ? value : null;
   },

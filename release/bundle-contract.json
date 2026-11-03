@@ -49,8 +49,15 @@
       "fasterStartup",
       "InstallAppFromURL",
       "ytark://updates",
-      "Faster startup (Experimental)",
-      "ytark-faster-startup-in-progress"
+      "Faster startup",
+      "ytark-faster-startup-in-progress",
+      "oledBlack",
+      "liquidGlass",
+      "enableCaptionFallback",
+      "showQualityNotice",
+      "Interactive readiness:",
+      "ytark-oled-black",
+      "ytark-liquid-glass"
     ],
     "forbidden": [
       "quickControls",

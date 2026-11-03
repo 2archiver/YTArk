@@ -1,0 +1,28 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>YTArk appearance regression fixture</title><style>
+* { box-sizing: border-box; }
+html, body { margin:0; font:24px Arial,sans-serif; color:#f1f1f1; background:#181818; }
+#container { position:relative; min-height:1080px; background:#181818; padding:55px 70px 45px 310px; }
+.ytLrGuideResponseContainer { position:absolute; left:0; top:0; bottom:0; width:260px; padding:55px 25px; background:#202020; }
+.ytLrGuideResponseContainer div { margin:35px 0; padding:15px; }
+h1 { font-size:48px; margin:0 0 12px; } h2 { margin:0; font-size:32px; }
+.subtitle { color:#aaa; font-size:21px; }
+.grid { display:flex; gap:24px; margin-top:45px; }
+.card { width:390px; } .art { height:210px; border-radius:14px; background:linear-gradient(135deg,#d08143,#163957); }
+.card p { margin:16px 0 7px; } .card span { color:#aaa; font-size:20px; }
+.ytLrOverlayPanelRenderer { position:absolute; top:310px; right:100px; width:690px; padding:32px; background:#282828; border-radius:16px; }
+.ytLrOverlayPanelHeaderRenderer { padding:0 0 25px; background:#282828; }
+.ytLrOverlayPanelRendererContent { background:#282828; }
+.row { padding:19px 22px; margin:8px 0; border-radius:10px; }
+.row span { float:right; } .zylon-focus { background:#f1f1f1; color:#0f0f0f; }
+video { display:block; position:absolute; left:310px; bottom:92px; width:360px; height:200px; background:rgb(17,34,51); }
+.caption-window { position:absolute; bottom:110px; left:340px; background:rgba(0,0,0,.7); color:white; font-size:20px; padding:8px; }
+.ytLrOverlayToastRenderer { position:absolute; right:100px; bottom:95px; background:#282828; border-radius:14px; padding:20px 32px; min-width:250px; }
+.label { position:absolute; bottom:28px; left:310px; color:#aaa; font-size:18px; }
+</style></head><body><div id="container">
+<aside class="ytLrGuideResponseContainer"><h2>YouTube</h2><div>Home</div><div>Search</div><div>Subscriptions</div><div>Library</div></aside>
+<section class="ytLrTvBrowseRendererHost"><h1>Good evening</h1><div class="subtitle">Appearance fixture · representative TV surfaces, not a device screenshot</div><div class="grid"><div class="card"><div class="art"></div><p>Recommended for you</p><span>Channel · 18 minutes</span></div><div class="card"><div class="art" style="background:linear-gradient(135deg,#235e72,#b586b3)"></div><p>Watch next</p><span>Channel · 24 minutes</span></div><div class="card"><div class="art" style="background:linear-gradient(135deg,#28425c,#c69245)"></div><p>Your subscriptions</p><span>Channel · 12 minutes</span></div></div></section>
+<div class="ytLrOverlayPanelRenderer"><header class="ytLrOverlayPanelHeaderRenderer"><h2>Appearance</h2></header><div class="ytLrOverlayPanelRendererContent"><div class="row zylon-focus">Liquid Glass <span>On</span></div><div class="row">OLED Black <span>On</span></div><div class="row">Hide channel watermark <span>On</span></div><div class="row">Remove player dimming <span>On</span></div></div></div>
+<video></video><div class="caption-window">Captions stay readable and unchanged.</div>
+<div class="ytLrOverlayToastRenderer"><strong>Quality</strong><div>1080p</div></div>
+<div class="label" id="mode">Default appearance</div></div></body></html>

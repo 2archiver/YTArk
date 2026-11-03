@@ -217,8 +217,8 @@ function aboutDiagnosticsPanel(options = {}) {
   const summary = browserDiagnostics.startupSummary().split('\n');
   const line = prefix => summary.find(value => value.startsWith(prefix)) || '';
   const sample = line('Latest sample:').replace(/^Latest sample:\s*/, '').replace(/\.$/, '') || 'No saved sample';
-  const durationDetail = line('Valid startup duration for latest sample:')
-    .replace(/^Valid startup duration for latest sample:\s*/, '').replace(/\.$/, '');
+  const durationDetail = line('Interactive readiness:')
+    .replace(/^Interactive readiness:\s*/, '').replace(/\.$/, '');
   const duration = durationDetail.match(/^\d+(?:\.\d+)? ms/)?.[0] || 'duration unavailable';
   const modeText = line('Faster startup preference:');
   const actualMode = modeText.includes('Actual readiness mode:')
@@ -328,7 +328,7 @@ export function buildSettingsTree() {
       icon: 'PLAY_CIRCLE',
       menuId: 'ytark-playback',
       header: { title: tx('ytark.categories.playback.title', 'Playback'), subtitle: tx('ytark.categories.playback.description', 'Player, video and subtitles') },
-      resetKeys: ['enablePatchingVideoPlayer', 'enablePreviousNextButtons', 'enableSuperThanksButton', 'enableAIAskButton', 'enableSpeedControlsButton', 'enableMPButton', 'enableSwapMPWithPIP', 'preferredVideoQuality', 'speedSettingsIncrement', 'videoSpeed', 'hideRelatedVideosPlayer', 'preferredVideoCodec', 'autoFrameRate', 'autoFrameRatePauseVideoFor', 'enablePlaybackRecovery', 'enableShowUserLanguage', 'enableShowOtherLanguages'],
+      resetKeys: ['enablePatchingVideoPlayer', 'enablePreviousNextButtons', 'enableSuperThanksButton', 'enableAIAskButton', 'enableSpeedControlsButton', 'enableMPButton', 'enableSwapMPWithPIP', 'preferredVideoQuality', 'speedSettingsIncrement', 'videoSpeed', 'hideRelatedVideosPlayer', 'preferredVideoCodec', 'autoFrameRate', 'autoFrameRatePauseVideoFor', 'enablePlaybackRecovery', 'enableShowUserLanguage', 'enableShowOtherLanguages', 'enableCaptionFallback', 'preferredAudioLanguage', 'fallbackCaptionLanguage', 'showQualityNotice'],
       children: [
       {
         id: 'player',
@@ -340,7 +340,7 @@ export function buildSettingsTree() {
         header: { title: t('settings.options.videoPlayer.title'), subtitle: t('settings.options.videoPlayer.subtitle') },
         resetKeys: ['enablePatchingVideoPlayer', 'enablePreviousNextButtons', 'enableSuperThanksButton', 'enableAIAskButton',
           'enableSpeedControlsButton', 'enableMPButton', 'enableSwapMPWithPIP', 'preferredVideoQuality', 'speedSettingsIncrement',
-          'videoSpeed', 'hideRelatedVideosPlayer', 'preferredVideoCodec', 'autoFrameRate', 'autoFrameRatePauseVideoFor', 'enablePlaybackRecovery'],
+          'videoSpeed', 'hideRelatedVideosPlayer', 'preferredVideoCodec', 'autoFrameRate', 'autoFrameRatePauseVideoFor', 'enablePlaybackRecovery', 'showQualityNotice'],
         children: [
           {
             id: 'player.patching',
@@ -384,6 +384,11 @@ export function buildSettingsTree() {
               title: level === 'Auto' ? t('settings.options.videoPlayer.options.qualityAuto') : level,
               value: level.toLowerCase(),
             })),
+          },
+          {
+            id: 'player.qualityNotice', type: 'toggle', key: 'showQualityNotice',
+            title: 'Quality notification', icon: 'VIDEO_QUALITY',
+            description: 'Briefly show the actual resolution when playback starts or quality changes.',
           },
           {
             id: 'player.speedIncrement',
@@ -455,8 +460,27 @@ export function buildSettingsTree() {
         title: t('settings.options.subtitles.title'),
         icon: 'TRANSLATE',
         menuId: 'ytark-subtitles',
-        resetKeys: ['enableShowUserLanguage', 'enableShowOtherLanguages'],
+        resetKeys: ['enableShowUserLanguage', 'enableShowOtherLanguages', 'enableCaptionFallback', 'preferredAudioLanguage', 'fallbackCaptionLanguage'],
         children: [
+          {
+            id: 'subtitles.fallback', type: 'toggle', key: 'enableCaptionFallback',
+            title: 'Caption fallback', icon: 'TRANSLATE',
+            description: 'Turn on available captions when your preferred audio language is missing. Manual caption changes take priority. Requires track information from the player.',
+          },
+          ...[
+            ['audioLanguage', 'preferredAudioLanguage', 'Preferred audio language'],
+            ['captionLanguage', 'fallbackCaptionLanguage', 'Fallback caption language'],
+          ].map(([id, key, title]) => ({
+            id: `subtitles.${id}`, type: 'choice', key, title, icon: 'TRANSLATE',
+            menuId: `ytark-${id}`,
+            dependsOn: { key: 'enableCaptionFallback', title: 'Caption fallback' },
+            options: [
+              ['en', 'English'], ['ru', 'Russian'], ['de', 'German'], ['fr', 'French'],
+              ['es', 'Spanish'], ['pt', 'Portuguese'], ['it', 'Italian'], ['el', 'Greek'],
+              ['uk', 'Ukrainian'], ['pl', 'Polish'], ['ar', 'Arabic'], ['hi', 'Hindi'],
+              ['ja', 'Japanese'], ['ko', 'Korean'], ['zh', 'Chinese'],
+            ].map(([value, name]) => ({ id: `subtitles.${id}.${value}`, title: name, value })),
+          })),
           { id: 'subtitles.userLanguage', type: 'toggle', title: t('settings.options.subtitles.options.showLocalSubtitle'), key: 'enableShowUserLanguage' },
           { id: 'subtitles.otherLanguages', type: 'toggle', title: t('settings.options.subtitles.options.showHiddenSubtitles'), key: 'enableShowOtherLanguages' },
         ],
@@ -470,8 +494,18 @@ export function buildSettingsTree() {
       description: tx('ytark.appearance.description', 'Player look, thumbnails and screen behaviour'),
       icon: 'DARK_THEME',
       menuId: 'ytark-appearance',
-      resetKeys: ['hidePlayerWatermark', 'removePlayerScrim', 'enableScreenDimming', 'dimmingTimeout', 'dimmingOpacity', 'enableHideWatchedVideos', 'hideWatchedVideosThreshold', 'hideWatchedVideosPages', 'enableClock', 'isClock12HourFormat', 'clockShowSeconds', 'clockHideWhenVideoPlaying', 'enableShrinkingThumbnails', 'enableHqThumbnails'],
+      resetKeys: ['oledBlack', 'liquidGlass', 'hidePlayerWatermark', 'removePlayerScrim', 'enableScreenDimming', 'dimmingTimeout', 'dimmingOpacity', 'enableHideWatchedVideos', 'hideWatchedVideosThreshold', 'hideWatchedVideosPages', 'enableClock', 'isClock12HourFormat', 'clockShowSeconds', 'clockHideWhenVideoPlaying', 'enableShrinkingThumbnails', 'enableHqThumbnails'],
       children: [
+        {
+          id: 'appearance.liquidGlass', type: 'toggle', key: 'liquidGlass',
+          title: 'Liquid Glass', icon: 'DARK_THEME',
+          description: 'Glass-inspired menus and notifications. Uses a light blur when supported, with a readable tinted fallback. Combines with OLED Black.',
+        },
+        {
+          id: 'appearance.oledBlack', type: 'toggle', key: 'oledBlack',
+          title: 'OLED Black', icon: 'DARK_THEME',
+          description: 'Pure black browsing and menu surfaces. Keeps video, artwork, captions and focus highlights intact.',
+        },
         {
           id: 'appearance.player',
           type: 'menu',
@@ -796,8 +830,8 @@ export function buildSettingsTree() {
             id: 'nav.fasterStartup',
             type: 'toggle',
             key: 'fasterStartup',
-            title: 'Faster startup (Experimental)',
-            description: 'Applies on the next app start. Controls are ready before the optional guide refresh, and the dependency check runs sooner; slow readiness returns to normal pacing. Does not speed up YouTube itself.',
+            title: 'Faster startup',
+            description: 'Applies on the next app start. Checks readiness immediately, defers optional guide work and backs off on slow launches. Startup timings are available in Diagnostics.',
             icon: 'SPEED',
           },
     ],

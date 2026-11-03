@@ -23,10 +23,10 @@ export function createStartupStages({ stages = [], warn = null } = {}) {
   const resolved = (record) => record.done || record.failed;
   const criticalResolved = () => records.filter((record) => record.critical).every(resolved);
 
-  function run(context) {
+  function run(context, { includeOptional = true } = {}) {
     const ran = [];
     for (const record of records) {
-      if (resolved(record)) continue;
+      if (resolved(record) || (!includeOptional && !record.critical)) continue;
       const waiting = record.requires.some((id) => {
         const dependency = records.find((candidate) => candidate.id === id);
         return !dependency || !dependency.done;
@@ -112,6 +112,7 @@ export function startDeferredStage({
   deadlineMs = 10_000,
   delayMs = 250,
   onDone = null,
+  initialDelayMs = 0,
 } = {}) {
   const started = now();
   let timer = null;
@@ -140,7 +141,7 @@ export function startDeferredStage({
     timer = later(step, delayMs);
     return undefined;
   };
-  timer = later(step, 0);
+  timer = later(step, Math.max(0, Math.min(1000, initialDelayMs)));
   return { stop, get finished() { return finished; } };
 }
 

@@ -186,6 +186,10 @@ startReadiness({
   storage: startupStorage,
   onInterrupted: () => diagnosticMark('startup-readiness-interrupted', 'interrupted'),
   onMode: mode => browserDiagnostics.recordStartupReadinessMode(mode),
+  onMetrics: metrics => {
+    browserDiagnostics.record('startup-poll-count', String(metrics.ticks), 'observed');
+    browserDiagnostics.record('startup-probe-count', String(resolverDiscovery.probes), 'observed');
+  },
   onReady: () => {
     diagnosticMark('startup-readiness-complete', 'complete');
     if (fasterStartup && !startupGuideRefresh.done && optionalRefresh === null) {
@@ -195,7 +199,8 @@ startReadiness({
           return startupGuideRefresh.done;
         },
         deadlineMs: 10_000,
-        delayMs: 250,
+        delayMs: 500,
+        initialDelayMs: 150,
         onDone: finishDeferredRefresh,
       });
     }
@@ -211,7 +216,7 @@ startReadiness({
     if (!startupGuideRefresh.done) startupGuideRefresh.timeOut();
     diagnosticMark('startup-readiness-timeout', 'timeout');
   },
-  tick: () => startupStages.run().criticalDone,
+  tick: () => startupStages.run(undefined, { includeOptional: !fasterStartup }).criticalDone,
 });
 
 } // end one-shot startup orchestration guard

@@ -72,7 +72,7 @@ describe('bounded local startup summary', () => {
     assert.match(summary, /Valid startup duration for latest sample: 321\.4 ms \(monotonic browser clock\)/);
     assert.match(summary, /Faster startup preference: On\. Actual readiness mode: Faster cadence\./);
     assert.match(summary, /userscript evaluation → YTArk controls ready/);
-    assert.doesNotMatch(summary, /cold|warm|group|cohort|comparison|Median|Observed difference/i);
+    assert.doesNotMatch(summary, /cold|warm|group|cohort|Median|Observed difference/i);
 
     const interruptedFaster = sample('interrupted-faster', {
       mode: 'normal-interrupted', fasterStartup: true,
@@ -167,7 +167,7 @@ describe('bounded local startup summary', () => {
     assert.match(summary, /Valid startup duration for latest sample: 145\.2 ms/);
     assert.match(summary, /Faster startup preference: Off/);
     assert.match(summary, /Actual readiness mode: Normal cadence \(Faster startup off\)/);
-    assert.doesNotMatch(summary, /startupComparisonKind|cold|warm|comparison/i);
+    assert.doesNotMatch(summary, /startupComparisonKind|cold|warm/i);
     assert.equal(recorder.status, 'off', 'reading a saved sample never enables recording');
   });
 
@@ -196,4 +196,26 @@ describe('bounded local startup summary', () => {
     assert.match(summary, /Latest sample: Launch · complete/);
     assert.doesNotMatch(summary, /Median|Observed difference|all 22/);
   });
+});
+
+test('interactive readiness differs from controls mounting and comparisons match build and route', async () => {
+  const { measureInteractiveStartup, startupComparison } = await import('../features/browserDiagnosticsSummary.js');
+  const complete = (id, faster, duration) => {
+    const s = sample(id, { durationMs: 50, mode: faster ? 'faster' : 'normal-disabled', fasterStartup: faster });
+    Object.assign(s.context, { bundleVersion: '4.4.0', baseTag: 'v2.0.3', scriptTag: 's45', startupDestination: 'none', reloadHomeOnStartup: true });
+    s.events.find(e => e.event === 'startup-readiness-complete').relativeMs = 10 + duration;
+    return s;
+  };
+  const valid = [complete('n1', false, 500), complete('n2', false, 600), complete('n3', false, 700),
+    complete('f1', true, 100), complete('f2', true, 200), complete('f3', true, 300)];
+  assert.equal(measureInteractiveStartup(valid[0]).durationMs, 500);
+  const result = startupComparison(valid, valid[0]);
+  assert.match(result, /Normal: n=3, median 600.0 ms, p95 700.0 ms/);
+  assert.match(result, /Faster: n=3, median 200.0 ms, p95 300.0 ms/);
+  const foreign = complete('other-build', true, 1); foreign.context.scriptTag = 's46';
+  const partial = complete('partial', true, 1); partial.capture = 'partial';
+  const fallback = complete('fallback', true, 1); fallback.events.push(event('startup-readiness-mode', 'normal-fallback', 50));
+  const insufficient = startupComparison([...valid.slice(0, 5), foreign, partial, fallback], valid[0]);
+  assert.match(insufficient, /3 normal \/ 2 Faster/);
+  assert.doesNotMatch(insufficient, /median|p95/);
 });

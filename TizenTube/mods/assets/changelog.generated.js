@@ -4,20 +4,75 @@ export const YTARK_CHANGELOG = {
   "schema": 1,
   "source": "CHANGELOG.md",
   "summaryFallback": "No short highlights available for this version.",
-  "sourceSha256": "d50441969aac73826bba9d491c2f4e2702e77489762223500244f774733e36f1",
+  "sourceSha256": "4a607546d5d3eb5692523680d81862ee2c46eaed767630298d0a666a40fbc5ee",
   "entries": [
     {
-      "version": "4.3.0",
-      "display": "4.3",
+      "version": "4.4.0",
+      "display": "4.4",
       "status": "unreleased",
       "date": null,
       "publishedAt": null,
+      "tag": "v4.4.0",
+      "versionCode": 4040000,
+      "scriptTag": "s45",
+      "title": "YTArk 4.4",
+      "releaseUrl": null,
+      "facts": "Not yet published. Candidate tag v4.4.0 · versionCode 4040000 · userscript s45 · TizenTubeCobalt v2.0.3.",
+      "summary": "Caption fallback, quality notifications, OLED Black and Liquid Glass.",
+      "sections": [
+        {
+          "heading": "Added",
+          "items": [
+            "Caption fallback optionally enables available captions when the preferred audio language is absent. Choose audio and caption languages in Playback → Subtitles; explicit caption/audio commands take priority for the current video.",
+            "Quality notifications use YouTube TV's own toast renderer and decoded video dimensions. Changes are coalesced with an eight-second notification cooldown; requests for a higher quality are never announced as successful playback.",
+            "OLED Black is a new, default-off implementation for solid browsing, guide and menu surfaces; the retired theme setting is not reused.",
+            "Liquid Glass adds optional glass-inspired menus and notifications, with a tinted fallback and reduced-transparency support. It combines with OLED Black without filtering video or artwork."
+          ]
+        },
+        {
+          "heading": "Changed",
+          "items": [
+            "Faster startup loses the Experimental label. Its first readiness pass now excludes optional guide work and defers that work by 150 ms, allowing the control hand-off to run first.",
+            "Startup recorder separates control mounting from interactive readiness, records readiness wake-ups and resolver probes, and shows normal/Faster median and p95 after at least three matched launches per mode on the same build and startup destination."
+          ]
+        },
+        {
+          "heading": "Fixed",
+          "items": [
+            "Quality preferences attach after a late document body and clean up notification/caption timers when the player is replaced.",
+            "Native toast thumbnails now initialize their image object correctly.",
+            "The 4.3 publication record and stale OLED documentation are corrected."
+          ]
+        },
+        {
+          "heading": "Defaults and migration",
+          "items": [
+            "Keep saved preferences and the existing package/signing identity. New OLED Black, Liquid Glass and caption fallback options default off; quality notifications default on and can be disabled in Playback.",
+            "Diagnostics remain opt-in and local; older samples stay readable and cannot be mixed across builds for comparisons."
+          ]
+        },
+        {
+          "heading": "Known limitations",
+          "items": [
+            "Caption/audio track access depends on the active YouTube TV frontend; unknown track data never triggers fallback. Missing captions are not generated or translated.",
+            "Physical Google TV playback, caption commands, theme coverage, blur performance and startup speed remain UNVERIFIED. Host tests do not establish a device speedup.",
+            "Liquid Glass is a TV adaptation, not Apple's native UI framework. Unsupported blur uses a tinted surface."
+          ]
+        }
+      ]
+    },
+    {
+      "version": "4.3.0",
+      "display": "4.3",
+      "status": "published",
+      "date": "2026-10-22",
+      "publishedAt": "2026-10-22T09:44Z",
       "tag": "v4.3.0",
       "versionCode": 4030000,
       "scriptTag": "s44",
       "title": "YTArk 4.3",
-      "releaseUrl": null,
-      "facts": "Not yet published. Candidate tag v4.3.0 · versionCode 4030000 · userscript s44 · TizenTubeCobalt v2.0.3.",
+      "releaseUrl": "https://github.com/2archiver/YTArk/releases/tag/v4.3.0",
+      "facts": "Published 2026-10-22 09:44 UTC as YTArk 4.3 · tag v4.3.0 · versionCode 4030000 · userscript s44 · TizenTubeCobalt v2.0.3.",
       "summary": "Independent sidebar controls and clean TV banner lettering.",
       "sections": [
         {

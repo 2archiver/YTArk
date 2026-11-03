@@ -1,3 +1,5 @@
+import { CaptionFallback } from './captionFallback.js';
+import { createQualityNotice, nativeQualityToast } from './qualityNotice.js';
 import { configRead, configChangeEmitter } from '../config.js';
 
 const PLAYER_SELECTOR = '.html5-video-player';
@@ -14,7 +16,7 @@ function isElement(node) {
 }
 
 class PreferredQualityHandler {
-  constructor(documentRef) {
+  constructor(documentRef, { notify = nativeQualityToast } = {}) {
     this.document = documentRef || (typeof document !== 'undefined' ? document : null);
     this.player = null;
     this.video = null;
@@ -31,6 +33,18 @@ class PreferredQualityHandler {
     this.handleVideoReady = this.handleVideoReady.bind(this);
     this.handleVideoError = this.handleVideoError.bind(this);
     this.handleConfigChange = this.handleConfigChange.bind(this);
+    this.captions = new CaptionFallback({ settings: configRead });
+    this.handleCaptionChange = () => this.captions.check(this.player, this.lastVideoId);
+    this.notice = createQualityNotice({
+      notify, enabled: () => configRead('showQualityNotice') === true,
+      current: () => this.getDecodedQuality(),
+      visible: () => this.document && this.document.visibilityState !== 'hidden'
+        && this.video && !this.video.paused && !this.video.ended && this.video.readyState >= 2,
+    });
+    this.handleQualityChange = () => {
+      this.publishStatus(configRead('preferredVideoQuality'), this.getActualQuality());
+      this.notice.request(this.lastVideoId);
+    };
     this.init();
   }
 
@@ -39,7 +53,10 @@ class PreferredQualityHandler {
     this.destroyed = false;
     configChangeEmitter.addEventListener('configChange', this.handleConfigChange);
     this.observePlayerChanges();
-    this.reconcilePlayer();
+    if (this.document.body) this.reconcilePlayer();
+    else this.document.addEventListener('DOMContentLoaded', () => {
+      if (!this.destroyed) { this.observePlayerChanges(); this.reconcilePlayer(); }
+    }, { once: true });
   }
 
   observePlayerChanges() {
@@ -83,6 +100,7 @@ class PreferredQualityHandler {
     if (this.destroyed || !this.document) return;
     const nextPlayer = this.document.querySelector(PLAYER_SELECTOR);
     if (!nextPlayer) {
+      if (this.player) { this.detachPlayer(); this.player = null; this.lastVideoId = null; }
       if (this.attachTimer === null && this.retryCount < MAX_QUALITY_RETRIES) {
         this.attachTimer = setTimeout(() => {
           this.attachTimer = null;
@@ -100,11 +118,18 @@ class PreferredQualityHandler {
       this.retryCount = 0;
       this.fallbackAttempted = false;
       if (typeof this.player.addEventListener === 'function') {
-        this.player.addEventListener('onStateChange', this.handleStateChange);
+        for (const [name, handler] of this.playerEvents()) {
+          try { this.player.addEventListener(name, handler); } catch (_) { /* unsupported optional event */ }
+        }
       }
       this.attachVideo();
     }
     this.handleStateChange();
+  }
+
+  playerEvents() {
+    return [['onStateChange', this.handleStateChange], ['onPlaybackQualityChange', this.handleQualityChange],
+      ['onApiChange', this.handleCaptionChange], ['onAudioTrackChange', this.handleCaptionChange]];
   }
 
   attachVideo() {
@@ -117,6 +142,8 @@ class PreferredQualityHandler {
     this.video.addEventListener('canplay', this.handleVideoReady);
     this.video.addEventListener('loadstart', this.handleVideoReady);
     this.video.addEventListener('error', this.handleVideoError);
+    this.video.addEventListener('resize', this.handleQualityChange);
+    this.video.addEventListener('playing', this.handleQualityChange);
   }
 
   detachVideo() {
@@ -125,13 +152,19 @@ class PreferredQualityHandler {
       this.video.removeEventListener('canplay', this.handleVideoReady);
       this.video.removeEventListener('loadstart', this.handleVideoReady);
       this.video.removeEventListener('error', this.handleVideoError);
+      this.video.removeEventListener('resize', this.handleQualityChange);
+      this.video.removeEventListener('playing', this.handleQualityChange);
     }
     this.video = null;
   }
 
   detachPlayer() {
+    this.notice.stop();
+    this.captions.destroy();
     if (this.player && typeof this.player.removeEventListener === 'function') {
-      this.player.removeEventListener('onStateChange', this.handleStateChange);
+      for (const [name, handler] of this.playerEvents()) {
+        try { this.player.removeEventListener(name, handler); } catch (_) { /* unsupported optional event */ }
+      }
     }
     this.detachVideo();
     clearTimeout(this.retryTimer);
@@ -140,6 +173,8 @@ class PreferredQualityHandler {
 
   destroy() {
     this.destroyed = true;
+    this.notice.stop();
+    this.captions.destroy();
     configChangeEmitter.removeEventListener('configChange', this.handleConfigChange);
     clearTimeout(this.attachTimer);
     clearTimeout(this.retryTimer);
@@ -153,6 +188,16 @@ class PreferredQualityHandler {
   }
 
   handleConfigChange(event) {
+    if (event.detail && ['enableCaptionFallback', 'preferredAudioLanguage', 'fallbackCaptionLanguage'].includes(event.detail.key)) {
+      this.captions.reset(this.player, this.lastVideoId);
+      this.handleCaptionChange();
+      return;
+    }
+    if (event.detail && event.detail.key === 'showQualityNotice') {
+      this.notice.stop();
+      this.handleQualityChange();
+      return;
+    }
     if (!event.detail || event.detail.key !== 'preferredVideoQuality') return;
     this.hasAppliedQuality = false;
     this.retryCount = 0;
@@ -177,6 +222,7 @@ class PreferredQualityHandler {
     const videoId = videoData && videoData.video_id;
     if (videoId && videoId !== this.lastVideoId) {
       this.lastVideoId = videoId;
+      this.notice.reset(videoId);
       this.hasAppliedQuality = false;
       this.retryCount = 0;
       this.fallbackAttempted = false;
@@ -187,6 +233,9 @@ class PreferredQualityHandler {
     const isShorts = Object.values(stats).some(value => value === 'shortspage');
     if (!isShorts && !this.hasAppliedQuality) this.applyQuality();
     if (state && state.isError) this.handleVideoError();
+    this.attachVideo();
+    this.handleCaptionChange();
+    if (state && state.isPlaying) this.handleQualityChange();
   }
 
   getVideoStats() {
@@ -201,6 +250,7 @@ class PreferredQualityHandler {
 
   handleVideoReady() {
     this.attachVideo();
+    this.handleCaptionChange();
     this.retryCount = 0;
     this.hasAppliedQuality = false;
     this.clearRetry();
@@ -276,7 +326,7 @@ class PreferredQualityHandler {
       }
       this.hasAppliedQuality = true;
       this.clearRetry();
-      this.publishStatus(preference, this.getActualQuality() || chosen.qualityLabel || chosen.quality);
+      this.publishStatus(preference, this.getActualQuality());
       return true;
     } catch (error) {
       console.warn('[YTArk quality] Failed to request the available stream quality:', error);
@@ -285,7 +335,16 @@ class PreferredQualityHandler {
     }
   }
 
+  getDecodedQuality() {
+    if (!this.video || this.video.readyState < 2 || Number(this.video.videoHeight) <= 0) return null;
+    return `${Math.min(Number(this.video.videoWidth) || Number(this.video.videoHeight), Number(this.video.videoHeight))}p`;
+  }
+
   getActualQuality() {
+    // The decoded dimensions are stronger evidence than a requested quality ID.
+    if (this.video && this.video.readyState >= 2 && Number(this.video.videoHeight) > 0) {
+      return `${Math.min(Number(this.video.videoWidth) || Number(this.video.videoHeight), Number(this.video.videoHeight))}p`;
+    }
     if (this.player && typeof this.player.getPlaybackQuality === 'function') {
       try {
         const quality = this.player.getPlaybackQuality();
@@ -339,7 +398,7 @@ class PreferredQualityHandler {
   }
 }
 
-const preferredVideoQualityHandler = typeof document !== 'undefined' && document.body
+const preferredVideoQualityHandler = typeof document !== 'undefined'
   ? new PreferredQualityHandler() : null;
 if (typeof window !== 'undefined' && preferredVideoQualityHandler) {
   window.preferredVideoQualityHandler = preferredVideoQualityHandler;
