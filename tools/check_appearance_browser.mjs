@@ -16,6 +16,29 @@ const page = await browser.newPage({ viewport: { width:1920, height:1080 }, devi
 try {
   await page.setContent(await readFile(new URL('../TizenTube/mods/tests/browser/appearance-4.4.html', import.meta.url), 'utf8'));
   await page.addStyleTag({ content: buildAppearanceCss() });
+  // Exercise default browser timers: Node permits an invocation form that
+  // Window timers reject, so injected fake clocks alone cannot catch this.
+  const captionSource = await readFile(new URL('../TizenTube/mods/features/captionFallback.js', import.meta.url), 'utf8');
+  const timerResult = await page.evaluate(async source => {
+    const CaptionFallback = new Function(source.replace(/^export /gm, '') + '; return CaptionFallback;')();
+    let audio = []; let current = {}; const calls = [];
+    const settings = { enableCaptionFallback:true, preferredAudioLanguage:'en', fallbackCaptionLanguage:'en' };
+    const player = {
+      getAvailableAudioTracks: () => audio,
+      getOption: (module, key) => key === 'tracklist' ? [{ languageCode:'en', vssId:'.en' }] : current,
+      setOption: (module, key, value) => { calls.push(value); current = value; },
+    };
+    const controller = new CaptionFallback({ settings:key => settings[key] });
+    controller.check(player, 'browser-video');
+    const initial = controller.status;
+    const scheduled = controller.timer !== null;
+    audio = [{ id:'ja.4' }];
+    await new Promise(resolve => setTimeout(resolve, 1100));
+    const result = { initial, scheduled, count:calls.length, status:controller.status };
+    controller.destroy();
+    return result;
+  }, captionSource);
+  assert.deepEqual(timerResult, { initial:'audio-unknown', scheduled:true, count:1, status:'applied' });
   for (const [name, classes] of [
     ['default', ''], ['oled', 'ytark-oled-black'], ['glass', 'ytark-liquid-glass'],
     ['oled-glass', 'ytark-oled-black ytark-liquid-glass'],
@@ -44,5 +67,5 @@ try {
   const reduced = await page.locator('.ytLrOverlayPanelRenderer').evaluate(element => ({ background:getComputedStyle(element).backgroundColor, blur:getComputedStyle(element).backdropFilter }));
   assert.equal(reduced.background, 'rgb(20, 24, 32)');
   assert.equal(reduced.blur, 'none');
-  console.log('PASS: default/OLED/glass/combined styles, unchanged media, readable focus, reduced-motion fallback. Fixture screenshots: work/appearance-browser.');
+  console.log('PASS: native browser caption retry timers; default/OLED/glass/combined styles, unchanged media, readable focus, reduced-motion fallback. Fixture screenshots: work/appearance-browser.');
 } finally { await browser.close(); }

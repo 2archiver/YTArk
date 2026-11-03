@@ -1,5 +1,5 @@
-Caption fallback, quality notifications, OLED Black and Liquid Glass.
+Browser-safe caption fallback.
 
-- Native toast thumbnails now initialize their image object correctly.
-- The 4.3 publication record and stale OLED documentation are corrected.
-- Faster startup
+- Caption fallback handles delayed tracks.
+- Browser tests exercise native timers.
+- All 4.4 features remain included.

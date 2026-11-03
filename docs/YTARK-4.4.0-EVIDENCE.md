@@ -26,3 +26,7 @@ Reproduce the optional browser check using installed Playwright and Chromium. `P
 No Android/ADB target is attached. Physical Google TV validation is NOT RUN. In particular: confirm available audio/caption APIs, manual caption priority, no quality notifications during ads, full theme coverage on Home/search/account/settings/player, Liquid Glass performance, and D-pad focus. Record alternating normal/Faster launches locally; the screenshot supplied by the user reports Android 14, 3.78 GB RAM and 24.46 GB storage but does not establish model, CPU or supported APK ABIs.
 
 The repository's candidate CI builds and signs the APK on a same-repository pull request, without publishing a stable release. Android compilation, packaged-manifest/DEX checks and candidate signing must be evaluated from that run; source/fixture tests are not APK or device tests.
+
+## 4.4.1 follow-up
+
+A final real-browser check found that calling native Window timers as controller methods throws Illegal invocation. The caption retry defaults now use arrow wrappers. The browser check exercises delayed audio data with actual Window timers and verifies a single successful caption selection and confirmation; it passes. All requested 4.4 features remain included. The correction uses version 4.4.1 / 4040100 / s46 without moving 4.4 tags.

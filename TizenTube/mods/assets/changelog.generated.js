@@ -4,20 +4,55 @@ export const YTARK_CHANGELOG = {
   "schema": 1,
   "source": "CHANGELOG.md",
   "summaryFallback": "No short highlights available for this version.",
-  "sourceSha256": "4a607546d5d3eb5692523680d81862ee2c46eaed767630298d0a666a40fbc5ee",
+  "sourceSha256": "1244ca189975ca3cb9d5022155af5da4df3bacc9934eabd0e464a97447bdf749",
   "entries": [
     {
-      "version": "4.4.0",
-      "display": "4.4",
+      "version": "4.4.1",
+      "display": "4.4.1",
       "status": "unreleased",
       "date": null,
       "publishedAt": null,
+      "tag": "v4.4.1",
+      "versionCode": 4040100,
+      "scriptTag": "s46",
+      "title": "YTArk 4.4.1",
+      "releaseUrl": null,
+      "facts": "Not yet published. Candidate tag v4.4.1 · versionCode 4040100 · userscript s46 · TizenTubeCobalt v2.0.3.",
+      "summary": "Browser-safe caption fallback.",
+      "sections": [
+        {
+          "heading": "Fixed",
+          "items": [
+            "Caption fallback handles delayed tracks. Caption fallback retries now call Window timers through wrappers; delayed audio/caption data no longer fails with an illegal invocation in a browser."
+          ]
+        },
+        {
+          "heading": "Changed",
+          "items": [
+            "Browser tests exercise native timers. Real-browser regression checks cover delayed track availability with native timers, in addition to the default/OLED/glass/combined appearance matrix.",
+            "All 4.4 features remain included. Includes all 4.4 features: caption fallback, quality notifications, new OLED Black and Liquid Glass settings, Faster startup and improved local diagnostics."
+          ]
+        },
+        {
+          "heading": "Known limitations",
+          "items": [
+            "Physical Google TV caption API compatibility, theme coverage, blur performance and startup speed remain UNVERIFIED."
+          ]
+        }
+      ]
+    },
+    {
+      "version": "4.4.0",
+      "display": "4.4",
+      "status": "published",
+      "date": "2026-11-03",
+      "publishedAt": "2026-11-03T10:48Z",
       "tag": "v4.4.0",
       "versionCode": 4040000,
       "scriptTag": "s45",
       "title": "YTArk 4.4",
-      "releaseUrl": null,
-      "facts": "Not yet published. Candidate tag v4.4.0 · versionCode 4040000 · userscript s45 · TizenTubeCobalt v2.0.3.",
+      "releaseUrl": "https://github.com/2archiver/YTArk/releases/tag/v4.4.0",
+      "facts": "Published 2026-11-03 10:48 UTC as YTArk 4.4 · tag v4.4.0 · versionCode 4040000 · userscript s45 · TizenTubeCobalt v2.0.3.",
       "summary": "Caption fallback, quality notifications, OLED Black and Liquid Glass.",
       "sections": [
         {

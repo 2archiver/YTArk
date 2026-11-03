@@ -25,7 +25,7 @@ export function isManualTrackCommand(command, depth = 0) {
   return Array.isArray(children) && children.slice(0, 32).some(child => isManualTrackCommand(child, depth + 1));
 }
 export class CaptionFallback {
-  constructor({ settings, notify = () => {}, later = setTimeout, cancel = clearTimeout } = {}) {
+  constructor({ settings, notify = () => {}, later = (fn, ms) => setTimeout(fn, ms), cancel = id => clearTimeout(id) } = {}) {
     this.settings = settings;
     this.notify = notify;
     this.later = later;

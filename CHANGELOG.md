@@ -22,9 +22,23 @@ Conventions:
 - Capabilities inherited from TizenTube and TizenTubeCobalt are listed under
   "Upstream base and inherited capabilities", not as YTArk additions.
 
-## [4.4.0] — Unreleased
+## [4.4.1] — Unreleased
 
-> Not yet published. Candidate tag `v4.4.0` · versionCode 4040000 · userscript `s45` · TizenTubeCobalt v2.0.3.
+> Not yet published. Candidate tag `v4.4.1` · versionCode 4040100 · userscript `s46` · TizenTubeCobalt v2.0.3.
+
+Browser-safe caption fallback.
+
+### Fixed
+- **Caption fallback handles delayed tracks.** Caption fallback retries now call Window timers through wrappers; delayed audio/caption data no longer fails with an illegal invocation in a browser.
+### Changed
+- **Browser tests exercise native timers.** Real-browser regression checks cover delayed track availability with native timers, in addition to the default/OLED/glass/combined appearance matrix.
+- **All 4.4 features remain included.** Includes all 4.4 features: caption fallback, quality notifications, new OLED Black and Liquid Glass settings, Faster startup and improved local diagnostics.
+### Known limitations
+- Physical Google TV caption API compatibility, theme coverage, blur performance and startup speed remain UNVERIFIED.
+
+## [4.4.0] — 2026-11-03
+
+> Published 2026-11-03 10:48 UTC as [YTArk 4.4](https://github.com/2archiver/YTArk/releases/tag/v4.4.0) · tag `v4.4.0` · versionCode 4040000 · userscript `s45` · TizenTubeCobalt v2.0.3.
 
 Caption fallback, quality notifications, OLED Black and Liquid Glass.
 
