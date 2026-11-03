@@ -4,20 +4,57 @@ export const YTARK_CHANGELOG = {
   "schema": 1,
   "source": "CHANGELOG.md",
   "summaryFallback": "No short highlights available for this version.",
-  "sourceSha256": "d484687755fd487f0d2a767b7a2496dcd9e1ee6621dce46517d5dfda00b00585",
+  "sourceSha256": "10e81ee03c0d03d9f07fe54e2af1c4a160286959315781d10870b26e6770206f",
   "entries": [
     {
-      "version": "4.4.2",
-      "display": "4.4.2",
+      "version": "4.4.3",
+      "display": "4.4.3",
       "status": "unreleased",
       "date": null,
       "publishedAt": null,
+      "tag": "v4.4.3",
+      "versionCode": 4040300,
+      "scriptTag": "s48",
+      "title": "YTArk 4.4.3",
+      "releaseUrl": null,
+      "facts": "Not yet published. Candidate tag v4.4.3 · versionCode 4040300 · userscript s48 · TizenTubeCobalt v2.0.3.",
+      "summary": "Clearer glass and lighter playback appearance.",
+      "sections": [
+        {
+          "heading": "Fixed",
+          "items": [
+            "Glass stays inside the menu. Theme the bounded side panel rather than its fullscreen renderer. Headers blend into their panel instead of displaying a separate black rectangle.",
+            "OLED clears native gradients. The inline fallback now clears background images as well as setting black, addressing leftover sidebar shading. Native focus highlights stay unchanged.",
+            "Playback avoids live blur. Full-height panels and the sidebar use a static clear tint. Small browsing surfaces may use a four-pixel blur; playback disables it everywhere."
+          ]
+        },
+        {
+          "heading": "Changed",
+          "items": [
+            "Glass uses a clearer tint and subtle edge highlight. This is an Apple-inspired approximation, not Apple's proprietary rendering.",
+            "Focus class changes no longer trigger theme work; route checks repaint only when entering or leaving playback mode. Stream selection, quality notifications, codecs and buffering remain unchanged."
+          ]
+        },
+        {
+          "heading": "Known limitations",
+          "items": [
+            "Browser regression checks cover the reported layout and repaint triggers. Physical Google TV responsiveness, the remaining left-edge shading and final glass appearance remain UNVERIFIED until device confirmation; no measured device speedup is claimed."
+          ]
+        }
+      ]
+    },
+    {
+      "version": "4.4.2",
+      "display": "4.4.2",
+      "status": "published",
+      "date": "2026-11-03",
+      "publishedAt": "2026-11-03T11:47Z",
       "tag": "v4.4.2",
       "versionCode": 4040200,
       "scriptTag": "s47",
       "title": "YTArk 4.4.2",
-      "releaseUrl": null,
-      "facts": "Not yet published. Candidate tag v4.4.2 · versionCode 4040200 · userscript s47 · TizenTubeCobalt v2.0.3.",
+      "releaseUrl": "https://github.com/2archiver/YTArk/releases/tag/v4.4.2",
+      "facts": "Published 2026-11-03 11:47 UTC as YTArk 4.4.2 · tag v4.4.2 · versionCode 4040200 · userscript s47 · TizenTubeCobalt v2.0.3.",
       "summary": "Visible TV themes and leaner playback menus.",
       "sections": [
         {

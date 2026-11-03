@@ -310,7 +310,8 @@ describe('4.4 optional OLED Black and Liquid Glass', () => {
       assert.equal(managedStyles().length, 1);
     }
     const css = styles.buildAppearanceCss();
-    assert.match(css, /@supports \(backdrop-filter: blur\(8px\)\)/);
+    assert.doesNotMatch(styles.buildGlassCss(), /backdrop-filter: blur/);
+    assert.doesNotMatch(styles.buildGlassCss(), /zylon-focus/);
     assert.match(css, /prefers-reduced-transparency/);
     for (const surface of [...styles.OLED_SURFACES, ...styles.GLASS_SURFACES]) {
       assert.doesNotMatch(surface, /video|img|canvas|thumbnail|caption|watch-default|html5-video-player/i);

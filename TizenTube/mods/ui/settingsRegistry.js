@@ -516,7 +516,7 @@ export function buildSettingsTree() {
         {
           id: 'appearance.liquidGlass', type: 'toggle', key: 'liquidGlass',
           title: 'Liquid Glass', icon: 'DARK_THEME',
-          description: 'Glass-inspired menus and notifications. Uses a light blur when supported, with a readable tinted fallback. Combines with OLED Black.',
+          description: 'Clear glass-inspired panels and notifications. Large panels use a static tint; blur is disabled during playback. Combines with OLED Black.',
         },
         {
           id: 'appearance.oledBlack', type: 'toggle', key: 'oledBlack',

@@ -11,16 +11,18 @@ test('semantic TV components are themed without knowing any obfuscated classes a
   const image=new FakeElement('img',d);d.body.appendChild(image);
   const stage=new FakeElement('yt-unified-overlay-stage',d);d.body.appendChild(stage);
   guide.style.setProperty('background-color','rgb(15, 15, 15)');
+  guide.style.setProperty('background-image','linear-gradient(to right, #333, transparent)');
   const settings={oledBlack:true,liquidGlass:false};
   const tasks=[];const w={MutationObserver:FakeMutationObserver,requestAnimationFrame:fn=>{tasks.push(fn);return tasks.length;},cancelAnimationFrame:()=>{},CSS:{supports:()=>false}};
   const theme=createLiveAppearance({documentObject:d,windowObject:w,read:key=>settings[key]});
   theme.start();theme.apply();
   assert.equal(guide.style.getPropertyValue('background-color'),'rgb(0, 0, 0)');
   assert.equal(browse.style.getPropertyValue('background-color'),'rgb(0, 0, 0)');
+  assert.equal(guide.style.getPropertyValue('background-image'),'none');
   assert.equal(video.style.getPropertyValue('background-color'),'rgb(17, 34, 51)');
   assert.equal(stage.style.getPropertyValue('background-color'),'');
   settings.liquidGlass=true;theme.apply();
-  assert.equal(guide.style.getPropertyValue('background-color'),'rgba(24, 28, 36, 0.9)');
+  assert.equal(guide.style.getPropertyValue('background-color'),'rgba(28, 32, 40, 0.38)');
   assert.equal(guide.style.getPropertyValue('backdrop-filter'),'none');
   const previous=theme.status().managedNodes;
   for(let i=0;i<25;i++)theme.apply();
@@ -28,6 +30,7 @@ test('semantic TV components are themed without knowing any obfuscated classes a
   settings.oledBlack=false;settings.liquidGlass=false;theme.apply();
   assert.equal(guide.style.getPropertyValue('background-color'),'rgb(15, 15, 15)');
   assert.equal(guide.style.getPropertyValue('border-top-color'),'');
+  assert.equal(guide.style.getPropertyValue('background-image'),'linear-gradient(to right, #333, transparent)');
   assert.equal(theme.status().managedNodes,0);
   theme.destroy();
 });

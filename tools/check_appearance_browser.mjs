@@ -46,11 +46,11 @@ try {
     await page.evaluate(({ name, classes }) => { document.documentElement.className = classes; document.querySelector('#mode').textContent = name; }, { name, classes });
     const state = await page.evaluate(() => {
       const css = selector => getComputedStyle(document.querySelector(selector));
-      return { body: css('body').backgroundColor, panel:css('.ytLrOverlayPanelRenderer').backgroundColor,
+      return { body: css('body').backgroundColor, panel:css('.ytLrOverlayPanelRendererContent').backgroundColor,
         focus:css('.zylon-focus').color, focusBg:css('.zylon-focus').backgroundColor,
         video:css('video').backgroundColor, videoFilter:css('video').filter,
         caption:css('.caption-window').color, art:css('.art').backgroundImage,
-        blur:css('.ytLrOverlayPanelRenderer').backdropFilter };
+        blur:css('.ytLrOverlayPanelRendererContent').backdropFilter };
     });
     assert.equal(state.video, 'rgb(17, 34, 51)', name);
     assert.equal(state.videoFilter, 'none', name);
@@ -60,11 +60,11 @@ try {
     assert.equal(state.focusBg, 'rgb(241, 241, 241)', name);
     if (name.includes('oled')) assert.equal(state.body, 'rgb(0, 0, 0)', name);
     if (name === 'oled') assert.equal(state.panel, 'rgb(0, 0, 0)');
-    if (name.includes('glass')) assert.match(state.panel, /^rgba\(20, 24, 32, 0\.(86|96)\)$/);
+    if (name.includes('glass')) assert.equal(state.panel, 'rgba(28, 32, 40, 0.38)');
     await page.screenshot({ path: fileURLToPath(new URL(`${name}.png`, output)) });
   }
   await page.emulateMedia({ reducedMotion:'reduce' });
-  const reduced = await page.locator('.ytLrOverlayPanelRenderer').evaluate(element => ({ background:getComputedStyle(element).backgroundColor, blur:getComputedStyle(element).backdropFilter }));
+  const reduced = await page.locator('.ytLrOverlayPanelRendererContent').evaluate(element => ({ background:getComputedStyle(element).backgroundColor, blur:getComputedStyle(element).backdropFilter }));
   assert.equal(reduced.background, 'rgb(20, 24, 32)');
   assert.equal(reduced.blur, 'none');
   console.log('PASS: native browser caption retry timers; default/OLED/glass/combined styles, unchanged media, readable focus, reduced-motion fallback. Fixture screenshots: work/appearance-browser.');

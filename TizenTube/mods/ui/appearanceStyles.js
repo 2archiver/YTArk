@@ -66,8 +66,6 @@ export const OLED_SURFACES = Object.freeze([
   '.ytLrTvBrowseRendererHost', '.ytLrGuideResponseContainer',
   '.ytLrClassicSearchPageHost', '.ytLrAccountSelectorHost',
   '.ytLrOverlayPanelRendererContent', '.ytLrOverlayTwoPanelRendererActionPanel',
-  'ytlr-overlay-panel-renderer',
-  '.ytLrOverlayPanelRenderer', '.ytLrOverlayPanelHeaderRenderer',
   '.ytLrDialogRenderer', '.ytLrAccountPicker', '.ytLrOverlayToastRenderer',
 ]);
 
@@ -84,44 +82,27 @@ ${scoped(ROOT_CLASSES.oled, OLED_SURFACES)} {
   background-color: rgb(0, 0, 0) !important;
   background-image: none !important;
 }
-/* Keep YouTube's high-contrast focus pill, including focused panel rows. */
-${scoped(ROOT_CLASSES.oled, FOCUSED_SELECTORS)} {
-  background-color: rgb(241, 241, 241) !important;
-  color: rgb(15, 15, 15) !important;
-  text-shadow: none;
-}`;
+`;
 }
 
 // Limit glass to solid menu/toast surfaces, never the fullscreen video layer.
 export const GLASS_SURFACES = Object.freeze([
-  '.ytLrOverlayPanelRenderer', 'ytlr-overlay-panel-renderer', '.ytLrDialogRenderer', '.ytLrOverlayToastRenderer',
+  '.ytLrOverlayPanelRendererContent', '.ytLrOverlayTwoPanelRendererActionPanel', '.ytLrDialogRenderer', '.ytLrOverlayToastRenderer',
   'ytlr-guide-response', 'ytlr-search-bar ytlr-text-box', 'yt-overlay-toast-renderer',
 ]);
 export function buildGlassCss() {
   const panels = scoped(ROOT_CLASSES.glass, GLASS_SURFACES);
   return `${panels} {
-  background-color: rgba(20, 24, 32, 0.96) !important;
-  background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.09), rgba(255, 255, 255, 0.01)) !important;
+  background-color: rgba(28, 32, 40, 0.38) !important;
+  background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.035)) !important;
   box-sizing: border-box;
   border: 1px solid rgba(255, 255, 255, 0.22);
   border-radius: 1rem;
   box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.3);
 }
-${scoped(ROOT_CLASSES.glass, ['.ytLrOverlayPanelHeaderRenderer', '.ytLrOverlayPanelRendererContent'])} {
+${scoped(ROOT_CLASSES.glass, ['.ytLrOverlayPanelHeaderRenderer', 'ytlr-overlay-panel-header-renderer'])} {
   background-color: transparent !important;
   background-image: none !important;
-}
-${scoped(ROOT_CLASSES.glass, FOCUSED_SELECTORS)} {
-  background-color: rgb(241, 241, 241) !important;
-  background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.98), rgba(225, 232, 244, 0.86)) !important;
-  color: rgb(15, 15, 15) !important;
-  border-radius: 0.75rem;
-}
-@supports (backdrop-filter: blur(8px)) {
-  ${panels} {
-    background-color: rgba(20, 24, 32, 0.86) !important;
-    backdrop-filter: blur(8px);
-  }
 }
 @media (prefers-reduced-transparency: reduce), (prefers-reduced-motion: reduce) {
   ${panels} {
@@ -133,7 +114,7 @@ ${scoped(ROOT_CLASSES.glass, FOCUSED_SELECTORS)} {
 
 /** Static feature CSS; activates only through the root classes. */
 export function buildAppearanceCss() {
-  return `/* ytark-appearance v4 */
+  return `/* ytark-appearance v5 */
 ${buildOledCss()}
 ${buildGlassCss()}
 ${scoped(ROOT_CLASSES.noScrim, SCRIM_SELECTORS)} {

@@ -37,9 +37,37 @@ try{
  assert.notEqual(oled.browse,'rgb(241, 241, 241)','ancestor focus classes never paint an entire page white');
  await page.evaluate(()=>window.ytarkAppearanceTest.configWrite('liquidGlass',true));
  await page.waitForTimeout(60);const glass=await read();
- assert.equal(glass.guide,'rgba(24, 28, 36, 0.9)');assert.equal(glass.search,'rgba(24, 28, 36, 0.9)');
+ assert.equal(glass.guide,'rgba(28, 32, 40, 0.38)');assert.equal(glass.search,'rgba(28, 32, 40, 0.38)');
  assert.equal(glass.stage,'rgba(0, 0, 0, 0)');
  await page.screenshot({path:fileURLToPath(new URL('on.png',output))});
+ // A fullscreen panel host must never become a glass slab; header and
+ // focus contrast stay native while only the bounded side panel is themed.
+ if (!process.env.YTARK_LIVE_DOM) {
+  const ui = await page.evaluate(() => {
+   const css=s=>getComputedStyle(document.querySelector(s));
+   return {host:css('ytlr-overlay-panel-renderer').backgroundColor,
+    hostBlur:css('ytlr-overlay-panel-renderer').backdropFilter,
+    header:css('ytlr-overlay-panel-header-renderer').backgroundColor,
+    panel:css('.side-panel').backgroundColor, guideBlur:css('ytlr-guide-response').backdropFilter,
+    focus:css('.side-panel .native-focus').backgroundColor};
+  });
+  assert.equal(ui.host,'rgba(0, 0, 0, 0)');assert.equal(ui.hostBlur,'none');
+  assert.equal(ui.header,'rgba(0, 0, 0, 0)');assert.equal(ui.panel,'rgba(28, 32, 40, 0.38)');
+  assert.equal(ui.guideBlur,'none');assert.equal(ui.focus,'rgb(241, 241, 241)');
+  await page.evaluate(() => { document.body.className='WEB_PAGE_TYPE_WATCH'; });
+  await page.waitForTimeout(60);
+  assert.equal(await page.locator('ytlr-text-box').evaluate(el=>getComputedStyle(el).backdropFilter),'none');
+  const writes = await page.evaluate(async()=>{
+   let count=0; const o=new MutationObserver(records=>count+=records.length);
+   o.observe(document.body,{attributes:true,subtree:true,attributeFilter:['style']});
+   const button=document.querySelector('.native-focus');
+   for(let i=0;i<100;i++){button.classList.toggle('zylon-focus');document.body.classList.toggle('focus-change');}
+   await new Promise(r=>setTimeout(r,80));o.disconnect();return count;
+  });
+  assert.equal(writes,0,'focus churn during playback must not repaint themed surfaces');
+  await page.evaluate(() => { document.body.className='WEB_PAGE_TYPE_BROWSE'; });
+  await page.waitForTimeout(60);
+ }
  const managed=glass.status.live.managedNodes;
  await page.evaluate(()=>{
   for(let i=0;i<20;i++){const node=document.querySelector('ytlr-guide-response');const clone=node.cloneNode(true);node.replaceWith(clone);}

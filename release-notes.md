@@ -1,5 +1,5 @@
-Visible TV themes and leaner playback menus.
+Clearer glass and lighter playback appearance.
 
-- Themes follow current TV components.
-- Glass reaches the sidebar and search bar.
-- Playback menus avoid repeated work.
+- Glass stays inside the menu.
+- OLED clears native gradients.
+- Playback avoids live blur.
