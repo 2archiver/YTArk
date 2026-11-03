@@ -191,9 +191,9 @@ describe('About YTArk', () => {
     assert.ok(build.openPopupAction.popup.overlaySectionRenderer.overlay.overlayTwoPanelRenderer
       .actionPanel.overlayPanelRenderer.content.scrollPaneRenderer, 'D-pad scrollable');
     const details = modalItems(build).map(messageText).join('\n');
-    assert.match(details, /Build versionName: 4\.3\.0/);
-    assert.match(details, /versionCode: 4030000/);
-    assert.match(details, /YTArk userscript revision: s44/);
+    assert.match(details, /Build versionName: 4\.4\.0/);
+    assert.match(details, /versionCode: 4040000/);
+    assert.match(details, /YTArk userscript revision: s45/);
     assert.match(details, /Android engine\/base: v2\.0\.3/);
     assert.doesNotMatch(details, /YouTube frontend version: unavailable/i, 'no absent frontend placeholder');
 
@@ -239,7 +239,7 @@ describe('About YTArk', () => {
     resolveCommand({ customAction: { action: 'YTARK_PANEL_SHOW', parameters: { id: 'about' } } });
     const panel = lastModal(recorded, 'ytark-panel-about');
     assert.equal(ytUI.hasVisibleYtarkSettingsPanel(), true, 'About is still part of the YTArk Settings input scope');
-    assert.equal(header(panel).subtitle, 'YTArk 4.3 (build metadata)', "this build's own version, labelled by source");
+    assert.equal(header(panel).subtitle, 'YTArk 4.4 (build metadata)', "this build's own version, labelled by source");
     const lines = modalItems(panel).map(messageText).filter(Boolean);
     assert.ok(lines.some(line => /Independent enhancements for the YouTube TV app/.test(line)), 'identity remains concise');
     assert.ok(!lines.some(line => /what.s new|^• /.test(line)), 'About has no release-highlight wall');
@@ -320,7 +320,8 @@ describe('YTArk and YouTube settings are told apart', () => {
     assert.equal(animation.key, 'fasterStartup');
     assert.equal(configDefault('fasterStartup'), false);
     assert.match(animation.description, /next app start/i);
-    assert.match(animation.description, /normal pacing/i);
+    assert.equal(animation.title, 'Faster startup');
+    assert.match(animation.description, /backs off on slow launches/i);
     const updates = registry.findNode(tree(), 'updates');
     assert.equal(updates.type, 'action');
     assert.equal(updates.command[0].customAction.action, 'YTARK_NATIVE_UPDATES_OPEN');

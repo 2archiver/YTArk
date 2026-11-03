@@ -27,7 +27,14 @@ function safeSession(session) {
     status: statuses.has(session.status) ? session.status : 'invalid',
     clockDomain: session.clockDomain === 'performance' ? 'performance' : 'unavailable',
     clockQuality: session.clockQuality === 'monotonic' ? 'monotonic' : 'unavailable',
-    context: { fasterStartup: typeof session.context.fasterStartup === 'boolean' ? session.context.fasterStartup : null },
+    context: {
+      fasterStartup: typeof session.context.fasterStartup === 'boolean' ? session.context.fasterStartup : null,
+      bundleVersion: /^[0-9]+\.[0-9]+\.[0-9]+$/.test(session.context.bundleVersion || '') ? session.context.bundleVersion : null,
+      baseTag: /^v[0-9]+\.[0-9]+\.[0-9]+$/.test(session.context.baseTag || '') ? session.context.baseTag : null,
+      scriptTag: /^s[0-9]+$/.test(session.context.scriptTag || '') ? session.context.scriptTag : null,
+      startupDestination: ['none', 'home', 'search', 'sports', 'news', 'music', 'podcasts', 'movies', 'gaming', 'live', 'subscriptions', 'library', 'more'].includes(session.context.startupDestination) ? session.context.startupDestination : null,
+      reloadHomeOnStartup: typeof session.context.reloadHomeOnStartup === 'boolean' ? session.context.reloadHomeOnStartup : null,
+    },
     events,
     truncated: session.truncated === true,
   };
@@ -131,6 +138,48 @@ function storageMessage(status) {
   return 'No browser startup sample is available yet.';
 }
 
+/** Readiness includes resolver and startup navigation; controls mounting alone
+ * can finish earlier. Neither interval is Android launch or first video frame. */
+export function measureInteractiveStartup(input) {
+  const measurement = startupMeasurement(input);
+  if (!measurement.measured) return measurement;
+  const events = measurement.session.events;
+  const start = events.find(event => event.event === START_EVENT);
+  const end = events.find(event => event.event === 'startup-readiness-complete');
+  if (!end || end.quality !== 'observed' || !Number.isFinite(end.relativeMs)
+      || end.relativeMs < start.relativeMs || end.relativeMs - start.relativeMs > MAX_INTERVAL_MS) {
+    return { measured: false, reason: 'Interactive readiness timing is unavailable.' };
+  }
+  return { ...measurement, durationMs: end.relativeMs - start.relativeMs };
+}
+function percentile(values, fraction) {
+  const sorted = values.slice().sort((a, b) => a - b);
+  return sorted[Math.max(0, Math.ceil(sorted.length * fraction) - 1)];
+}
+export function startupComparison(inputs, reference) {
+  const context = safeSession(reference)?.context;
+  const keys = ['bundleVersion', 'baseTag', 'scriptTag', 'startupDestination', 'reloadHomeOnStartup'];
+  if (!context || keys.some(key => context[key] === null)) return 'Local comparison: waiting for matched launch samples.';
+  const groups = { normal: [], faster: [] };
+  for (const input of inputs.slice(0, MAX_RETAINED_SESSIONS)) {
+    const measured = measureInteractiveStartup(input);
+    if (!measured.measured || keys.some(key => measured.session.context[key] !== context[key])) continue;
+    const modes = measured.session.events.filter(event => event.event === 'startup-readiness-mode');
+    // Fallback, interrupted and partial runs must never count as successful Faster launches.
+    if (modes.length !== 1) continue;
+    const group = modes[0].outcome === 'faster' && measured.preference === true ? 'faster'
+      : modes[0].outcome === 'normal-disabled' && measured.preference === false ? 'normal' : null;
+    if (group && groups[group].length < 5) groups[group].push(measured.durationMs);
+  }
+  if (groups.normal.length < 3 || groups.faster.length < 3) {
+    return `Local comparison: ${groups.normal.length} normal / ${groups.faster.length} Faster matched launches; record at least 3 of each.`;
+  }
+  return ['Local comparison (same build and startup destination; recent launches):',
+    ...['normal', 'faster'].map(group => `${group === 'normal' ? 'Normal' : 'Faster'}: n=${groups[group].length}, median ${percentile(groups[group], 0.5).toFixed(1)} ms, p95 ${percentile(groups[group], 0.95).toFixed(1)} ms.`),
+    'Browser readiness only; app caching and network conditions can affect these observations.',
+  ].join('\n');
+}
+
 /** Compact, bounded native-overlay summary; no user labels or cross-sample arithmetic. */
 export function summarizeStartupSessions({
   sessions = [], status = 'empty', recordingEnabled = false, activeRecording = false,
@@ -153,7 +202,19 @@ export function summarizeStartupSessions({
     'Scope: userscript evaluation → YTArk controls ready (not Android app start); local only, nothing is sent automatically.',
   ];
   if (!latest) lines.splice(2, 0, storageMessage(status));
-  return lines.slice(0, 8).join('\n');
+  const interactive = latest ? measureInteractiveStartup(latest) : null;
+  lines.push(interactive?.measured
+    ? `Interactive readiness: ${interactive.durationMs.toFixed(1)} ms (includes resolver and startup navigation).`
+    : 'Interactive readiness: unavailable.');
+  if (latest) {
+    const count = name => {
+      const event = latest.events.find(item => item.event === name);
+      return event && /^\d{1,3}$/.test(event.outcome) ? event.outcome : 'unavailable';
+    };
+    lines.push(`Startup checks: ${count('startup-poll-count')} wake-ups; ${count('startup-probe-count')} resolver probes.`);
+  }
+  lines.push(startupComparison(cleanSessions, latest));
+  return lines.slice(0, 15).join('\n');
 }
 
 export function measureStartupSample(session) {

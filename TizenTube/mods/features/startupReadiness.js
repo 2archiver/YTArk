@@ -51,6 +51,7 @@ export function startReadiness({
   onReady = null,
   onInterrupted = null,
   onMode = null,
+  onMetrics = null,
   now = null,
   later = (fn, ms) => setTimeout(fn, ms),
   cancel = (id) => clearTimeout(id),
@@ -106,6 +107,9 @@ export function startReadiness({
   const finish = (gaveUp) => {
     if (stopped) return;
     stop();
+    if (typeof onMetrics === 'function') {
+      try { onMetrics({ ticks: tickCount, scheduledWaitMs: elapsedBySchedule }); } catch (_) { /* optional */ }
+    }
     const callback = gaveUp ? onGiveUp : onReady;
     if (typeof callback === 'function') {
       try { callback(); } catch (_) { /* reporting is best effort */ }

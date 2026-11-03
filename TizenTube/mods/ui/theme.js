@@ -19,7 +19,7 @@ import { ROOT_CLASSES, buildAppearanceCss } from './appearanceStyles.js';
 
 const STYLE_ATTRIBUTE = 'data-ytark-managed-theme';
 const STYLE_SELECTOR = `style[${STYLE_ATTRIBUTE}="true"]`;
-const WATCHED_KEYS = ['removePlayerScrim', 'hidePlayerWatermark'];
+const WATCHED_KEYS = ['removePlayerScrim', 'hidePlayerWatermark', 'oledBlack', 'liquidGlass'];
 const STATIC_CSS = buildAppearanceCss();
 
 let managedStyle = null;
@@ -89,6 +89,8 @@ function setClass(element, name, enabled) {
 /** Desired root classes for the current configuration. */
 export function desiredRootClasses() {
   return {
+    [ROOT_CLASSES.glass]: configRead('liquidGlass') === true,
+    [ROOT_CLASSES.oled]: configRead('oledBlack') === true,
     [ROOT_CLASSES.noScrim]: configRead('removePlayerScrim') === true,
     [ROOT_CLASSES.hideWatermark]: configRead('hidePlayerWatermark') === true,
   };

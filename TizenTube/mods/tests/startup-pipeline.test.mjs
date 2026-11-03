@@ -157,3 +157,16 @@ test('the deferred runner stops as soon as the optional work completes', () => {
   assert.deepEqual(reasons, ['complete']);
   assert.equal(timer, null);
 });
+
+test('Faster startup does not execute optional work in the readiness pass', () => {
+  const calls = [];
+  const stages = createStartupStages({ stages: [
+    { id: 'controls', run: () => { calls.push('controls'); return true; } },
+    { id: 'guide', critical: false, requires: ['controls'], run: () => { calls.push('guide'); return true; } },
+  ] });
+  assert.equal(stages.run(undefined, { includeOptional: false }).criticalDone, true);
+  assert.deepEqual(calls, ['controls']);
+  assert.equal(stages.done, false);
+  stages.run();
+  assert.deepEqual(calls, ['controls', 'guide']);
+});

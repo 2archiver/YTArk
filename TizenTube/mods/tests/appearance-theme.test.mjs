@@ -46,7 +46,7 @@ describe('appearance stylesheet', () => {
     assert.doesNotMatch(css, /#container\s*\{[^}]*background-color:\s*#/i,
       'no content-root colour rule');
     assert.doesNotMatch(css, /background-color:\s*#[0-9a-f]{3,8}/i, 'no custom hex colour paint');
-    assert.doesNotMatch(css, /filter\s*:|backdrop-filter|mix-blend|opacity\s*:/i,
+    assert.doesNotMatch(css, /(?:^|[;{]\s*)filter\s*:|mix-blend|opacity\s*:/im,
       'no filters, tints or opacity changes');
   });
 
@@ -91,7 +91,7 @@ describe('appearance stylesheet', () => {
           }
           // The caption and focus selectors may only appear in text-shadow
           // resets (crisp captions and focus pills), never in anything else.
-          if (/caption|subtitle|zylon-focus|ytLrButtonFocused/i.test(selector)) {
+          if (/caption|subtitle/i.test(selector) || (rootClass === styles.ROOT_CLASSES.noScrim && /zylon-focus|ytLrButtonFocused/i.test(selector))) {
             assert.match(block.declarations, /text-shadow: none/,
               `caption/focus selectors only ever reset the shadow: ${selector}`);
             assert.doesNotMatch(block.declarations, /background|color\s*:/i,
@@ -100,7 +100,7 @@ describe('appearance stylesheet', () => {
         }
       }
     }
-    assert.doesNotMatch(css, /filter\s*:|backdrop-filter|mix-blend|opacity\s*:/i);
+    assert.doesNotMatch(css, /(?:^|[;{]\s*)filter\s*:|mix-blend|opacity\s*:/im);
   });
 
   it('restores its own classes when the frontend rewrites <html class>', () => {
@@ -290,5 +290,31 @@ describe('lifecycle', () => {
     theme.updateStyle();
     assert.equal(managedStyles().length, 1);
     assert.ok(has(styles.ROOT_CLASSES.noScrim));
+  });
+});
+
+describe('4.4 optional OLED Black and Liquid Glass', () => {
+  it('has independent default-off settings and keeps the broken legacy theme retired', () => {
+    assert.equal(configRead('oledBlack'), false);
+    assert.equal(configRead('liquidGlass'), false);
+    assert.equal(configKeys().includes('uiTheme'), false);
+    assert.equal(registry.findNode(registry.buildSettingsTree(), 'appearance.oledBlack').key, 'oledBlack');
+    assert.equal(registry.findNode(registry.buildSettingsTree(), 'appearance.liquidGlass').key, 'liquidGlass');
+  });
+  it('composes both modes live without duplicating styles or touching media', () => {
+    theme.resetThemeForTests(); theme.updateStyle();
+    for (const oled of [false, true]) for (const glass of [false, true]) {
+      configWrite('oledBlack', oled); configWrite('liquidGlass', glass);
+      assert.equal(has(styles.ROOT_CLASSES.oled), oled);
+      assert.equal(has(styles.ROOT_CLASSES.glass), glass);
+      assert.equal(managedStyles().length, 1);
+    }
+    const css = styles.buildAppearanceCss();
+    assert.match(css, /@supports \(backdrop-filter: blur\(8px\)\)/);
+    assert.match(css, /prefers-reduced-transparency/);
+    for (const surface of [...styles.OLED_SURFACES, ...styles.GLASS_SURFACES]) {
+      assert.doesNotMatch(surface, /video|img|canvas|thumbnail|caption|watch-default|html5-video-player/i);
+    }
+    configWrite('oledBlack', false); configWrite('liquidGlass', false);
   });
 });

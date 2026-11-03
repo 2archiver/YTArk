@@ -1,3 +1,4 @@
+import { isManualTrackCommand } from './features/captionFallback.js';
 import { configWrite, configRead } from './config.js';
 import { enablePip } from './features/pictureInPicture.js';
 import modernUI, { optionShow } from './ui/settings.js';
@@ -80,6 +81,10 @@ export function patchResolveCommand() {
                 // remote-input owner before the dismissal continuation opens any
                 // parent panel. An activation spent elsewhere must not leak into
                 // the guide entry.
+                if (isManualTrackCommand(cmd)) {
+                    const handler = window.preferredVideoQualityHandler;
+                    if (handler && handler.captions) handler.captions.respectManualSelection();
+                }
                 noteYtarkModalCommand(cmd);
                 noteResolverCommand(cmd);
                 // An automatic focus-dwell inline preview must never replace

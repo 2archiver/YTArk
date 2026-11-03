@@ -22,7 +22,7 @@
   <a href="https://github.com/2archiver/YTArk"><strong>Star YTArk on GitHub</strong></a>
 </p>
 
-<p align="center"><sub>4.2 source update · Original artwork and TizenTubeCobalt 2.0.3 · Download links list published builds only.</sub></p>
+<p align="center"><sub>4.4 candidate · Caption fallback, OLED Black and Liquid Glass · Download links list published builds only.</sub></p>
 
 YTArk brings the familiar YouTube TV interface to compatible Android TV and Google TV devices, with a remote-friendly settings layer and an Android-native updater. It builds on the TizenTubeCobalt foundation and maintains selected TizenTube userscript features.
 
@@ -45,15 +45,18 @@ These features originate in the upstream TizenTube userscript; YTArk maintains a
 ### YTArk additions
 
 - **Remote-friendly Settings** for playback, appearance, privacy, navigation and app information.
-- **Appearance options**, including OLED Black and supported player/interface adjustments. Cosmetic Premium branding does not provide a subscription or paid YouTube features.
+- **Appearance options**, including a fresh, opt-in OLED Black theme, optional Liquid Glass-inspired menus, and supported player/interface adjustments. Cosmetic Premium branding does not provide a subscription or paid YouTube features.
 - **Android-native updater** for official stable GitHub releases. It validates the update package before handing installation to Android; the operating system still controls authorization and confirmation.
-- **Optional browser diagnostics** for local startup and playback summaries. Collection is off by default; recorded samples stay on the device.
+- **Caption fallback** enables available captions when the preferred audio language is missing; track APIs must be exposed by the frontend.
+- **Quality notifications** briefly show decoded resolution using the YouTube TV toast style.
+- **Faster startup** defers optional guide work and uses bounded readiness checks.
+- **Optional browser diagnostics** separate controls mounting from interactive readiness and compare matched normal/Faster launches locally. Collection is off by default; recorded samples stay on the device.
 
 No Return YouTube Dislike integration is present in the current source tree, so it is not advertised as a YTArk feature.
 
 ## Download and installation
 
-Use the [latest published release](https://github.com/2archiver/YTArk/releases/latest) or browse [all releases](https://github.com/2archiver/YTArk/releases). The 4.2 source update is published by the main-branch build pipeline after package validation.
+Use the [latest published release](https://github.com/2archiver/YTArk/releases/latest) or browse [all releases](https://github.com/2archiver/YTArk/releases). The 4.4 candidate is not a published release. The main-branch build pipeline publishes only after package validation.
 
 YTArk publishes a **32-bit ARM (`armeabi-v7a`) APK only**. There is no `arm64-v8a` APK. A 64-bit processor alone does not establish that the device's Android system can install 32-bit apps; an arm64-only system is not compatible with this package. 4K capability does not change APK architecture.
 

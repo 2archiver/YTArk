@@ -39,6 +39,8 @@ const EVENT_OUTCOMES = Object.freeze({
     'faster', 'normal-disabled', 'normal-interrupted', 'normal-storage-unavailable', 'normal-fallback',
   ],
   'startup-readiness-complete': ['complete'],
+  'startup-poll-count': Array.from({ length: 203 }, (_, index) => String(index)),
+  'startup-probe-count': Array.from({ length: 241 }, (_, index) => String(index)),
   'startup-readiness-timeout': ['timeout'],
   'startup-readiness-interrupted': ['interrupted'],
   'first-remote-input-received': ['dpad-left', 'dpad-right', 'dpad-up', 'dpad-down', 'ok', 'back'],

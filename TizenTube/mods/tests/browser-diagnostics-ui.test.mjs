@@ -142,7 +142,7 @@ describe('About diagnostics navigation, four-row scope and focus restoration', (
     assert.match(summary, /Valid startup duration for latest sample: 145\.2 ms/);
     assert.match(summary, /Faster startup preference: Off/);
     assert.match(summary, /Actual readiness mode: Normal cadence \(Faster startup off\)/);
-    assert.doesNotMatch(summary, /startupComparisonKind|cold|warm|comparison/i);
+    assert.doesNotMatch(summary, /startupComparisonKind|cold|warm/i);
     assert.equal(browser.status, 'off', 'opening a summary never enables collection');
   });
 

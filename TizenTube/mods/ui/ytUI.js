@@ -28,7 +28,7 @@ function showToast(title, subtitle, thumbnails) {
     }
 
     if (thumbnails) {
-        toastCmd.openPopupAction.popup.overlayToastRenderer.image.thumbnails = thumbnails;
+        toastCmd.openPopupAction.popup.overlayToastRenderer.image = { thumbnails };
     }
     resolveCommand(toastCmd);
 }
