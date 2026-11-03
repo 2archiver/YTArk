@@ -65,21 +65,16 @@ class PreferredQualityHandler {
     this.observer = new MutationObserver(records => {
       let relevant = false;
       for (const record of records) {
-        const target = record.target;
-        if (target && target.closest && target.closest(PLAYER_SELECTOR)) {
-          relevant = true;
-          break;
-        }
         for (const node of Array.from(record.addedNodes || [])) {
-          if (isElement(node) && ((node.matches && node.matches(PLAYER_SELECTOR))
-              || (node.querySelector && node.querySelector(PLAYER_SELECTOR)))) {
+          if (isElement(node) && ((node.matches && node.matches(PLAYER_SELECTOR + ', video'))
+              || (node.querySelector && node.querySelector(PLAYER_SELECTOR + ', video')))) {
             relevant = true;
             break;
           }
         }
         if (relevant) break;
         for (const node of Array.from(record.removedNodes || [])) {
-          if (node === this.player || (isElement(node) && node.contains && node.contains(this.player))) {
+          if (node === this.player || node === this.video || (isElement(node) && node.contains && (node.contains(this.player) || node.contains(this.video)))) {
             relevant = true;
             break;
           }

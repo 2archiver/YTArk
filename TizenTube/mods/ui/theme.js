@@ -14,6 +14,7 @@
  * the player or the video and are no longer applied.)
  */
 
+import { createLiveAppearance } from './liveAppearance.js';
 import { configRead, configChangeEmitter } from '../config.js';
 import { ROOT_CLASSES, buildAppearanceCss } from './appearanceStyles.js';
 
@@ -22,6 +23,7 @@ const STYLE_SELECTOR = `style[${STYLE_ATTRIBUTE}="true"]`;
 const WATCHED_KEYS = ['removePlayerScrim', 'hidePlayerWatermark', 'oledBlack', 'liquidGlass'];
 const STATIC_CSS = buildAppearanceCss();
 
+let live = null;
 let managedStyle = null;
 let rootObserver = null;
 let headObserver = null;
@@ -167,6 +169,9 @@ export function updateStyle() {
     }
   }
   applyRootClasses(d);
+  if (!live) live = createLiveAppearance({ documentObject:d, windowObject:typeof window !== 'undefined' ? window : null, read:configRead });
+  live.start();
+  live.apply();
   watchRoot(d);
   watchHead(d);
 }
@@ -178,6 +183,8 @@ function onConfigChange(event) {
 
 /** Test/diagnostic hook: tear down the observer and forget the style element. */
 export function resetThemeForTests() {
+  if (live) live.destroy();
+  live = null;
   if (rootObserver) rootObserver.disconnect();
   rootObserver = null;
   if (headObserver) headObserver.disconnect();
@@ -204,6 +211,7 @@ export function themeStatus(d = doc()) {
   }
   const root = d && d.documentElement;
   return {
+    live: live ? live.status() : null,
     stylePresent: present,
     cssLength,
     restorations: styleRestorations,

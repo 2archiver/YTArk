@@ -1,4 +1,4 @@
-import { describe, it } from 'node:test';
+import { describe, it, test } from 'node:test';
 import assert from 'node:assert/strict';
 
 const storage = {};
@@ -75,4 +75,29 @@ describe('requested stream quality is bounded by available quality data', () => 
     assert.equal(calls.length, 2, 'a second video error must not start another fallback loop');
     handler.destroy();
   });
+});
+
+test('opening a menu inside the player does not reconcile or re-read playback state', async () => {
+  const { FakeElement } = await import('./helpers/fake-dom.mjs');
+  let callback;
+  const previous = globalThis.MutationObserver;
+  globalThis.MutationObserver = class {
+    constructor(fn) { callback = fn; }
+    observe() {}
+    disconnect() {}
+  };
+  const player = new FakeElement('div'); player.setAttribute('class','html5-video-player');
+  Object.assign(player, { getVideoData:()=>({video_id:'one'}), getPlayerStateObject:()=>({isPlaying:false}),
+    getVideoStats:()=>({}), setPlaybackQualityRange:()=>true });
+  const video = new FakeElement('video');
+  const doc = { body:{}, querySelector:selector=>selector==='video'?video:player };
+  const handler = new PreferredQualityHandler(doc);
+  let reconciles=0;handler.reconcilePlayer=()=>{reconciles++;};
+  callback([{target:player,addedNodes:[new FakeElement('ytlr-overlay-panel-renderer')],removedNodes:[]}]);
+  await new Promise(resolve=>setTimeout(resolve,130));
+  assert.equal(reconciles,0);
+  callback([{target:player,addedNodes:[new FakeElement('video')],removedNodes:[]}]);
+  await new Promise(resolve=>setTimeout(resolve,130));
+  assert.equal(reconciles,1,'video replacement remains observable');
+  handler.destroy();globalThis.MutationObserver=previous;
 });

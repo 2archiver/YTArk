@@ -1,3 +1,4 @@
+import { patchPlaybackMenu } from './ui/playbackMenu.js';
 import { isManualTrackCommand } from './features/captionFallback.js';
 import { configWrite, configRead } from './config.js';
 import { enablePip } from './features/pictureInPicture.js';
@@ -133,78 +134,11 @@ export function patchResolveCommand() {
                     customAction(cmd.playlistEditEndpoint.customAction.action, cmd.playlistEditEndpoint.customAction.parameters);
                     return true;
                 } else if (cmd?.openPopupAction?.uniqueId === 'playback-settings') {
-                    // Patch the playback settings popup to use YTArk speed settings
-                    const items = cmd.openPopupAction.popup.overlaySectionRenderer.overlay.overlayTwoPanelRenderer.actionPanel.overlayPanelRenderer.content.overlayPanelItemListRenderer.items;
-                    for (const item of items) {
-                        if (item?.compactLinkRenderer?.icon?.iconType === 'SLOW_MOTION_VIDEO') {
-                            item.compactLinkRenderer.subtitle && (item.compactLinkRenderer.subtitle.simpleText = t('player.withTizenTube'));
-                            item.compactLinkRenderer.serviceEndpoint = {
-                                clickTrackingParams: "null",
-                                signalAction: {
-                                    customAction: {
-                                        action: 'TT_SPEED_SETTINGS_SHOW',
-                                        parameters: []
-                                    }
-                                }
-                            };
-                        }
-                    }
-
-                    cmd.openPopupAction.popup.overlaySectionRenderer.overlay.overlayTwoPanelRenderer.actionPanel.overlayPanelRenderer.content.overlayPanelItemListRenderer.items.splice(2, 0,
-                        buttonItem(
-                            { title: t('player.miniPlayer') },
-                            { icon: 'CLEAR_COOKIES' }, [
-                            {
-                                customAction: {
-                                    action: 'ENTER_MP'
-                                }
-                            }
-                        ])
-                    );
-
-                    cmd.openPopupAction.popup.overlaySectionRenderer.overlay.overlayTwoPanelRenderer.actionPanel.overlayPanelRenderer.content.overlayPanelItemListRenderer.items.splice(3, 0,
-                        buttonItem(
-                            { title: t('player.share.button') },
-                            { icon: 'OPEN_IN_NEW' }, [
-                            {
-                                customAction: {
-                                    action: 'SHARE'
-                                }
-                            }
-                        ])
-                    );
-
-                    cmd.openPopupAction.popup.overlaySectionRenderer.overlay.overlayTwoPanelRenderer.actionPanel.overlayPanelRenderer.content.overlayPanelItemListRenderer.items.splice(3, 0,
-                        buttonItem(
-                            { title: t('player.screenOff') },
-                            { icon: 'EYE_OFF' }, [
-                            {
-                                customAction: {
-                                    action: 'SCREEN_OFF'
-                                }
-                            }
-                        ])
-                    );
-
-                    if (window.h5vcc && window.h5vcc.tizentube && window.h5vcc.tizentube.HasSystemFeature &&
-                        window.h5vcc.tizentube.HasSystemFeature('android.software.picture_in_picture')) {
-                        cmd.openPopupAction.popup.overlaySectionRenderer.overlay.overlayTwoPanelRenderer.actionPanel.overlayPanelRenderer.content.overlayPanelItemListRenderer.items.splice(3, 0,
-                            buttonItem(
-                                { title: t('player.pictureInPicture') },
-                                { icon: 'TV' }, [
-                                {
-                                    customAction: {
-                                        action: 'ENTER_PIP'
-                                    }
-                                },
-                                {
-                                    signalAction: {
-                                        signal: 'POPUP_BACK'
-                                    }
-                                }
-                            ])
-                        );
-                    }
+                    const items = cmd.openPopupAction?.popup?.overlaySectionRenderer?.overlay
+                        ?.overlayTwoPanelRenderer?.actionPanel?.overlayPanelRenderer?.content?.overlayPanelItemListRenderer?.items;
+                    let pip = false;
+                    try { pip = !!window.h5vcc?.tizentube?.HasSystemFeature?.('android.software.picture_in_picture'); } catch (_) { /* unavailable */ }
+                    patchPlaybackMenu(items, { buttonItem, t, pip });
                 } else if (cmd?.watchEndpoint?.videoId) {
                     window.isPipPlaying = false;
                     const ytlrPlayerContainer = document.querySelector('ytlr-player-container');

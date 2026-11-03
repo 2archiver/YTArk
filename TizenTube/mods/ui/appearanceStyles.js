@@ -47,7 +47,8 @@ export const CAPTION_SELECTORS = Object.freeze([
   '.captions-text',
 ]);
 export const FOCUSED_SELECTORS = Object.freeze([
-  '.zylon-focus',
+  'yt-button-container.zylon-focus',
+  'ytlr-button.zylon-focus',
   '.ytLrButtonFocused',
 ]);
 
@@ -58,7 +59,8 @@ function scoped(rootClass, selectors) {
 // Solid TV surfaces only. Never paint watch/player hosts or use universal
 // descendant rules: transparent transport controls must leave the video visible.
 export const OLED_SURFACES = Object.freeze([
-  'body', '#container', 'ytlr-browse', 'ytlr-search', 'ytlr-settings',
+  'body', '#container', '#app-background', 'body.WEB_PAGE_TYPE_BROWSE ytlr-tv-browse-renderer', 'body.WEB_PAGE_TYPE_BROWSE ytlr-tv-surface-content-renderer',
+  'ytlr-guide-response', 'ytlr-classic-search-page', 'ytlr-account-selector', 'yt-overlay-toast-renderer', 'ytlr-browse', 'ytlr-search', 'ytlr-settings',
   '.ytLrGuide', '.ytLrGuideRenderer', '.ytLrGuideContent',
   '.ytLrBrowse', '.ytLrSearch', '.ytLrSettings',
   '.ytLrTvBrowseRendererHost', '.ytLrGuideResponseContainer',
@@ -93,6 +95,7 @@ ${scoped(ROOT_CLASSES.oled, FOCUSED_SELECTORS)} {
 // Limit glass to solid menu/toast surfaces, never the fullscreen video layer.
 export const GLASS_SURFACES = Object.freeze([
   '.ytLrOverlayPanelRenderer', 'ytlr-overlay-panel-renderer', '.ytLrDialogRenderer', '.ytLrOverlayToastRenderer',
+  'ytlr-guide-response', 'ytlr-search-bar ytlr-text-box', 'yt-overlay-toast-renderer',
 ]);
 export function buildGlassCss() {
   const panels = scoped(ROOT_CLASSES.glass, GLASS_SURFACES);

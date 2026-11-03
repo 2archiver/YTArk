@@ -4,20 +4,63 @@ export const YTARK_CHANGELOG = {
   "schema": 1,
   "source": "CHANGELOG.md",
   "summaryFallback": "No short highlights available for this version.",
-  "sourceSha256": "1244ca189975ca3cb9d5022155af5da4df3bacc9934eabd0e464a97447bdf749",
+  "sourceSha256": "d484687755fd487f0d2a767b7a2496dcd9e1ee6621dce46517d5dfda00b00585",
   "entries": [
     {
-      "version": "4.4.1",
-      "display": "4.4.1",
+      "version": "4.4.2",
+      "display": "4.4.2",
       "status": "unreleased",
       "date": null,
       "publishedAt": null,
+      "tag": "v4.4.2",
+      "versionCode": 4040200,
+      "scriptTag": "s47",
+      "title": "YTArk 4.4.2",
+      "releaseUrl": null,
+      "facts": "Not yet published. Candidate tag v4.4.2 · versionCode 4040200 · userscript s47 · TizenTubeCobalt v2.0.3.",
+      "summary": "Visible TV themes and leaner playback menus.",
+      "sections": [
+        {
+          "heading": "Fixed",
+          "items": [
+            "Themes follow current TV components. OLED Black and Liquid Glass use semantic component tags and a reversible inline fallback instead of depending on old CSS class names. Ancestor focus containers are never given a white button fill.",
+            "Glass reaches the sidebar and search bar. Menus and native toasts share the treatment; video, artwork, captions and fullscreen stages remain excluded. Theme state survives component replacement and cloned navigation surfaces, then restores on opt-out.",
+            "Playback menus avoid repeated work. Constructor analysis runs once, cached playback popups cannot accumulate duplicate YTArk actions, and menu DOM changes no longer trigger quality-handler reconciliation."
+          ]
+        },
+        {
+          "heading": "Added",
+          "items": [
+            "Appearance status reports the observed main background, matching TV surfaces and blur/fallback support."
+          ]
+        },
+        {
+          "heading": "Changed",
+          "items": [
+            "Native setting writes normalize known values so string booleans cannot silently leave enabled options inactive.",
+            "The existing stream selection, codecs, buffering and working quality notification behaviour are retained."
+          ]
+        },
+        {
+          "heading": "Known limitations",
+          "items": [
+            "Public guest TV frontend and real-browser checks pass; exact physical Google TV coverage, blur performance and menu timing remain UNVERIFIED until a device run. No measured TV speedup is claimed."
+          ]
+        }
+      ]
+    },
+    {
+      "version": "4.4.1",
+      "display": "4.4.1",
+      "status": "published",
+      "date": "2026-11-03",
+      "publishedAt": "2026-11-03T10:57Z",
       "tag": "v4.4.1",
       "versionCode": 4040100,
       "scriptTag": "s46",
       "title": "YTArk 4.4.1",
-      "releaseUrl": null,
-      "facts": "Not yet published. Candidate tag v4.4.1 · versionCode 4040100 · userscript s46 · TizenTubeCobalt v2.0.3.",
+      "releaseUrl": "https://github.com/2archiver/YTArk/releases/tag/v4.4.1",
+      "facts": "Published 2026-11-03 10:57 UTC as YTArk 4.4.1 · tag v4.4.1 · versionCode 4040100 · userscript s46 · TizenTubeCobalt v2.0.3.",
       "summary": "Browser-safe caption fallback.",
       "sections": [
         {

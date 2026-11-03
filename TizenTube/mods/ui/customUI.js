@@ -19,9 +19,16 @@ function applyPatches() {
 
     const origMethod = window._yttv[methods[0]];
 
+    // Parse the constructor once when installing the patch, never when the
+    // frontend builds/rebuilds controls while a video is playing.
+    const source = origMethod.toString();
+    const isClass = /^class\s/.test(source);
+    let functions;
+    try { functions = extractAssignedFunctions(source); }
+    catch (_) { console.warn('[YTArk] Player controls were left unchanged: source analysis unavailable.'); return; }
+
     function YtlrPlayerActionsContainer() {
         const args = Array.prototype.slice.call(arguments);
-        const isClass = /^class\s/.test(origMethod.toString());
 
         function constructAsNew(ctor, argsList) {
             if (typeof Reflect !== 'undefined' && typeof Reflect.construct === 'function') {
@@ -43,7 +50,6 @@ function applyPatches() {
             inst = this;
         }
 
-        const functions = extractAssignedFunctions(origMethod.toString());
 
         const pipCommand = {
             "type": "TRANSPORT_CONTROLS_BUTTON_TYPE_PIP",
@@ -63,9 +69,9 @@ function applyPatches() {
 
         const settingActionGroup = functions.find(func => {
             return func.rhs.includes('TRANSPORT_CONTROLS_BUTTON_TYPE_PLAYBACK_SETTINGS');
-        }).left.split('.')[1];
+        })?.left?.split('.')[1];
 
-        if (!settingActionGroup) return inst;
+        if (!settingActionGroup || typeof inst[settingActionGroup] !== 'function') return inst;
 
         const origSettingActionGroup = inst[settingActionGroup];
         if (configRead('enableMPButton')) {
@@ -85,7 +91,7 @@ function applyPatches() {
                     return true;
                 }
             }
-        }).left.split('.')[1];
+        })?.left?.split('.')[1];
 
         const nextButtonName = functions.find(func => {
             if (func.rhs.includes('skipPreviousButton')) {
@@ -95,11 +101,11 @@ function applyPatches() {
                     return true;
                 }
             }
-        }).left.split('.')[1];
+        })?.left?.split('.')[1];
 
-        const engagementActionButton = functions.find(func => func.rhs.includes('props.data.engagementActions')).left.split('.')[1];
+        const engagementActionButton = functions.find(func => func.rhs.includes('props.data.engagementActions'))?.left?.split('.')[1];
 
-        if (engagementActionButton && configRead('enableSpeedControlsButton')) {
+        if (engagementActionButton && typeof inst[engagementActionButton] === 'function' && configRead('enableSpeedControlsButton')) {
             const origEngagementActionButton = inst[engagementActionButton];
             inst[engagementActionButton] = function () {
                 const res = origEngagementActionButton.apply(this, arguments);
@@ -123,7 +129,7 @@ function applyPatches() {
             }
         }
 
-        if (!configRead('enableSuperThanksButton')) {
+        if (engagementActionButton && typeof inst[engagementActionButton] === 'function' && !configRead('enableSuperThanksButton')) {
             const origEngagementActionButton = inst[engagementActionButton];
             inst[engagementActionButton] = function () {
                 const res = origEngagementActionButton.apply(this, arguments);
@@ -133,7 +139,7 @@ function applyPatches() {
             }
         }
 
-        if (!configRead('enableAIAskButton')) {
+        if (engagementActionButton && typeof inst[engagementActionButton] === 'function' && !configRead('enableAIAskButton')) {
             const origEngagementActionButton = inst[engagementActionButton];
             inst[engagementActionButton] = function () {
                 const res = origEngagementActionButton.apply(this, arguments);

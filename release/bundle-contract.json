@@ -57,7 +57,10 @@
       "showQualityNotice",
       "Interactive readiness:",
       "ytark-oled-black",
-      "ytark-liquid-glass"
+      "ytark-liquid-glass",
+      "data-ytark-appearance-original",
+      "Appearance status",
+      "TV surfaces reached:"
     ],
     "forbidden": [
       "quickControls",

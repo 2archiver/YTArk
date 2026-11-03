@@ -1,5 +1,5 @@
-Browser-safe caption fallback.
+Visible TV themes and leaner playback menus.
 
-- Caption fallback handles delayed tracks.
-- Browser tests exercise native timers.
-- All 4.4 features remain included.
+- Themes follow current TV components.
+- Glass reaches the sidebar and search bar.
+- Playback menus avoid repeated work.

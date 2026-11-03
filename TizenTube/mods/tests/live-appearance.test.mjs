@@ -1,0 +1,33 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { createLiveAppearance } from '../ui/liveAppearance.js';
+import { createDocument, FakeElement, FakeMutationObserver } from './helpers/fake-dom.mjs';
+
+test('semantic TV components are themed without knowing any obfuscated classes and restore on opt-out', () => {
+  const d=createDocument();d.body.className='WEB_PAGE_TYPE_BROWSE';
+  const guide=new FakeElement('ytlr-guide-response',d);guide.setAttribute('class','obfuscated-a');d.body.appendChild(guide);
+  const browse=new FakeElement('ytlr-tv-browse-renderer',d);browse.setAttribute('class','obfuscated-b');d.body.appendChild(browse);
+  const video=new FakeElement('video',d);video.style.setProperty('background-color','rgb(17, 34, 51)');d.body.appendChild(video);
+  const image=new FakeElement('img',d);d.body.appendChild(image);
+  const stage=new FakeElement('yt-unified-overlay-stage',d);d.body.appendChild(stage);
+  guide.style.setProperty('background-color','rgb(15, 15, 15)');
+  const settings={oledBlack:true,liquidGlass:false};
+  const tasks=[];const w={MutationObserver:FakeMutationObserver,requestAnimationFrame:fn=>{tasks.push(fn);return tasks.length;},cancelAnimationFrame:()=>{},CSS:{supports:()=>false}};
+  const theme=createLiveAppearance({documentObject:d,windowObject:w,read:key=>settings[key]});
+  theme.start();theme.apply();
+  assert.equal(guide.style.getPropertyValue('background-color'),'rgb(0, 0, 0)');
+  assert.equal(browse.style.getPropertyValue('background-color'),'rgb(0, 0, 0)');
+  assert.equal(video.style.getPropertyValue('background-color'),'rgb(17, 34, 51)');
+  assert.equal(stage.style.getPropertyValue('background-color'),'');
+  settings.liquidGlass=true;theme.apply();
+  assert.equal(guide.style.getPropertyValue('background-color'),'rgba(24, 28, 36, 0.9)');
+  assert.equal(guide.style.getPropertyValue('backdrop-filter'),'none');
+  const previous=theme.status().managedNodes;
+  for(let i=0;i<25;i++)theme.apply();
+  assert.equal(theme.status().managedNodes,previous);
+  settings.oledBlack=false;settings.liquidGlass=false;theme.apply();
+  assert.equal(guide.style.getPropertyValue('background-color'),'rgb(15, 15, 15)');
+  assert.equal(guide.style.getPropertyValue('border-top-color'),'');
+  assert.equal(theme.status().managedNodes,0);
+  theme.destroy();
+});

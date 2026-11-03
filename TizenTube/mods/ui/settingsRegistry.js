@@ -1,3 +1,4 @@
+import { themeStatus } from './theme.js';
 /**
  * The shared YTArk settings registry.
  *
@@ -307,6 +308,21 @@ function aboutProjectPanel() {
 }
 
 
+function appearanceStatusPanel() {
+  const status = themeStatus();
+  const live = status.live || {};
+  const text = [
+    `OLED Black: ${configRead('oledBlack') === true ? 'On' : 'Off'}`,
+    `Liquid Glass: ${configRead('liquidGlass') === true ? 'On' : 'Off'}`,
+    `Appearance stylesheet: ${status.stylePresent ? 'present' : 'missing'}`,
+    `TV surfaces reached: ${Number(live.oled) || 0} OLED / ${Number(live.glass) || 0} glass`,
+    `Main background: ${/^rgba?\([0-9., ]+\)$/.test(live.background || '') ? live.background : 'unavailable'}`,
+    `Blur support: ${live.blur ? 'available' : 'tinted fallback'}`,
+    'Counts describe the current screen. Fullscreen stages, video, artwork and captions are excluded.',
+  ];
+  return { title:'Appearance status', content:scrollPaneRenderer(text.map(line => overlayMessageRenderer(line))) };
+}
+
 /** Build the complete settings tree for the current state and device. */
 export function buildSettingsTree() {
   const caps = runtimeCapabilities();
@@ -496,6 +512,7 @@ export function buildSettingsTree() {
       menuId: 'ytark-appearance',
       resetKeys: ['oledBlack', 'liquidGlass', 'hidePlayerWatermark', 'removePlayerScrim', 'enableScreenDimming', 'dimmingTimeout', 'dimmingOpacity', 'enableHideWatchedVideos', 'hideWatchedVideosThreshold', 'hideWatchedVideosPages', 'enableClock', 'isClock12HourFormat', 'clockShowSeconds', 'clockHideWhenVideoPlaying', 'enableShrinkingThumbnails', 'enableHqThumbnails'],
       children: [
+        { id:'appearance.status', type:'panel', title:'Appearance status', icon:'INFO', panel:appearanceStatusPanel },
         {
           id: 'appearance.liquidGlass', type: 'toggle', key: 'liquidGlass',
           title: 'Liquid Glass', icon: 'DARK_THEME',

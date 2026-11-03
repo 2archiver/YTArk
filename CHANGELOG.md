@@ -22,9 +22,27 @@ Conventions:
 - Capabilities inherited from TizenTube and TizenTubeCobalt are listed under
   "Upstream base and inherited capabilities", not as YTArk additions.
 
-## [4.4.1] — Unreleased
+## [4.4.2] — Unreleased
 
-> Not yet published. Candidate tag `v4.4.1` · versionCode 4040100 · userscript `s46` · TizenTubeCobalt v2.0.3.
+> Not yet published. Candidate tag `v4.4.2` · versionCode 4040200 · userscript `s47` · TizenTubeCobalt v2.0.3.
+
+Visible TV themes and leaner playback menus.
+
+### Fixed
+- **Themes follow current TV components.** OLED Black and Liquid Glass use semantic component tags and a reversible inline fallback instead of depending on old CSS class names. Ancestor focus containers are never given a white button fill.
+- **Glass reaches the sidebar and search bar.** Menus and native toasts share the treatment; video, artwork, captions and fullscreen stages remain excluded. Theme state survives component replacement and cloned navigation surfaces, then restores on opt-out.
+- **Playback menus avoid repeated work.** Constructor analysis runs once, cached playback popups cannot accumulate duplicate YTArk actions, and menu DOM changes no longer trigger quality-handler reconciliation.
+### Added
+- Appearance status reports the observed main background, matching TV surfaces and blur/fallback support.
+### Changed
+- Native setting writes normalize known values so string booleans cannot silently leave enabled options inactive.
+- The existing stream selection, codecs, buffering and working quality notification behaviour are retained.
+### Known limitations
+- Public guest TV frontend and real-browser checks pass; exact physical Google TV coverage, blur performance and menu timing remain UNVERIFIED until a device run. No measured TV speedup is claimed.
+
+## [4.4.1] — 2026-11-03
+
+> Published 2026-11-03 10:57 UTC as [YTArk 4.4.1](https://github.com/2archiver/YTArk/releases/tag/v4.4.1) · tag `v4.4.1` · versionCode 4040100 · userscript `s46` · TizenTubeCobalt v2.0.3.
 
 Browser-safe caption fallback.
 

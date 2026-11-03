@@ -572,6 +572,7 @@ export function configKeys() {
 }
 
 export function configWrite(key, value) {
+  value = normalizeValue(key, value);
   localConfig[key] = value;
   persist(key);
   configChangeEmitter.dispatchEvent(makeEvent('configChange', { key, value }));
