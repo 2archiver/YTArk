@@ -9,7 +9,7 @@
 export const YTARK_BUILD_INFO = {
   "schema": 1,
   "versionName": "4.5.0",
-  "displayVersion": "4.5.0",
+  "displayVersion": "4.5",
   "versionCode": 4050000,
   "versionTag": "v4.5.0",
   "scriptTag": "s49",
