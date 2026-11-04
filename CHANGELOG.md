@@ -22,9 +22,33 @@ Conventions:
 - Capabilities inherited from TizenTube and TizenTubeCobalt are listed under
   "Upstream base and inherited capabilities", not as YTArk additions.
 
-## [4.4.3] — Unreleased
+## [4.5.0] — Unreleased
 
-> Not yet published. Candidate tag `v4.4.3` · versionCode 4040300 · userscript `s48` · TizenTubeCobalt v2.0.3.
+> Not yet published. Candidate tag `v4.5.0` · versionCode 4050000 · userscript `s49` · TizenTubeCobalt v2.0.3.
+
+Clearer Liquid Glass, unchanged TV geometry.
+
+### Fixed
+- **Settings panels reduce text bleed-through.** Bounded panels use a more opaque glass surface and supported backdrop blur, making the underlying page less likely to appear as duplicate text. Fullscreen overlay hosts are never painted.
+- **Glass decoration preserves native dimensions.** Edge highlights use inset shadows rather than borders; the implementation does not add padding, margins, width, height or box-sizing overrides.
+- **OLED Black and Glass compose cleanly.** Combined mode keeps bounded panels near true black, while disabling either option restores the original inline styles.
+
+### Changed
+- **Connected tab styling.** Semantic tab lists receive one shared glass surface and selected tabs receive a restrained highlight. The treatment changes paint only, not focus or layout geometry.
+- **Glass reaches bounded overlay menus.** Dialogs, side panels, search surfaces, notifications and bounded player popup menus share the same treatment. Video, artwork, captions, fullscreen stages and player focus controls remain untouched.
+- **Lower-cost playback behaviour.** Large watch-page surfaces use a static tint; blur is limited to supported non-playback panels and small browsing surfaces.
+
+### Validation
+- Host regression coverage checks media exclusion, reversible styles, no borders or box-sizing overrides, stable managed-node counts and the connected-tab paint treatment.
+- Release candidate CI must pass the changelog, bundle, userscript, Android updater, ARMv7 package and signing checks before publication.
+
+### Known limitations
+- The Settings double-text report and final tab/player appearance still require physical Google TV confirmation. Physical Google TV appearance and performance remain UNVERIFIED pending device testing; no device-level fix or performance gain is claimed.
+- Player transport buttons are deliberately not repainted: their native focus and readability states remain intact. Glass is applied to bounded player popup/side panels only.
+
+## [4.4.3] — 2026-11-03
+
+> Published 2026-11-03 12:49 UTC as [YTArk 4.4.3](https://github.com/2archiver/YTArk/releases/tag/v4.4.3) · tag `v4.4.3` · versionCode 4040300 · userscript `s48` · TizenTubeCobalt v2.0.3.
 
 Clearer glass and lighter playback appearance.
 
@@ -32,9 +56,11 @@ Clearer glass and lighter playback appearance.
 - **Glass stays inside the menu.** Theme the bounded side panel rather than its fullscreen renderer. Headers blend into their panel instead of displaying a separate black rectangle.
 - **OLED clears native gradients.** The inline fallback now clears background images as well as setting black, addressing leftover sidebar shading. Native focus highlights stay unchanged.
 - **Playback avoids live blur.** Full-height panels and the sidebar use a static clear tint. Small browsing surfaces may use a four-pixel blur; playback disables it everywhere.
+
 ### Changed
 - Glass uses a clearer tint and subtle edge highlight. This is an Apple-inspired approximation, not Apple's proprietary rendering.
 - Focus class changes no longer trigger theme work; route checks repaint only when entering or leaving playback mode. Stream selection, quality notifications, codecs and buffering remain unchanged.
+
 ### Known limitations
 - Browser regression checks cover the reported layout and repaint triggers. Physical Google TV responsiveness, the remaining left-edge shading and final glass appearance remain UNVERIFIED until device confirmation; no measured device speedup is claimed.
 

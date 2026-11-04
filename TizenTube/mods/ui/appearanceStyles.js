@@ -87,26 +87,52 @@ ${scoped(ROOT_CLASSES.oled, OLED_SURFACES)} {
 
 // Limit glass to solid menu/toast surfaces, never the fullscreen video layer.
 export const GLASS_SURFACES = Object.freeze([
-  '.ytLrOverlayPanelRendererContent', '.ytLrOverlayTwoPanelRendererActionPanel', '.ytLrDialogRenderer', '.ytLrOverlayToastRenderer',
+  '.ytLrDialogRenderer', '.ytLrOverlayToastRenderer',
   'ytlr-guide-response', 'ytlr-search-bar ytlr-text-box', 'yt-overlay-toast-renderer',
+  '[role="tablist"]',
 ]);
 export function buildGlassCss() {
   const panels = scoped(ROOT_CLASSES.glass, GLASS_SURFACES);
   return `${panels} {
-  background-color: rgba(28, 32, 40, 0.38) !important;
-  background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.035)) !important;
-  box-sizing: border-box;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: 1rem;
-  box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.3);
+  background-color: rgba(18, 22, 30, 0.92) !important;
+  background-image: linear-gradient(145deg, rgba(255, 255, 255, 0.19), rgba(255, 255, 255, 0.055) 48%, rgba(255, 255, 255, 0.025)) !important;
+  /* Inset edge treatment never changes the native component's box size. */
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22), 0 0.5rem 1.5rem rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(10px);
 }
 ${scoped(ROOT_CLASSES.glass, ['.ytLrOverlayPanelHeaderRenderer', 'ytlr-overlay-panel-header-renderer'])} {
   background-color: transparent !important;
   background-image: none !important;
 }
+html.${ROOT_CLASSES.glass} [role="tablist"] {
+  background-color: rgba(18, 22, 30, 0.92) !important;
+  background-image: linear-gradient(145deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.04)) !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.16);
+  backdrop-filter: blur(8px);
+}
+html.${ROOT_CLASSES.glass} [role="tablist"] > [role="tab"] {
+  background-color: transparent !important;
+  background-image: none !important;
+  box-shadow: none;
+}
+html.${ROOT_CLASSES.glass} [role="tablist"] > [role="tab"][aria-selected="true"],
+html.${ROOT_CLASSES.glass} [role="tab"][aria-selected="true"] {
+  background-color: rgba(255, 255, 255, 0.16) !important;
+  background-image: linear-gradient(145deg, rgba(255, 255, 255, 0.20), rgba(255, 255, 255, 0.06)) !important;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.24);
+}
+html.${ROOT_CLASSES.oled}.${ROOT_CLASSES.glass} ${panels} {
+  background-color: rgba(0, 0, 0, 0.94) !important;
+}
 @media (prefers-reduced-transparency: reduce), (prefers-reduced-motion: reduce) {
   ${panels} {
     background-color: rgb(20, 24, 32) !important;
+    background-image: none !important;
+    backdrop-filter: none;
+  }
+  html.${ROOT_CLASSES.glass} [role="tablist"] {
+    background-color: rgb(20, 24, 32) !important;
+    background-image: none !important;
     backdrop-filter: none;
   }
 }`;

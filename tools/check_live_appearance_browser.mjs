@@ -37,7 +37,7 @@ try{
  assert.notEqual(oled.browse,'rgb(241, 241, 241)','ancestor focus classes never paint an entire page white');
  await page.evaluate(()=>window.ytarkAppearanceTest.configWrite('liquidGlass',true));
  await page.waitForTimeout(60);const glass=await read();
- assert.equal(glass.guide,'rgba(28, 32, 40, 0.38)');assert.equal(glass.search,'rgba(28, 32, 40, 0.38)');
+ assert.equal(glass.guide,'rgba(18, 22, 30, 0.92)');assert.equal(glass.search,'rgba(28, 32, 40, 0.38)');
  assert.equal(glass.stage,'rgba(0, 0, 0, 0)');
  await page.screenshot({path:fileURLToPath(new URL('on.png',output))});
  // A fullscreen panel host must never become a glass slab; header and

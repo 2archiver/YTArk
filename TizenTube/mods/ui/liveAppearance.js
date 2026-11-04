@@ -9,11 +9,12 @@ export const LIVE_OLED = [
 export const LIVE_GLASS = [
   'ytlr-guide-response', 'ytlr-search-bar ytlr-text-box',
   'yt-overlay-toast-renderer',
+  '[role="tablist"]', '[role="tablist"] > [role="tab"]', '[role="tab"][aria-selected="true"]',
 ];
 const PANEL_HEADER = 'ytlr-overlay-panel-header-renderer';
 const INTEREST = [...LIVE_OLED, ...LIVE_GLASS, PANEL_HEADER].join(',');
 const ORIGINAL_ATTRIBUTE = 'data-ytark-appearance-original';
-const SAFE_PROPERTY = /^(?:background-(?:color|image)|box-sizing|backdrop-filter|border-(?:(?:top|right|bottom|left)-(?:color|width|style)|(?:top-left|top-right|bottom-left|bottom-right)-radius))$/;
+const SAFE_PROPERTY = /^(?:background-(?:color|image)|box-sizing|backdrop-filter|box-shadow|border-(?:(?:top|right|bottom|left)-(?:color|width|style)|(?:top-left|top-right|bottom-left|bottom-right)-radius))$/;
 const MEDIA = 'video, img, canvas, svg, ytlr-thumbnail-details, .caption-window, .captions-text';
 export function createLiveAppearance({ documentObject, read, windowObject = null } = {}) {
   const d = documentObject;
@@ -72,9 +73,16 @@ export function createLiveAppearance({ documentObject, read, windowObject = null
   function blurSupported() { try { return !!w?.CSS?.supports?.('backdrop-filter', 'blur(4px)'); } catch (_) { return false; } }
   const isWatch = () => /WEB_PAGE_TYPE_(WATCH|SHORTS)/.test(d.body.className || '');
   function panelSurfaces() {
-    const panels = new Set(nodes('.ytLrOverlayPanelRendererContent, .ytLrOverlayTwoPanelRendererActionPanel'));
     const viewport = w?.innerWidth || d.documentElement?.clientWidth || 0;
-    if (!viewport) return [...panels];
+    const height = w?.innerHeight || d.documentElement?.clientHeight || 0;
+    if (!viewport) return [];
+    // Renderer content can itself be a fullscreen host. Only theme a visibly
+    // bounded panel; never paint the full-screen overlay that contains it.
+    const panels = new Set(nodes('.ytLrOverlayPanelRendererContent, .ytLrOverlayTwoPanelRendererActionPanel').filter(node => {
+      const rect = node.getBoundingClientRect?.();
+      return !!rect && rect.width >= viewport * 0.15 && rect.width < viewport * 0.85
+        && (!height || rect.height <= height * 1.05);
+    }));
     for (const header of nodes(PANEL_HEADER)) {
       // The semantic panel renderer may span the entire screen. Find the
       // bounded side panel around its header, never style the fullscreen host.
@@ -120,21 +128,36 @@ export function createLiveAppearance({ documentObject, read, windowObject = null
         let reduce = false;
         try { reduce = w?.matchMedia?.('(prefers-reduced-transparency: reduce), (prefers-reduced-motion: reduce)').matches === true; } catch (_) { /* unavailable */ }
         for (const node of [...nodes(LIVE_GLASS.join(',')), ...panels]) {
+          const panel = panels.includes(node) || node.matches?.('.ytLrDialogRenderer');
+          const oled = read('oledBlack') === true;
+          // A translucent panel over sharp text creates the reported double-text
+          // effect. Keep enough opacity to occlude the page beneath it, then use
+          // a restrained blur only where the browser actually supports it.
+          const tabList = node.matches?.('[role="tablist"]');
+          const tab = node.matches?.('[role="tab"]');
+          const selectedTab = tab && node.getAttribute?.('aria-selected') === 'true';
           const values = {
-            'background-color': reduce ? 'rgb(24, 28, 36)' : 'rgba(28, 32, 40, 0.38)',
-            'background-image':'linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.035))',
-            'box-sizing':'border-box',
+            'background-color': tab && !selectedTab
+              ? 'transparent'
+              : tab ? 'rgba(255, 255, 255, 0.16)'
+                : reduce ? (oled ? 'rgb(0, 0, 0)' : 'rgb(20, 24, 32)')
+                  : (oled ? 'rgba(0, 0, 0, 0.94)' : 'rgba(18, 22, 30, 0.92)'),
+            'background-image': tab && !selectedTab
+              ? 'none'
+              : reduce ? 'none'
+                : 'linear-gradient(145deg, rgba(255, 255, 255, 0.19), rgba(255, 255, 255, 0.055) 48%, rgba(255, 255, 255, 0.025))',
           };
-          for (const side of ['top','right','bottom','left']) {
-            values[`border-${side}-color`]='rgba(255, 255, 255, 0.3)';
-            values[`border-${side}-width`]='1px';
-            values[`border-${side}-style`]='solid';
-          }
-          for (const corner of ['top-left','top-right','bottom-left','bottom-right']) values[`border-${corner}-radius`]='1.25rem';
+          if (tabList) values['box-shadow'] = 'inset 0 0 0 1px rgba(255, 255, 255, 0.16)';
+          else if (tab && !selectedTab) values['box-shadow'] = 'none';
+          else if (tab) values['box-shadow'] = 'inset 0 0 0 1px rgba(255, 255, 255, 0.24)';
+          // Decorative edge is an inset shadow, not a CSS border: it cannot
+          // consume layout space or change the dimensions of the native panel.
+          values['box-shadow']='inset 0 0 0 1px rgba(255, 255, 255, 0.22), 0 0.5rem 1.5rem rgba(0, 0, 0, 0.22)';
           // Full-height menus and the guide never blur the underlying page.
           // During playback even small surfaces use the static clear tint.
           const small = node.matches?.('ytlr-search-bar ytlr-text-box, yt-overlay-toast-renderer');
-          values['backdrop-filter']=counts.blur && !reduce && !watch && small ? 'blur(4px)' : 'none';
+          values['backdrop-filter'] = counts.blur && !reduce && !watch && (panel || small)
+            ? (panel ? 'blur(10px)' : 'blur(6px)') : 'none';
           paint(node, values);
           counts.glass += 1;
         }

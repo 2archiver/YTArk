@@ -46,11 +46,11 @@ try {
     await page.evaluate(({ name, classes }) => { document.documentElement.className = classes; document.querySelector('#mode').textContent = name; }, { name, classes });
     const state = await page.evaluate(() => {
       const css = selector => getComputedStyle(document.querySelector(selector));
-      return { body: css('body').backgroundColor, panel:css('.ytLrOverlayPanelRendererContent').backgroundColor,
+      return { body: css('body').backgroundColor, panel:css('.ytLrDialogRenderer').backgroundColor,
         focus:css('.zylon-focus').color, focusBg:css('.zylon-focus').backgroundColor,
         video:css('video').backgroundColor, videoFilter:css('video').filter,
         caption:css('.caption-window').color, art:css('.art').backgroundImage,
-        blur:css('.ytLrOverlayPanelRendererContent').backdropFilter };
+        blur:css('.ytLrDialogRenderer').backdropFilter };
     });
     assert.equal(state.video, 'rgb(17, 34, 51)', name);
     assert.equal(state.videoFilter, 'none', name);
@@ -60,7 +60,8 @@ try {
     assert.equal(state.focusBg, 'rgb(241, 241, 241)', name);
     if (name.includes('oled')) assert.equal(state.body, 'rgb(0, 0, 0)', name);
     if (name === 'oled') assert.equal(state.panel, 'rgb(0, 0, 0)');
-    if (name.includes('glass')) assert.equal(state.panel, 'rgba(28, 32, 40, 0.38)');
+    if (name === 'glass') assert.equal(state.panel, 'rgba(18, 22, 30, 0.92)');
+    if (name === 'oled-glass') assert.equal(state.panel, 'rgba(0, 0, 0, 0.94)');
     await page.screenshot({ path: fileURLToPath(new URL(`${name}.png`, output)) });
   }
   await page.emulateMedia({ reducedMotion:'reduce' });
