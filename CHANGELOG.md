@@ -43,7 +43,7 @@ Clearer Liquid Glass, unchanged TV geometry.
 - Release candidate CI must pass the changelog, bundle, userscript, Android updater, ARMv7 package and signing checks before publication.
 
 ### Known limitations
-- The Settings double-text report and final tab/player appearance still require physical Google TV confirmation. The more opaque surface is intended to reduce content bleed-through; no device-level fix or performance gain is claimed until tested.
+- The Settings double-text report and final tab/player appearance still require physical Google TV confirmation. Physical Google TV appearance and performance remain UNVERIFIED pending device testing; no device-level fix or performance gain is claimed.
 - Player transport buttons are deliberately not repainted: their native focus and readability states remain intact. Glass is applied to bounded player popup/side panels only.
 
 ## [4.4.3] — 2026-11-03
