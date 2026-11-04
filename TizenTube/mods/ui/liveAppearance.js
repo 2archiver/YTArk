@@ -128,19 +128,28 @@ export function createLiveAppearance({ documentObject, read, windowObject = null
         let reduce = false;
         try { reduce = w?.matchMedia?.('(prefers-reduced-transparency: reduce), (prefers-reduced-motion: reduce)').matches === true; } catch (_) { /* unavailable */ }
         for (const node of [...nodes(LIVE_GLASS.join(',')), ...panels]) {
-          const panel = panels.includes(node) || node.matches?.('.ytLrDialogRenderer, [role="tablist"]');
+          const panel = panels.includes(node) || node.matches?.('.ytLrDialogRenderer');
           const oled = read('oledBlack') === true;
           // A translucent panel over sharp text creates the reported double-text
           // effect. Keep enough opacity to occlude the page beneath it, then use
           // a restrained blur only where the browser actually supports it.
+          const tabList = node.matches?.('[role="tablist"]');
+          const tab = node.matches?.('[role="tab"]');
+          const selectedTab = tab && node.getAttribute?.('aria-selected') === 'true';
           const values = {
-            'background-color': reduce
-              ? (oled ? 'rgb(0, 0, 0)' : 'rgb(20, 24, 32)')
-              : (oled ? 'rgba(0, 0, 0, 0.94)' : 'rgba(18, 22, 30, 0.92)'),
-            'background-image': reduce
+            'background-color': tab && !selectedTab
+              ? 'transparent'
+              : tab ? 'rgba(255, 255, 255, 0.16)'
+                : reduce ? (oled ? 'rgb(0, 0, 0)' : 'rgb(20, 24, 32)')
+                  : (oled ? 'rgba(0, 0, 0, 0.94)' : 'rgba(18, 22, 30, 0.92)'),
+            'background-image': tab && !selectedTab
               ? 'none'
-              : 'linear-gradient(145deg, rgba(255, 255, 255, 0.19), rgba(255, 255, 255, 0.055) 48%, rgba(255, 255, 255, 0.025))',
+              : reduce ? 'none'
+                : 'linear-gradient(145deg, rgba(255, 255, 255, 0.19), rgba(255, 255, 255, 0.055) 48%, rgba(255, 255, 255, 0.025))',
           };
+          if (tabList) values['box-shadow'] = 'inset 0 0 0 1px rgba(255, 255, 255, 0.16)';
+          else if (tab && !selectedTab) values['box-shadow'] = 'none';
+          else if (tab) values['box-shadow'] = 'inset 0 0 0 1px rgba(255, 255, 255, 0.24)';
           // Decorative edge is an inset shadow, not a CSS border: it cannot
           // consume layout space or change the dimensions of the native panel.
           values['box-shadow']='inset 0 0 0 1px rgba(255, 255, 255, 0.22), 0 0.5rem 1.5rem rgba(0, 0, 0, 0.22)';
