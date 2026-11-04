@@ -922,7 +922,7 @@ class PublicationTests(PublishReleaseTestCase):
                 manifest=str(rebuilt.manifest), run_id=rebuilt.run_id,
             )
         self.assertIn("next patch version", str(caught.exception))
-        self.assertIn("4040400", str(caught.exception))
+        self.assertIn("4050100", str(caught.exception))
 
     def test_repair_guard_rejects_bytes_the_published_checksums_refuse(self):
         """The published checksum file decides whether a rebuild may repair an APK."""
