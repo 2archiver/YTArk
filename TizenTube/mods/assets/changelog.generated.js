@@ -4,7 +4,7 @@ export const YTARK_CHANGELOG = {
   "schema": 1,
   "source": "CHANGELOG.md",
   "summaryFallback": "No short highlights available for this version.",
-  "sourceSha256": "c575215c78945772bed7a57a4a8fab672bd676cd88bed3ba642c9ff33b1da00f",
+  "sourceSha256": "3b2bcf0f6248a21ffd441ace8ac402392b364a2ce6909dc13aa3f31326e07662",
   "entries": [
     {
       "version": "4.5.0",
@@ -46,7 +46,7 @@ export const YTARK_CHANGELOG = {
         {
           "heading": "Known limitations",
           "items": [
-            "The Settings double-text report and final tab/player appearance still require physical Google TV confirmation. The more opaque surface is intended to reduce content bleed-through; no device-level fix or performance gain is claimed until tested.",
+            "The Settings double-text report and final tab/player appearance still require physical Google TV confirmation. Physical Google TV appearance and performance remain UNVERIFIED pending device testing; no device-level fix or performance gain is claimed.",
             "Player transport buttons are deliberately not repainted: their native focus and readability states remain intact. Glass is applied to bounded player popup/side panels only."
           ]
         }
