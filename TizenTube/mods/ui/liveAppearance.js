@@ -72,9 +72,16 @@ export function createLiveAppearance({ documentObject, read, windowObject = null
   function blurSupported() { try { return !!w?.CSS?.supports?.('backdrop-filter', 'blur(4px)'); } catch (_) { return false; } }
   const isWatch = () => /WEB_PAGE_TYPE_(WATCH|SHORTS)/.test(d.body.className || '');
   function panelSurfaces() {
-    const panels = new Set(nodes('.ytLrOverlayPanelRendererContent, .ytLrOverlayTwoPanelRendererActionPanel'));
     const viewport = w?.innerWidth || d.documentElement?.clientWidth || 0;
-    if (!viewport) return [...panels];
+    const height = w?.innerHeight || d.documentElement?.clientHeight || 0;
+    if (!viewport) return [];
+    // Renderer content can itself be a fullscreen host. Only theme a visibly
+    // bounded panel; never paint the full-screen overlay that contains it.
+    const panels = new Set(nodes('.ytLrOverlayPanelRendererContent, .ytLrOverlayTwoPanelRendererActionPanel').filter(node => {
+      const rect = node.getBoundingClientRect?.();
+      return !!rect && rect.width >= viewport * 0.15 && rect.width < viewport * 0.85
+        && (!height || rect.height <= height * 1.05);
+    }));
     for (const header of nodes(PANEL_HEADER)) {
       // The semantic panel renderer may span the entire screen. Find the
       // bounded side panel around its header, never style the fullscreen host.
@@ -123,14 +130,10 @@ export function createLiveAppearance({ documentObject, read, windowObject = null
           const values = {
             'background-color': reduce ? 'rgb(24, 28, 36)' : 'rgba(28, 32, 40, 0.38)',
             'background-image':'linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.035))',
-            'box-sizing':'border-box',
-          };
-          for (const side of ['top','right','bottom','left']) {
-            values[`border-${side}-color`]='rgba(255, 255, 255, 0.3)';
-            values[`border-${side}-width`]='1px';
-            values[`border-${side}-style`]='solid';
-          }
-          for (const corner of ['top-left','top-right','bottom-left','bottom-right']) values[`border-${corner}-radius`]='1.25rem';
+            };
+          // Decorative edge is an inset shadow, not a CSS border: it cannot
+          // consume layout space or change the dimensions of the native panel.
+          values['box-shadow']='inset 0 0 0 1px rgba(255, 255, 255, 0.22), 0 0.5rem 1.5rem rgba(0, 0, 0, 0.22)';
           // Full-height menus and the guide never blur the underlying page.
           // During playback even small surfaces use the static clear tint.
           const small = node.matches?.('ytlr-search-bar ytlr-text-box, yt-overlay-toast-renderer');
