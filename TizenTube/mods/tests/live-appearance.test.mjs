@@ -10,6 +10,8 @@ test('semantic TV components are themed without knowing any obfuscated classes a
   const video=new FakeElement('video',d);video.style.setProperty('background-color','rgb(17, 34, 51)');d.body.appendChild(video);
   const image=new FakeElement('img',d);d.body.appendChild(image);
   const stage=new FakeElement('yt-unified-overlay-stage',d);d.body.appendChild(stage);
+  const tabList=new FakeElement('div',d);tabList.setAttribute('role','tablist');d.body.appendChild(tabList);
+  const tab=new FakeElement('button',d);tab.setAttribute('role','tab');tab.setAttribute('aria-selected','true');tabList.appendChild(tab);
   guide.style.setProperty('background-color','rgb(15, 15, 15)');
   guide.style.setProperty('background-image','linear-gradient(to right, #333, transparent)');
   const settings={oledBlack:true,liquidGlass:false};
@@ -27,6 +29,9 @@ test('semantic TV components are themed without knowing any obfuscated classes a
   assert.match(guide.style.getPropertyValue('box-shadow'),/inset 0 0 0 1px/);
   assert.equal(guide.style.getPropertyValue('box-sizing'),'');
   assert.equal(guide.style.getPropertyValue('border-top-width'),'');
+  assert.equal(tabList.style.getPropertyValue('background-color'),'rgba(18, 22, 30, 0.92)');
+  assert.equal(tab.style.getPropertyValue('background-color'),'rgba(255, 255, 255, 0.16)');
+  assert.equal(tab.style.getPropertyValue('box-sizing'),'');
   const previous=theme.status().managedNodes;
   for(let i=0;i<25;i++)theme.apply();
   assert.equal(theme.status().managedNodes,previous);
