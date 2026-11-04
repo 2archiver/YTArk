@@ -49,7 +49,7 @@ class Armv7OnlyReleaseContractTests(unittest.TestCase):
         self.assertEqual(config["DISPLAY_VERSION"], "4.5")
         self.assertEqual(config["VERSION_CODE"], "4050000")
         self.assertEqual(config["VERSION_TAG"], "v4.5.0")
-        self.assertEqual(config["RELEASE_NAME"], "YTArk 4.5.0")
+        self.assertEqual(config["RELEASE_NAME"], "YTArk 4.5")
         # The public filename carries the full ABI suffix; the internal
         # architecture key stays in build tooling and CLI flags.
         self.assertEqual(config["APK_ARMV7"], "YTArk-v4.5.0-armeabi-v7a.apk")
