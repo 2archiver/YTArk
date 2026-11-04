@@ -28,12 +28,12 @@ test('semantic TV components are themed without knowing any obfuscated classes a
   assert.equal(boundedPanel.style.getPropertyValue('background-color'),'rgb(0, 0, 0)');
   assert.equal(fullscreenPanel.style.getPropertyValue('background-color'),'');
   settings.liquidGlass=true;theme.apply();
-  assert.equal(guide.style.getPropertyValue('background-color'),'rgba(18, 22, 30, 0.92)');
+  assert.equal(guide.style.getPropertyValue('background-color'),'rgba(0, 0, 0, 0.94)');
   assert.equal(guide.style.getPropertyValue('backdrop-filter'),'none');
   assert.match(guide.style.getPropertyValue('box-shadow'),/inset 0 0 0 1px/);
   assert.equal(guide.style.getPropertyValue('box-sizing'),'');
   assert.equal(guide.style.getPropertyValue('border-top-width'),'');
-  assert.equal(tabList.style.getPropertyValue('background-color'),'rgba(18, 22, 30, 0.92)');
+  assert.equal(tabList.style.getPropertyValue('background-color'),'rgba(0, 0, 0, 0.94)');
   assert.equal(tab.style.getPropertyValue('background-color'),'rgba(255, 255, 255, 0.16)');
   assert.equal(tab.style.getPropertyValue('box-sizing'),'');
   assert.equal(boundedPanel.style.getPropertyValue('background-color'),'rgba(0, 0, 0, 0.94)');
