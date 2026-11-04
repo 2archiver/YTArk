@@ -134,10 +134,10 @@ class Armv7OnlyReleaseContractTests(unittest.TestCase):
             releases_path.write_text(json.dumps([releases[:5], releases[5:]]), encoding="utf-8")
             validate_release.check_version(str(latest_path), str(releases_path))
 
-            # A published release above the candidate (4.4.4 = 4040400) must block it.
+            # A published release above the candidate (4.5.1 = 4050100) must block it.
             too_high = dict(releases[1])
-            too_high["tag_name"] = "v4.4.4"
-            too_high["body"] = "Version 4.4.4 (versionCode 4040400)"
+            too_high["tag_name"] = "v4.5.1"
+            too_high["body"] = "Version 4.5.1 (versionCode 4050100)"
             releases_path.write_text(json.dumps(releases + [too_high]), encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "must exceed every published release|must be newer"):
                 validate_release.check_version(str(latest_path), str(releases_path))
