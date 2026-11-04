@@ -46,6 +46,24 @@ Clearer Liquid Glass, unchanged TV geometry.
 - The Settings double-text report and final tab/player appearance still require physical Google TV confirmation. The more opaque surface is intended to reduce content bleed-through; no device-level fix or performance gain is claimed until tested.
 - Player transport buttons are deliberately not repainted: their native focus and readability states remain intact. Glass is applied to bounded player popup/side panels only.
 
+## [4.4.3] — 2026-11-03
+
+> Published 2026-11-03 12:49 UTC as [YTArk 4.4.3](https://github.com/2archiver/YTArk/releases/tag/v4.4.3) · tag `v4.4.3` · versionCode 4040300 · userscript `s48` · TizenTubeCobalt v2.0.3.
+
+Clearer glass and lighter playback appearance.
+
+### Fixed
+- **Glass stays inside the menu.** Theme the bounded side panel rather than its fullscreen renderer. Headers blend into their panel instead of displaying a separate black rectangle.
+- **OLED clears native gradients.** The inline fallback now clears background images as well as setting black, addressing leftover sidebar shading. Native focus highlights stay unchanged.
+- **Playback avoids live blur.** Full-height panels and the sidebar use a static clear tint. Small browsing surfaces may use a four-pixel blur; playback disables it everywhere.
+
+### Changed
+- Glass uses a clearer tint and subtle edge highlight. This is an Apple-inspired approximation, not Apple's proprietary rendering.
+- Focus class changes no longer trigger theme work; route checks repaint only when entering or leaving playback mode. Stream selection, quality notifications, codecs and buffering remain unchanged.
+
+### Known limitations
+- Browser regression checks cover the reported layout and repaint triggers. Physical Google TV responsiveness, the remaining left-edge shading and final glass appearance remain UNVERIFIED until device confirmation; no measured device speedup is claimed.
+
 ## [4.4.2] — 2026-11-03
 
 > Published 2026-11-03 11:47 UTC as [YTArk 4.4.2](https://github.com/2archiver/YTArk/releases/tag/v4.4.2) · tag `v4.4.2` · versionCode 4040200 · userscript `s47` · TizenTubeCobalt v2.0.3.
