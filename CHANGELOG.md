@@ -26,7 +26,7 @@ Conventions:
 
 > Not yet published. Candidate tag `v4.5.0` · versionCode 4050000 · userscript `s49` · TizenTubeCobalt v2.0.3.
 
-Clearer Liquid Glass with unchanged TV layout geometry.
+Clearer Liquid Glass, unchanged TV geometry.
 
 ### Fixed
 - **Settings panels reduce text bleed-through.** Bounded panels use a more opaque glass surface and supported backdrop blur, making the underlying page less likely to appear as duplicate text. Fullscreen overlay hosts are never painted.
