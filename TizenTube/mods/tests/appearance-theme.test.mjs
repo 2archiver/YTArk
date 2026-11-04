@@ -293,7 +293,7 @@ describe('lifecycle', () => {
   });
 });
 
-describe('4.4 optional OLED Black and Liquid Glass', () => {
+describe('4.5 optional OLED Black and Liquid Glass', () => {
   it('has independent default-off settings and keeps the broken legacy theme retired', () => {
     assert.equal(configRead('oledBlack'), false);
     assert.equal(configRead('liquidGlass'), false);
@@ -310,8 +310,12 @@ describe('4.4 optional OLED Black and Liquid Glass', () => {
       assert.equal(managedStyles().length, 1);
     }
     const css = styles.buildAppearanceCss();
-    assert.doesNotMatch(styles.buildGlassCss(), /backdrop-filter: blur/);
+    assert.match(styles.buildGlassCss(), /backdrop-filter: blur\(10px\)/);
     assert.doesNotMatch(styles.buildGlassCss(), /zylon-focus/);
+    assert.match(styles.buildGlassCss(), /\[role="tablist"\]/);
+    assert.match(styles.buildGlassCss(), /aria-selected="true"/);
+    assert.match(styles.buildGlassCss(), /box-shadow: inset/);
+    assert.doesNotMatch(styles.buildGlassCss(), /(?:^|[;{])\s*(?:width|height|padding|margin|border)\s*:/i);
     assert.match(css, /prefers-reduced-transparency/);
     for (const surface of [...styles.OLED_SURFACES, ...styles.GLASS_SURFACES]) {
       assert.doesNotMatch(surface, /video|img|canvas|thumbnail|caption|watch-default|html5-video-player/i);
