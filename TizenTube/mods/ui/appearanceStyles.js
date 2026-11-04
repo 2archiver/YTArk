@@ -87,7 +87,7 @@ ${scoped(ROOT_CLASSES.oled, OLED_SURFACES)} {
 
 // Limit glass to solid menu/toast surfaces, never the fullscreen video layer.
 export const GLASS_SURFACES = Object.freeze([
-  '.ytLrOverlayPanelRendererContent', '.ytLrOverlayTwoPanelRendererActionPanel', '.ytLrDialogRenderer', '.ytLrOverlayToastRenderer',
+  '.ytLrDialogRenderer', '.ytLrOverlayToastRenderer',
   'ytlr-guide-response', 'ytlr-search-bar ytlr-text-box', 'yt-overlay-toast-renderer',
 ]);
 export function buildGlassCss() {
@@ -95,10 +95,8 @@ export function buildGlassCss() {
   return `${panels} {
   background-color: rgba(28, 32, 40, 0.38) !important;
   background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.035)) !important;
-  box-sizing: border-box;
-  border: 1px solid rgba(255, 255, 255, 0.22);
-  border-radius: 1rem;
-  box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.3);
+  /* Inset edge treatment never changes the native component's box size. */
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22), 0 0.5rem 1.5rem rgba(0, 0, 0, 0.22);
 }
 ${scoped(ROOT_CLASSES.glass, ['.ytLrOverlayPanelHeaderRenderer', 'ytlr-overlay-panel-header-renderer'])} {
   background-color: transparent !important;
