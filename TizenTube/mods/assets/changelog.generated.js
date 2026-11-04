@@ -4,7 +4,7 @@ export const YTARK_CHANGELOG = {
   "schema": 1,
   "source": "CHANGELOG.md",
   "summaryFallback": "No short highlights available for this version.",
-  "sourceSha256": "c0f4bee670f2ab13bb67feb85c9a51e3754f13dec7e7177cb5a912bf1f89e87f",
+  "sourceSha256": "c567c60a5487c3c0aabfe53e4fb8bfcd19534fd534a9c98bd82a20c91048078c",
   "entries": [
     {
       "version": "4.5.0",
@@ -18,7 +18,7 @@ export const YTARK_CHANGELOG = {
       "title": "YTArk 4.5",
       "releaseUrl": null,
       "facts": "Not yet published. Candidate tag v4.5.0 · versionCode 4050000 · userscript s49 · TizenTubeCobalt v2.0.3.",
-      "summary": "A clearer, more cohesive Liquid Glass treatment without changing native TV layout geometry.",
+      "summary": "Clearer Liquid Glass, unchanged TV geometry.",
       "sections": [
         {
           "heading": "Fixed",
