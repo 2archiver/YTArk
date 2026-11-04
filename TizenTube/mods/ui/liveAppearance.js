@@ -13,7 +13,7 @@ export const LIVE_GLASS = [
 const PANEL_HEADER = 'ytlr-overlay-panel-header-renderer';
 const INTEREST = [...LIVE_OLED, ...LIVE_GLASS, PANEL_HEADER].join(',');
 const ORIGINAL_ATTRIBUTE = 'data-ytark-appearance-original';
-const SAFE_PROPERTY = /^(?:background-(?:color|image)|box-sizing|backdrop-filter|border-(?:(?:top|right|bottom|left)-(?:color|width|style)|(?:top-left|top-right|bottom-left|bottom-right)-radius))$/;
+const SAFE_PROPERTY = /^(?:background-(?:color|image)|box-sizing|backdrop-filter|box-shadow|border-(?:(?:top|right|bottom|left)-(?:color|width|style)|(?:top-left|top-right|bottom-left|bottom-right)-radius))$/;
 const MEDIA = 'video, img, canvas, svg, ytlr-thumbnail-details, .caption-window, .captions-text';
 export function createLiveAppearance({ documentObject, read, windowObject = null } = {}) {
   const d = documentObject;
