@@ -239,7 +239,7 @@ describe('About YTArk', () => {
     resolveCommand({ customAction: { action: 'YTARK_PANEL_SHOW', parameters: { id: 'about' } } });
     const panel = lastModal(recorded, 'ytark-panel-about');
     assert.equal(ytUI.hasVisibleYtarkSettingsPanel(), true, 'About is still part of the YTArk Settings input scope');
-    assert.equal(header(panel).subtitle, 'YTArk 4.4.3 (build metadata)', "this build's own version, labelled by source");
+    assert.equal(header(panel).subtitle, 'YTArk 4.5 (build metadata)', "this build's own version, labelled by source");
     const lines = modalItems(panel).map(messageText).filter(Boolean);
     assert.ok(lines.some(line => /Independent enhancements for the YouTube TV app/.test(line)), 'identity remains concise');
     assert.ok(!lines.some(line => /what.s new|^• /.test(line)), 'About has no release-highlight wall');
