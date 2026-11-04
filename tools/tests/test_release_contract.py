@@ -42,17 +42,17 @@ class Armv7OnlyReleaseContractTests(unittest.TestCase):
 
     def test_expected_clean_semver_version_and_asset_names(self):
         config = validate_release.load_config()
-        # The 4.4.3 candidate identity is the next numeric release after the
+        # The 4.5.0 candidate identity is the next numeric release after the
         # published 4.0.0 (4000000). Keep these literals so the test checks the
         # release contract itself rather than echoing the configured values.
-        self.assertEqual(config["VERSION_NAME"], "4.4.3")
-        self.assertEqual(config["DISPLAY_VERSION"], "4.4.3")
-        self.assertEqual(config["VERSION_CODE"], "4040300")
-        self.assertEqual(config["VERSION_TAG"], "v4.4.3")
-        self.assertEqual(config["RELEASE_NAME"], "YTArk 4.4.3")
+        self.assertEqual(config["VERSION_NAME"], "4.5.0")
+        self.assertEqual(config["DISPLAY_VERSION"], "4.5")
+        self.assertEqual(config["VERSION_CODE"], "4050000")
+        self.assertEqual(config["VERSION_TAG"], "v4.5.0")
+        self.assertEqual(config["RELEASE_NAME"], "YTArk 4.5.0")
         # The public filename carries the full ABI suffix; the internal
         # architecture key stays in build tooling and CLI flags.
-        self.assertEqual(config["APK_ARMV7"], "YTArk-v4.4.3-armeabi-v7a.apk")
+        self.assertEqual(config["APK_ARMV7"], "YTArk-v4.5.0-armeabi-v7a.apk")
         self.assertEqual(validate_release.apk_filename(config["VERSION_NAME"], "armv7"), config["APK_ARMV7"])
         self.assertTrue(config["APK_ARMV7"].endswith("-armeabi-v7a.apk"))
         # Only one architecture is published from 2.1.2 onwards.
