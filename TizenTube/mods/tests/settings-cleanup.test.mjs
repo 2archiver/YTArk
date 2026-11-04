@@ -191,9 +191,9 @@ describe('About YTArk', () => {
     assert.ok(build.openPopupAction.popup.overlaySectionRenderer.overlay.overlayTwoPanelRenderer
       .actionPanel.overlayPanelRenderer.content.scrollPaneRenderer, 'D-pad scrollable');
     const details = modalItems(build).map(messageText).join('\n');
-    assert.match(details, /Build versionName: 4\.4\.3/);
-    assert.match(details, /versionCode: 4040300/);
-    assert.match(details, /YTArk userscript revision: s48/);
+    assert.match(details, /Build versionName: 4\.5\.0/);
+    assert.match(details, /versionCode: 4050000/);
+    assert.match(details, /YTArk userscript revision: s49/);
     assert.match(details, /Android engine\/base: v2\.0\.3/);
     assert.doesNotMatch(details, /YouTube frontend version: unavailable/i, 'no absent frontend placeholder');
 
