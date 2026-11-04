@@ -89,14 +89,16 @@ ${scoped(ROOT_CLASSES.oled, OLED_SURFACES)} {
 export const GLASS_SURFACES = Object.freeze([
   '.ytLrDialogRenderer', '.ytLrOverlayToastRenderer',
   'ytlr-guide-response', 'ytlr-search-bar ytlr-text-box', 'yt-overlay-toast-renderer',
+  '[role="tablist"]', '[role="tablist"] > [role="tab"]', '[role="tab"][aria-selected="true"]',
 ]);
 export function buildGlassCss() {
   const panels = scoped(ROOT_CLASSES.glass, GLASS_SURFACES);
   return `${panels} {
-  background-color: rgba(28, 32, 40, 0.38) !important;
-  background-image: linear-gradient(135deg, rgba(255, 255, 255, 0.15), rgba(255, 255, 255, 0.035)) !important;
+  background-color: rgba(18, 22, 30, 0.92) !important;
+  background-image: linear-gradient(145deg, rgba(255, 255, 255, 0.19), rgba(255, 255, 255, 0.055) 48%, rgba(255, 255, 255, 0.025)) !important;
   /* Inset edge treatment never changes the native component's box size. */
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.22), 0 0.5rem 1.5rem rgba(0, 0, 0, 0.22);
+  backdrop-filter: blur(10px);
 }
 ${scoped(ROOT_CLASSES.glass, ['.ytLrOverlayPanelHeaderRenderer', 'ytlr-overlay-panel-header-renderer'])} {
   background-color: transparent !important;
@@ -105,6 +107,7 @@ ${scoped(ROOT_CLASSES.glass, ['.ytLrOverlayPanelHeaderRenderer', 'ytlr-overlay-p
 @media (prefers-reduced-transparency: reduce), (prefers-reduced-motion: reduce) {
   ${panels} {
     background-color: rgb(20, 24, 32) !important;
+    background-image: none !important;
     backdrop-filter: none;
   }
 }`;
