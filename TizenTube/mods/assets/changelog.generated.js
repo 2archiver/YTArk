@@ -4,7 +4,7 @@ export const YTARK_CHANGELOG = {
   "schema": 1,
   "source": "CHANGELOG.md",
   "summaryFallback": "No short highlights available for this version.",
-  "sourceSha256": "5d1d4465386e4f236b5e7a92f56848d526cc36897aa42cc0e396b6c4fe1ea5f8",
+  "sourceSha256": "c0f4bee670f2ab13bb67feb85c9a51e3754f13dec7e7177cb5a912bf1f89e87f",
   "entries": [
     {
       "version": "4.5.0",
