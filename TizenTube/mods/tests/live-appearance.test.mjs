@@ -24,6 +24,9 @@ test('semantic TV components are themed without knowing any obfuscated classes a
   settings.liquidGlass=true;theme.apply();
   assert.equal(guide.style.getPropertyValue('background-color'),'rgba(28, 32, 40, 0.38)');
   assert.equal(guide.style.getPropertyValue('backdrop-filter'),'none');
+  assert.match(guide.style.getPropertyValue('box-shadow'),/inset 0 0 0 1px/);
+  assert.equal(guide.style.getPropertyValue('box-sizing'),'');
+  assert.equal(guide.style.getPropertyValue('border-top-width'),'');
   const previous=theme.status().managedNodes;
   for(let i=0;i<25;i++)theme.apply();
   assert.equal(theme.status().managedNodes,previous);
