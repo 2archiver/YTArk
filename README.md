@@ -15,8 +15,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/2archiver/YTArk/actions/workflows/ci.yml">
-    <img src="https://github.com/2archiver/YTArk/actions/workflows/ci.yml/badge.svg?branch=main" alt="YTArk continuous integration status">
+  <a href="">
   </a>
   &nbsp; · &nbsp;
   <a href="https://github.com/2archiver/YTArk"><strong>Star YTArk on GitHub</strong></a>
